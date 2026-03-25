@@ -127,6 +127,25 @@ async function buildJobWithDetails(jobId: number) {
     .leftJoin(materialsTable, eq(jobMaterialsTable.materialId, materialsTable.id))
     .where(eq(jobMaterialsTable.jobId, jobId));
 
+  const wastageLogs = await db
+    .select({
+      id: wastageLogTable.id,
+      jobId: wastageLogTable.jobId,
+      materialId: wastageLogTable.materialId,
+      materialName: materialsTable.materialName,
+      plannedQty: wastageLogTable.plannedQty,
+      actualQty: wastageLogTable.actualQty,
+      wastageQty: wastageLogTable.wastageQty,
+      wastagePct: wastageLogTable.wastagePct,
+      reason: wastageLogTable.reason,
+      notes: wastageLogTable.notes,
+      loggedAt: wastageLogTable.loggedAt,
+    })
+    .from(wastageLogTable)
+    .leftJoin(materialsTable, eq(wastageLogTable.materialId, materialsTable.id))
+    .where(eq(wastageLogTable.jobId, jobId))
+    .orderBy(wastageLogTable.loggedAt);
+
   const material = job.materialId
     ? await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId)).then(r => r[0])
     : null;
@@ -134,8 +153,11 @@ async function buildJobWithDetails(jobId: number) {
   return {
     ...job,
     materialName: material?.materialName ?? null,
+    materialDimensions: material?.dimensions ?? null,
+    materialGrain: material?.grain ?? null,
     routing,
     materials,
+    wastageLogs,
   };
 }
 

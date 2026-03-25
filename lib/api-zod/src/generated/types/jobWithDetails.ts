@@ -9,6 +9,7 @@ import type { JobMaterial } from "./jobMaterial";
 import type { JobRouting } from "./jobRouting";
 import type { JobWithDetailsDeductionsItem } from "./jobWithDetailsDeductionsItem";
 import type { JobWithDetailsStatus } from "./jobWithDetailsStatus";
+import type { WastageLog } from "./wastageLog";
 
 export interface JobWithDetails {
   id: number;
@@ -18,6 +19,8 @@ export interface JobWithDetails {
   materialId?: number | null;
   materialName?: string | null;
   materialGsm?: number | null;
+  materialDimensions?: string | null;
+  materialGrain?: string | null;
   qtySheets: number;
   plannedSheets?: number | null;
   status: JobWithDetailsStatus;
@@ -26,5 +29,6 @@ export interface JobWithDetails {
   createdAt: string;
   routing: JobRouting[];
   materials: JobMaterial[];
+  wastageLogs: WastageLog[];
   deductions?: JobWithDetailsDeductionsItem[] | null;
 }

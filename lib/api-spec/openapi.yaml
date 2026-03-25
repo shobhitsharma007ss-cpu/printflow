@@ -1184,6 +1184,12 @@ components:
         materialGsm:
           type: integer
           nullable: true
+        materialDimensions:
+          type: string
+          nullable: true
+        materialGrain:
+          type: string
+          nullable: true
         qtySheets:
           type: integer
         plannedSheets:
@@ -1208,6 +1214,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/JobMaterial"
+        wastageLogs:
+          type: array
+          items:
+            $ref: "#/components/schemas/WastageLog"
         deductions:
           type: array
           nullable: true
@@ -1223,7 +1233,7 @@ components:
               unit:
                 type: string
             required: [materialId, materialName, qty, unit]
-      required: [id, jobCode, jobName, clientName, qtySheets, status, createdAt, routing, materials]
+      required: [id, jobCode, jobName, clientName, qtySheets, status, createdAt, routing, materials, wastageLogs]
 
     CreateJobRequest:
       type: object

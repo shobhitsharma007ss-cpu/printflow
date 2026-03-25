@@ -12,11 +12,8 @@ import {
 } from "lucide-react";
 import { cn, getStatusColor } from "@/lib/utils";
 import {
-  useListWastageLogs,
   useCreateWastageLog,
-  useGetJobMaterials,
-  getListWastageLogsQueryKey,
-  getGetJobMaterialsQueryKey,
+  getGetJobQueryKey,
   getListJobsQueryKey,
 } from "@workspace/api-client-react";
 import type { JobMaterial, CreateWastageLogRequestReason } from "@workspace/api-client-react";
@@ -158,25 +155,26 @@ export default function Jobs() {
 }
 
 function StandaloneWastageModal({ jobId, onClose }: { jobId: number; onClose: () => void }) {
-  const { data: jobMaterials } = useGetJobMaterials(jobId);
+  const { data: job } = useJob(jobId);
   return (
     <LogWastageModal
       isOpen={true}
       onClose={onClose}
       jobId={jobId}
-      jobMaterials={jobMaterials ?? []}
+      jobMaterials={job?.materials ?? []}
     />
   );
 }
 
 function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void }) {
   const { data: job, isLoading } = useJob(jobId);
-  const { data: materials } = useGetJobMaterials(jobId);
-  const { data: wastageLogs } = useListWastageLogs({ jobId });
   const { data: costReport } = useJobCostReport(jobId);
   const updateRouting = useUpdateJobRoutingStatus();
   const updateStatus = useUpdateJobStatus();
   const [isWastageOpen, setIsWastageOpen] = useState(false);
+
+  const materials = job?.materials ?? [];
+  const wastageLogs = job?.wastageLogs ?? [];
 
   // Close on Escape key
   useEffect(() => {
@@ -252,7 +250,13 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                   <div className="bg-muted/50 rounded-lg p-3">
                     <p className="text-xs text-muted-foreground mb-0.5">Substrate</p>
                     <p className="text-sm font-bold truncate">{job.materialName}</p>
-                    {job.materialGsm && <p className="text-[10px] text-muted-foreground">{job.materialGsm} GSM</p>}
+                    <p className="text-[10px] text-muted-foreground">
+                      {[
+                        job.materialGsm ? `${job.materialGsm} GSM` : null,
+                        job.materialDimensions ? `${job.materialDimensions}"` : null,
+                        job.materialGrain ? (job.materialGrain === "long" ? "LG" : "SG") : null,
+                      ].filter(Boolean).join(" · ") || ""}
+                    </p>
                   </div>
                 )}
               </div>
@@ -522,7 +526,6 @@ type LogWastageModalProps = {
 };
 
 function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageModalProps) {
-  const { data: allMaterials } = useMaterials();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     materialId: '',
@@ -535,8 +538,7 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
   const createWastage = useCreateWastageLog({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListWastageLogsQueryKey({ jobId }) });
-        queryClient.invalidateQueries({ queryKey: getGetJobMaterialsQueryKey(jobId) });
+        queryClient.invalidateQueries({ queryKey: getGetJobQueryKey(jobId) });
         queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
         toast.success("Wastage logged", { description: "Entry saved successfully." });
         handleClose();
@@ -547,13 +549,14 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
     }
   });
 
-  // When material selection changes, auto-fill planned qty from job materials if available
+  // When material selection changes, auto-fill planned qty (always from job materials, always read-only)
   const handleMaterialChange = (materialId: string) => {
     const jm = jobMaterials.find(m => String(m.materialId) === materialId);
     setForm(prev => ({
       ...prev,
       materialId,
       plannedQty: jm ? String(Number(jm.plannedQty)) : '',
+      actualQty: '',
     }));
   };
 
@@ -561,6 +564,8 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
   const actualNum = parseFloat(form.actualQty) || 0;
   const wastageQty = Math.max(0, actualNum - plannedNum);
   const wastagePct = plannedNum > 0 ? (wastageQty / plannedNum) * 100 : 0;
+
+  const selectedJobMat = jobMaterials.find(m => String(m.materialId) === form.materialId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -583,18 +588,23 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
     setForm({ materialId: '', plannedQty: '', actualQty: '', reason: 'setup', notes: '' });
   };
 
-  const selectedJobMat = jobMaterials.find(m => String(m.materialId) === form.materialId);
-  const hasJobMaterialPlanned = !!selectedJobMat;
-
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Log Wastage">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {jobMaterials.length === 0 ? (
+          <div className="rounded-lg p-4 bg-muted/50 border border-border text-sm text-muted-foreground text-center">
+            No materials are assigned to this job. Assign materials before logging wastage.
+          </div>
+        ) : (
+          <>
         <div className="space-y-1.5">
           <Label>Material <span className="text-destructive">*</span></Label>
           <Select required value={form.materialId} onChange={e => handleMaterialChange(e.target.value)}>
-            <option value="">— Select Material —</option>
-            {allMaterials?.map(m => (
-              <option key={m.id} value={m.id}>{m.materialName} [{m.unit}]</option>
+            <option value="">— Select from job materials —</option>
+            {jobMaterials.map(m => (
+              <option key={m.materialId} value={m.materialId}>
+                {m.materialName || `Material #${m.materialId}`} [{m.unit}] — plan: {Number(m.plannedQty).toFixed(0)}
+              </option>
             ))}
           </Select>
         </div>
@@ -603,7 +613,7 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
           <div className="space-y-1.5">
             <Label>
               Planned Qty <span className="text-destructive">*</span>
-              {hasJobMaterialPlanned && (
+              {selectedJobMat && (
                 <span className="ml-1 text-[10px] text-primary font-normal">(from job plan)</span>
               )}
             </Label>
@@ -613,10 +623,9 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
               min="0"
               step="0.01"
               value={form.plannedQty}
-              onChange={e => setForm({ ...form, plannedQty: e.target.value })}
-              readOnly={hasJobMaterialPlanned}
-              className={hasJobMaterialPlanned ? "bg-muted cursor-not-allowed opacity-80" : ""}
-              placeholder="e.g. 5000"
+              readOnly
+              className="bg-muted cursor-not-allowed opacity-80"
+              placeholder="Select a material first"
             />
           </div>
           <div className="space-y-1.5">
@@ -672,10 +681,17 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
           />
         </div>
 
-        <div className="pt-2 flex justify-end gap-3 border-t border-border">
-          <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
-          <Button type="submit" isLoading={createWastage.isPending}>Log Wastage</Button>
-        </div>
+          <div className="pt-2 flex justify-end gap-3 border-t border-border">
+            <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
+            <Button type="submit" isLoading={createWastage.isPending} disabled={!form.materialId || !form.plannedQty || !form.actualQty}>Log Wastage</Button>
+          </div>
+          </>
+        )}
+        {jobMaterials.length === 0 && (
+          <div className="flex justify-end">
+            <Button type="button" variant="ghost" onClick={handleClose}>Close</Button>
+          </div>
+        )}
       </form>
     </Modal>
   );

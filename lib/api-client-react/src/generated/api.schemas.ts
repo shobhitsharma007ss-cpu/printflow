@@ -251,6 +251,32 @@ export type JobWithDetailsDeductionsItem = {
   unit: string;
 };
 
+export type WastageLogReason =
+  (typeof WastageLogReason)[keyof typeof WastageLogReason];
+
+export const WastageLogReason = {
+  setup: "setup",
+  "mis-registration": "mis-registration",
+  "client-correction": "client-correction",
+  "plate-change": "plate-change",
+  other: "other",
+} as const;
+
+export interface WastageLog {
+  id: number;
+  jobId: number;
+  jobCode?: string | null;
+  materialId: number;
+  materialName?: string | null;
+  plannedQty: number;
+  actualQty: number;
+  wastageQty: number;
+  wastagePct: number;
+  reason: WastageLogReason;
+  notes?: string | null;
+  loggedAt: string;
+}
+
 export interface JobWithDetails {
   id: number;
   jobCode: string;
@@ -259,6 +285,8 @@ export interface JobWithDetails {
   materialId?: number | null;
   materialName?: string | null;
   materialGsm?: number | null;
+  materialDimensions?: string | null;
+  materialGrain?: string | null;
   qtySheets: number;
   plannedSheets?: number | null;
   status: JobWithDetailsStatus;
@@ -267,6 +295,7 @@ export interface JobWithDetails {
   createdAt: string;
   routing: JobRouting[];
   materials: JobMaterial[];
+  wastageLogs: WastageLog[];
   deductions?: JobWithDetailsDeductionsItem[] | null;
 }
 
@@ -302,32 +331,6 @@ export interface UpdateJobRequest {
   plannedSheets?: number | null;
   status?: UpdateJobRequestStatus;
   scheduledDate?: string | null;
-}
-
-export type WastageLogReason =
-  (typeof WastageLogReason)[keyof typeof WastageLogReason];
-
-export const WastageLogReason = {
-  setup: "setup",
-  "mis-registration": "mis-registration",
-  "client-correction": "client-correction",
-  "plate-change": "plate-change",
-  other: "other",
-} as const;
-
-export interface WastageLog {
-  id: number;
-  jobId: number;
-  jobCode?: string | null;
-  materialId: number;
-  materialName?: string | null;
-  plannedQty: number;
-  actualQty: number;
-  wastageQty: number;
-  wastagePct: number;
-  reason: WastageLogReason;
-  notes?: string | null;
-  loggedAt: string;
 }
 
 export type CreateWastageLogRequestReason =
