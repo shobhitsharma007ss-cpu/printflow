@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db, vendorsTable, materialsTable, materialVendorsTable, machinesTable, jobTemplatesTable, jobsTable, jobRoutingTable, jobMaterialsTable } from "@workspace/db";
+import { db, vendorsTable, materialsTable, materialVendorsTable, machinesTable, jobTemplatesTable, jobsTable, jobRoutingTable, jobMaterialsTable, wastageLogTable } from "@workspace/db";
 
 async function seed() {
   console.log("Seeding database...");
@@ -179,6 +179,61 @@ async function seed() {
     { jobId: job3.id, materialId: artCard285.id, plannedQty: "3100", actualQty: null, unit: "sheets", costPerUnit: "1.80" },
     { jobId: job3.id, materialId: cmykInk.id, plannedQty: "3", actualQty: null, unit: "kg", costPerUnit: "150" },
     { jobId: job3.id, materialId: uvInk.id, plannedQty: "1.5", actualQty: null, unit: "kg", costPerUnit: "280" },
+  ]);
+
+  // Wastage Logs for PF-001 (completed job)
+  await db.delete(wastageLogTable);
+  await db.insert(wastageLogTable).values([
+    {
+      jobId: job1.id,
+      materialId: greyBack350.id,
+      plannedQty: "5200",
+      actualQty: "5100",
+      wastageQty: "100",
+      wastagePct: "1.92",
+      reason: "setup",
+      loggedAt: new Date("2026-03-20T18:00:00Z"),
+    },
+    {
+      jobId: job1.id,
+      materialId: cmykInk.id,
+      plannedQty: "5.00",
+      actualQty: "5.30",
+      wastageQty: "0.30",
+      wastagePct: "5.66",
+      reason: "mis-registration",
+      loggedAt: new Date("2026-03-20T18:00:00Z"),
+    },
+    {
+      jobId: job1.id,
+      materialId: varnish.id,
+      plannedQty: "3.00",
+      actualQty: "3.10",
+      wastageQty: "0.10",
+      wastagePct: "3.23",
+      reason: "plate-change",
+      loggedAt: new Date("2026-03-21T11:00:00Z"),
+    },
+    {
+      jobId: job2.id,
+      materialId: maplitho70.id,
+      plannedQty: "55.00",
+      actualQty: "60.00",
+      wastageQty: "5.00",
+      wastagePct: "8.33",
+      reason: "client-correction",
+      loggedAt: new Date("2026-03-25T12:00:00Z"),
+    },
+    {
+      jobId: job2.id,
+      materialId: cmykInk.id,
+      plannedQty: "2.00",
+      actualQty: "2.50",
+      wastageQty: "0.50",
+      wastagePct: "20.00",
+      reason: "other",
+      loggedAt: new Date("2026-03-25T12:00:00Z"),
+    },
   ]);
 
   // Update machine status to running for PF-002 active

@@ -20,28 +20,33 @@ export function getStatusColor(status: string) {
       return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     case 'idle':
     case 'pending':
-      return 'bg-amber-100 text-amber-800 border-amber-200';
+      return 'bg-gray-100 text-gray-600 border-gray-200';
     case 'maintenance':
     case 'on-hold':
       return 'bg-rose-100 text-rose-800 border-rose-200';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-gray-100 text-gray-600 border-gray-200';
   }
 }
 
 export function getStatusDotColor(status: string) {
   switch (status.toLowerCase()) {
     case 'running':
+      return 'bg-[#22c55e] shadow-[0_0_10px_rgba(34,197,94,0.7)]';
     case 'completed':
     case 'in-progress':
-      return 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]';
+      return 'bg-[#22c55e]';
     case 'idle':
     case 'pending':
-      return 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]';
+      return 'bg-gray-400';
     case 'maintenance':
     case 'on-hold':
-      return 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]';
+      return 'bg-[#ef4444] shadow-[0_0_10px_rgba(239,68,68,0.7)]';
     default:
       return 'bg-gray-400';
   }
+}
+
+export function isAnimatedStatus(status: string) {
+  return status.toLowerCase() === 'running';
 }

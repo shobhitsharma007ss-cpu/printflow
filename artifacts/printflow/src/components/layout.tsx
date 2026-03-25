@@ -64,10 +64,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-sidebar-border mt-auto">
           <div className="flex items-center gap-3 px-3 py-2">
             <div className="w-9 h-9 rounded-full bg-sidebar-accent border border-sidebar-border flex items-center justify-center overflow-hidden">
-               <span className="text-xs font-bold text-white">JD</span>
+               <span className="text-xs font-bold text-white">PI</span>
             </div>
             <div>
-              <p className="text-sm font-medium text-white leading-tight">John Doe</p>
+              <p className="text-sm font-medium text-white leading-tight">Prakash Industries</p>
               <p className="text-xs text-sidebar-foreground/50">Plant Manager</p>
             </div>
           </div>

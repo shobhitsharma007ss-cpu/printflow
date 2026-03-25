@@ -2,7 +2,7 @@ import React from "react";
 import { useDashboardMetrics } from "@/hooks/use-dashboard";
 import { Card } from "@/components/ui-elements";
 import { Activity, Briefcase, AlertTriangle, CheckCircle2, Factory } from "lucide-react";
-import { getStatusColor, getStatusDotColor } from "@/lib/utils";
+import { getStatusColor, getStatusDotColor, isAnimatedStatus } from "@/lib/utils";
 
 export default function Dashboard() {
   const { data: metrics, isLoading, error } = useDashboardMetrics();
@@ -77,7 +77,7 @@ export default function Dashboard() {
                     <h3 className="font-bold text-foreground text-lg leading-none mb-1">{machine.machineName}</h3>
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{machine.machineType}</span>
                   </div>
-                  <div className={`w-4 h-4 rounded-full ${getStatusDotColor(machine.status)} animate-pulse`} />
+                  <div className={`w-4 h-4 rounded-full ${getStatusDotColor(machine.status)} ${isAnimatedStatus(machine.status) ? 'animate-pulse' : ''}`} />
                 </div>
                 <div className="pt-3 border-t border-border mt-auto flex justify-between items-end">
                   <div>

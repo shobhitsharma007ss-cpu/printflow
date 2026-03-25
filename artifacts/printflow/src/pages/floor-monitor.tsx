@@ -1,7 +1,7 @@
 import React from "react";
 import { useMachines } from "@/hooks/use-machines";
 import { Card } from "@/components/ui-elements";
-import { getStatusColor, getStatusDotColor } from "@/lib/utils";
+import { getStatusColor, getStatusDotColor, isAnimatedStatus } from "@/lib/utils";
 import { Factory, AlertCircle, Maximize2 } from "lucide-react";
 
 export default function FloorMonitor() {
@@ -52,8 +52,8 @@ export default function FloorMonitor() {
                       <p className="font-semibold text-muted-foreground mt-1">{machine.machineName}</p>
                     </div>
                     <div className="relative flex h-5 w-5">
-                      {machine.status === 'running' && (
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      {isAnimatedStatus(machine.status) && (
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75"></span>
                       )}
                       <span className={`relative inline-flex rounded-full h-5 w-5 ${getStatusDotColor(machine.status)}`}></span>
                     </div>
@@ -97,9 +97,9 @@ export default function FloorMonitor() {
 
 function getMachineColorCode(status: string) {
   switch (status.toLowerCase()) {
-    case 'running': return '#10b981'; // emerald-500
-    case 'idle': return '#f59e0b'; // amber-500
-    case 'maintenance': return '#f43f5e'; // rose-500
+    case 'running': return '#22c55e'; // green-500
+    case 'idle': return '#9ca3af'; // gray-400
+    case 'maintenance': return '#ef4444'; // red-500
     default: return '#9ca3af'; // gray-400
   }
 }
