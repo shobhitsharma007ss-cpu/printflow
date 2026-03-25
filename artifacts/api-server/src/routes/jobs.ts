@@ -547,6 +547,17 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  const [job] = await db.select({ status: jobsTable.status }).from(jobsTable).where(eq(jobsTable.id, parsed.data.jobId)).limit(1);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  if (job.status !== "completed") {
+    res.status(409).json({ error: "Wastage can only be logged for completed jobs" });
+    return;
+  }
+
   const wastageQty = Math.max(0, parsed.data.actualQty - parsed.data.plannedQty);
   const wastagePct = parsed.data.plannedQty > 0 ? (wastageQty / parsed.data.plannedQty) * 100 : 0;
 
