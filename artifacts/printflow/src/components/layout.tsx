@@ -10,16 +10,14 @@ import {
   Bell,
   Search,
   Menu,
-  Check,
-  CheckCheck,
   AlertTriangle,
-  Play,
   CheckCircle2,
-  PackagePlus,
+  PackageX,
+  Clock,
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@/hooks/use-notifications";
+import { usePlantAlerts } from "@/hooks/use-notifications";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -30,64 +28,35 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function getNotificationIcon(type: string) {
-  switch (type) {
-    case "low-stock": return AlertTriangle;
-    case "step-started": return Play;
-    case "step-completed": return Check;
-    case "job-completed": return CheckCircle2;
-    case "stock-inward": return PackagePlus;
-    default: return Bell;
-  }
-}
-
-function getNotificationColor(type: string) {
-  switch (type) {
-    case "low-stock": return "text-amber-500 bg-amber-500/10";
-    case "step-started": return "text-blue-500 bg-blue-500/10";
-    case "step-completed": return "text-emerald-500 bg-emerald-500/10";
-    case "job-completed": return "text-emerald-600 bg-emerald-600/10";
-    case "stock-inward": return "text-primary bg-primary/10";
-    default: return "text-muted-foreground bg-muted";
-  }
-}
-
 function NotificationBell() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const { data: notifications } = useNotifications();
-  const markRead = useMarkNotificationRead();
-  const markAllRead = useMarkAllNotificationsRead();
+  const { data: alerts } = usePlantAlerts();
 
-  const unreadCount = notifications?.filter(n => !n.isRead).length ?? 0;
+  const lowStock = alerts?.lowStock ?? [];
+  const overdueJobs = alerts?.overdueJobs ?? [];
+  const completedToday = alerts?.completedToday ?? [];
+  const totalCount = lowStock.length + overdueJobs.length + completedToday.length;
 
-  const handleMarkRead = (id: number) => {
-    markRead.mutate({ id });
-  };
-
-  const handleMarkAllRead = () => {
-    markAllRead.mutate();
-  };
-
-  const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  };
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [isOpen]);
 
   return (
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+        aria-label="Open notifications"
       >
         <Bell size={20} />
-        {unreadCount > 0 && (
+        {totalCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-destructive rounded-full border-2 border-card flex items-center justify-center text-[10px] font-bold text-white px-1">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {totalCount > 9 ? "9+" : totalCount}
           </span>
         )}
       </button>
@@ -95,56 +64,114 @@ function NotificationBell() {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full mt-2 w-[380px] bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="absolute right-0 top-full mt-2 w-[360px] bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-              <h3 className="font-bold text-sm">Notifications</h3>
               <div className="flex items-center gap-2">
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllRead}
-                    className="text-xs text-primary hover:underline font-medium flex items-center gap-1"
-                  >
-                    <CheckCheck size={12} />
-                    Mark all read
-                  </button>
+                <h3 className="font-bold text-sm">Plant Alerts</h3>
+                {totalCount > 0 && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-destructive text-white rounded-full">{totalCount}</span>
                 )}
-                <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-muted rounded">
-                  <X size={14} />
-                </button>
               </div>
+              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-muted rounded text-muted-foreground">
+                <X size={14} />
+              </button>
             </div>
-            <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-              {(!notifications || notifications.length === 0) && (
-                <div className="p-8 text-center text-muted-foreground text-sm">
-                  No notifications yet
+
+            <div className="max-h-[480px] overflow-y-auto custom-scrollbar">
+              {totalCount === 0 && (
+                <div className="p-8 text-center">
+                  <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+                  <p className="text-sm font-medium text-muted-foreground">All clear</p>
+                  <p className="text-xs text-muted-foreground/60 mt-0.5">No active alerts right now</p>
                 </div>
               )}
-              {notifications?.map(n => {
-                const Icon = getNotificationIcon(n.type);
-                const colorClass = getNotificationColor(n.type);
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.isRead && handleMarkRead(n.id)}
-                    className={cn(
-                      "flex items-start gap-3 px-4 py-3 border-b border-border/50 transition-colors cursor-pointer",
-                      !n.isRead ? "bg-primary/[0.03] hover:bg-muted/50" : "hover:bg-muted/30"
-                    )}
-                  >
-                    <div className={cn("p-1.5 rounded-lg shrink-0 mt-0.5", colorClass)}>
-                      <Icon size={14} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={cn("text-sm font-semibold", !n.isRead && "text-foreground")}>{n.title}</p>
-                        {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                      <p className="text-[10px] text-muted-foreground/60 mt-1">{timeAgo(n.createdAt)}</p>
-                    </div>
+
+              {lowStock.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-rose-50 dark:bg-rose-950/20 border-b border-rose-200 dark:border-rose-800 flex items-center gap-2">
+                    <PackageX size={13} className="text-rose-500" />
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Low Stock ({lowStock.length})</span>
                   </div>
-                );
-              })}
+                  {lowStock.map(m => (
+                    <Link
+                      key={m.id}
+                      href="/inventory"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-start gap-3 px-4 py-3 border-b border-rose-100 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-950/10 transition-colors cursor-pointer"
+                    >
+                      <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-rose-100 dark:bg-rose-900/30">
+                        <AlertTriangle size={13} className="text-rose-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{m.materialName}</p>
+                        <p className="text-xs text-rose-600 dark:text-rose-400 mt-0.5">
+                          {m.currentQty.toFixed(0)} {m.unit} remaining · reorder at {m.minReorderQty.toFixed(0)}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {overdueJobs.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2">
+                    <Clock size={13} className="text-amber-500" />
+                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Overdue Pending ({overdueJobs.length})</span>
+                  </div>
+                  {overdueJobs.map(j => (
+                    <Link
+                      key={j.id}
+                      href="/jobs"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-start gap-3 px-4 py-3 border-b border-amber-100 dark:border-amber-900/30 hover:bg-amber-50 dark:hover:bg-amber-950/10 transition-colors cursor-pointer"
+                    >
+                      <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-amber-100 dark:bg-amber-900/30">
+                        <Clock size={13} className="text-amber-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          <span className="font-mono text-primary text-xs">{j.jobCode}</span> {j.jobName}
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                          {j.clientName} · {j.daysOverdue + 2}d in pending
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {completedToday.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-950/20 border-b border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed Today ({completedToday.length})</span>
+                  </div>
+                  {completedToday.map(j => (
+                    <Link
+                      key={j.id}
+                      href="/jobs"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-start gap-3 px-4 py-3 border-b border-emerald-100 dark:border-emerald-900/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/10 transition-colors cursor-pointer"
+                    >
+                      <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-emerald-100 dark:bg-emerald-900/30">
+                        <CheckCircle2 size={13} className="text-emerald-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">
+                          <span className="font-mono text-primary text-xs">{j.jobCode}</span> {j.jobName}
+                        </p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{j.clientName}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-2.5 border-t border-border bg-muted/20 text-center">
+              <p className="text-[10px] text-muted-foreground/60">Refreshes every 60 seconds</p>
             </div>
           </div>
         </>

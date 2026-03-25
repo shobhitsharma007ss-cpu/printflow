@@ -719,6 +719,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/WastageLog"
 
+  /plant-alerts:
+    get:
+      operationId: getPlantAlerts
+      tags: [dashboard]
+      summary: Get live plant alerts (low stock, overdue jobs, completed today)
+      responses:
+        "200":
+          description: Plant alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantAlerts"
+
   /dashboard/metrics:
     get:
       operationId: getDashboardMetrics
@@ -1460,6 +1473,66 @@ components:
                 type: number
             required: [materialName, plannedQty, unit, totalCost]
       required: [jobId, jobCode, jobName, clientName, totalCost, materials]
+
+    PlantAlerts:
+      type: object
+      properties:
+        lowStock:
+          type: array
+          items:
+            $ref: "#/components/schemas/LowStockAlert"
+        overdueJobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OverdueJobAlert"
+        completedToday:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompletedTodayAlert"
+      required: [lowStock, overdueJobs, completedToday]
+
+    LowStockAlert:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialName:
+          type: string
+        currentQty:
+          type: number
+        minReorderQty:
+          type: number
+        unit:
+          type: string
+      required: [id, materialName, currentQty, minReorderQty, unit]
+
+    OverdueJobAlert:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobCode:
+          type: string
+        jobName:
+          type: string
+        clientName:
+          type: string
+        daysOverdue:
+          type: integer
+      required: [id, jobCode, jobName, clientName, daysOverdue]
+
+    CompletedTodayAlert:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobCode:
+          type: string
+        jobName:
+          type: string
+        clientName:
+          type: string
+      required: [id, jobCode, jobName, clientName]
 
     Notification:
       type: object

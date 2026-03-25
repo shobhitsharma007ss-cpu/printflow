@@ -408,6 +408,35 @@ export interface JobCostReport {
   materials: JobCostReportMaterialsItem[];
 }
 
+export interface LowStockAlert {
+  id: number;
+  materialName: string;
+  currentQty: number;
+  minReorderQty: number;
+  unit: string;
+}
+
+export interface OverdueJobAlert {
+  id: number;
+  jobCode: string;
+  jobName: string;
+  clientName: string;
+  daysOverdue: number;
+}
+
+export interface CompletedTodayAlert {
+  id: number;
+  jobCode: string;
+  jobName: string;
+  clientName: string;
+}
+
+export interface PlantAlerts {
+  lowStock: LowStockAlert[];
+  overdueJobs: OverdueJobAlert[];
+  completedToday: CompletedTodayAlert[];
+}
+
 export interface Notification {
   id: number;
   type: string;

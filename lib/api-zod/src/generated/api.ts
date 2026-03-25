@@ -932,6 +932,38 @@ export const CreateWastageLogBody = zod.object({
 });
 
 /**
+ * @summary Get live plant alerts (low stock, overdue jobs, completed today)
+ */
+export const GetPlantAlertsResponse = zod.object({
+  lowStock: zod.array(
+    zod.object({
+      id: zod.number(),
+      materialName: zod.string(),
+      currentQty: zod.number(),
+      minReorderQty: zod.number(),
+      unit: zod.string(),
+    }),
+  ),
+  overdueJobs: zod.array(
+    zod.object({
+      id: zod.number(),
+      jobCode: zod.string(),
+      jobName: zod.string(),
+      clientName: zod.string(),
+      daysOverdue: zod.number(),
+    }),
+  ),
+  completedToday: zod.array(
+    zod.object({
+      id: zod.number(),
+      jobCode: zod.string(),
+      jobName: zod.string(),
+      clientName: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Get dashboard metrics
  */
 export const GetDashboardMetricsResponse = zod.object({
