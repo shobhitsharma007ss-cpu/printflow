@@ -96,6 +96,7 @@ export interface StockInward {
   unit: string;
   batchRef: string;
   receivedDate: string;
+  brand?: string | null;
   notes?: string | null;
   vendorName?: string | null;
   materialName?: string | null;
@@ -107,6 +108,7 @@ export interface CreateStockInwardRequest {
   qtyReceived: number;
   unit: string;
   batchRef: string;
+  brand?: string | null;
   receivedDate: string;
   notes?: string | null;
 }
@@ -391,6 +393,16 @@ export interface JobCostReport {
   materials: JobCostReportMaterialsItem[];
 }
 
+export interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  relatedId?: number | null;
+  createdAt: string;
+}
+
 export type AddMaterialVendorBody = {
   vendorId: number;
 };
@@ -452,4 +464,8 @@ export type UpdateJobRoutingStatusBody = {
 
 export type ListWastageLogsParams = {
   jobId?: number;
+};
+
+export type MarkAllNotificationsRead200 = {
+  count?: number;
 };

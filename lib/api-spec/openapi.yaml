@@ -29,6 +29,8 @@ tags:
     description: Dashboard metrics
   - name: reports
     description: Reports
+  - name: notifications
+    description: Notification management
 
 paths:
   /healthz:
@@ -732,6 +734,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/JobCostReport"
 
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/mark-all-read:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+
 components:
   schemas:
     HealthStatus:
@@ -848,6 +900,9 @@ components:
           type: string
         receivedDate:
           type: string
+        brand:
+          type: string
+          nullable: true
         notes:
           type: string
           nullable: true
@@ -872,6 +927,9 @@ components:
           type: string
         batchRef:
           type: string
+        brand:
+          type: string
+          nullable: true
         receivedDate:
           type: string
         notes:
@@ -1318,3 +1376,23 @@ components:
                 type: number
             required: [materialName, plannedQty, unit, totalCost]
       required: [jobId, jobCode, jobName, clientName, totalCost, materials]
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        isRead:
+          type: boolean
+        relatedId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, type, title, message, isRead, createdAt]

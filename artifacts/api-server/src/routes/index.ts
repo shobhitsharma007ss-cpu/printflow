@@ -8,6 +8,7 @@ import jobsRouter from "./jobs";
 import templatesRouter from "./templates";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(jobsRouter);
 router.use(templatesRouter);
 router.use(dashboardRouter);
 router.use(reportsRouter);
+router.use(notificationsRouter);
 
 export default router;

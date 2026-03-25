@@ -37,24 +37,25 @@ artifacts-monorepo/
 ## Database Schema
 
 - `vendors` — vendor management
-- `materials` — all materials (board/paper/consumable)
+- `materials` — all materials (board/paper/consumable), with dimensions/grain fields
 - `material_vendors` — many-to-many linking materials to vendors
-- `stock_inward` — stock receipt tracking
+- `stock_inward` — stock receipt tracking with brand field (nullable)
 - `machines` — machine fleet with capabilities/status
 - `job_templates` — reusable routing templates
 - `jobs` — production jobs with auto PF-XXX codes
-- `job_routing` — per-job machine routing steps
+- `job_routing` — per-job machine routing steps (with auto-advance + auto-deduction)
 - `job_materials` — material allocation per job
 - `wastage_log` — wastage recording and tracking
+- `notifications` — in-app notifications (type, title, message, isRead, relatedId)
 
 ## Frontend Pages
 
 1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs, auto-refreshes every 60s
-2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots
-3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel, Record Inward Stock modal
-4. **Jobs** (`/jobs`) — Job table with status/search filters; Create New Job modal (client, name, material dropdown, qty, template selector with live routing preview, scheduled date, 4% wastage preview)
+2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots, step advancement buttons (Start/Complete), active job progress visualization with routing step pipeline
+3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel with vendor list and inward history (includes brand), Record Inward Stock modal with brand/make field
+4. **Jobs** (`/jobs`) — Job table with status/search filters; clickable rows open detail slide-over panel with routing progress, materials, wastage logs, and quick status actions; Log Wastage modal; Create New Job modal (client, name, material dropdown, qty, template selector with live routing preview, scheduled date, 4% wastage preview)
 5. **Reports** (`/reports`) — Wastage chart grouped per job (PF-XXX x-axis), color-coded bars (normal/watch/critical), stock reorder watchlist
-6. **Settings** (`/settings`) — 4 tabs: Machines (inline operator edit, status toggle), Materials (inline reorder level edit), Vendors (add/delete), Job Templates (routing step visualization)
+6. **Settings** (`/settings`) — 4 tabs: Machines (inline operator edit, status toggle), Materials (inline reorder level edit, 6-step AddMaterialWizard), Vendors (add/delete), Job Templates (routing step visualization)
 
 ## API Routes
 
@@ -70,6 +71,7 @@ artifacts-monorepo/
 - `/api/reports/wastage` — Wastage report
 - `/api/reports/stock-summary` — Stock with reorder status
 - `/api/reports/job-cost/:jobId` — Per-job cost breakdown
+- `/api/notifications` — List notifications (GET), mark read (PATCH /:id/read), mark all read (POST /mark-all-read)
 
 ## Running Locally
 

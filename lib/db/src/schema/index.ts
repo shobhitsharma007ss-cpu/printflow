@@ -3,3 +3,4 @@ export * from "./materials";
 export * from "./stock";
 export * from "./machines";
 export * from "./jobs";
+export * from "./notifications";

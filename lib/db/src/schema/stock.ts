@@ -11,6 +11,7 @@ export const stockInwardTable = pgTable("stock_inward", {
   qtyReceived: numeric("qty_received", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
   batchRef: text("batch_ref").notNull(),
+  brand: text("brand"),
   receivedDate: text("received_date").notNull(),
   notes: text("notes"),
 });

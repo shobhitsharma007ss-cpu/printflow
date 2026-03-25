@@ -17,6 +17,7 @@ import {
   ListWastageLogsQueryParams,
   CreateWastageLogBody,
 } from "@workspace/api-zod";
+import { createNotification } from "./notifications";
 
 const router: IRouter = Router();
 
@@ -265,6 +266,68 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   }
 
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
+
+  if (parsed.data.status === "in-progress") {
+    await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
+    if (job && job.status === "pending") {
+      await db.update(jobsTable).set({ status: "in-progress" }).where(eq(jobsTable.id, job.id));
+    }
+    await createNotification({
+      type: "step-started",
+      title: "Step Started",
+      message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} started on ${machine?.machineName ?? 'Unknown'}`,
+      relatedId: routing.jobId,
+    });
+  }
+
+  if (parsed.data.status === "completed") {
+    await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
+
+    const allSteps = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, routing.jobId));
+    const allDone = allSteps.every(s => s.id === routing.id ? true : s.status === "completed");
+
+    if (allDone && job) {
+      await db.update(jobsTable).set({ status: "completed" }).where(eq(jobsTable.id, job.id));
+
+      const jobMats = await db.select().from(jobMaterialsTable).where(eq(jobMaterialsTable.jobId, job.id));
+      for (const jm of jobMats) {
+        const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, jm.materialId));
+        if (mat) {
+          const currentQty = parseFloat(String(mat.currentQty));
+          const minQty = parseFloat(String(mat.minReorderQty));
+          if (currentQty <= minQty) {
+            await createNotification({
+              type: "low-stock",
+              title: "Low Stock Alert",
+              message: `${mat.materialName} is at ${currentQty} ${mat.unit} (reorder level: ${minQty})`,
+              relatedId: mat.id,
+            });
+          }
+        }
+      }
+
+      await createNotification({
+        type: "job-completed",
+        title: "Job Completed",
+        message: `${job.jobCode} — ${job.jobName} has been completed`,
+        relatedId: job.id,
+      });
+    } else {
+      await createNotification({
+        type: "step-completed",
+        title: "Step Completed",
+        message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} completed on ${machine?.machineName ?? 'Unknown'}`,
+        relatedId: routing.jobId,
+      });
+
+      const nextStep = allSteps.find(s => s.stepNumber === routing.stepNumber + 1);
+      if (nextStep && nextStep.status === "pending") {
+        await db.update(jobRoutingTable).set({ status: "in-progress", startedAt: new Date().toISOString() }).where(eq(jobRoutingTable.id, nextStep.id));
+        await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, nextStep.machineId));
+      }
+    }
+  }
 
   res.json({
     ...routing,

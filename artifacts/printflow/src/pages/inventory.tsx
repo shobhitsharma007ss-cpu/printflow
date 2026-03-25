@@ -220,6 +220,7 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
                     <span className="text-muted-foreground">{h.receivedDate ? format(new Date(h.receivedDate), "dd MMM yy") : '—'}</span>
                   </div>
                   <p className="text-muted-foreground">{h.vendorName || 'Unknown vendor'}</p>
+                  {h.brand && <p className="text-primary font-semibold">{h.brand}</p>}
                   {h.batchRef && <p className="text-muted-foreground">Ref: {h.batchRef}</p>}
                 </div>
               ))}
@@ -242,6 +243,7 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     vendorId: '',
     qtyReceived: '',
     batchRef: '',
+    brand: '',
     receivedDate: today,
     notes: '',
   });
@@ -259,20 +261,21 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         qtyReceived: parseFloat(form.qtyReceived) || 0,
         unit: selectedMaterial?.unit ?? 'units',
         batchRef: form.batchRef || '',
+        brand: form.brand || undefined,
         receivedDate: form.receivedDate,
         notes: form.notes || undefined,
       }
     }, {
       onSuccess: () => {
         onClose();
-        setForm({ materialId: '', vendorId: '', qtyReceived: '', batchRef: '', receivedDate: today, notes: '' });
+        setForm({ materialId: '', vendorId: '', qtyReceived: '', batchRef: '', brand: '', receivedDate: today, notes: '' });
       }
     });
   };
 
   const handleClose = () => {
     onClose();
-    setForm({ materialId: '', vendorId: '', qtyReceived: '', batchRef: '', receivedDate: today, notes: '' });
+    setForm({ materialId: '', vendorId: '', qtyReceived: '', batchRef: '', brand: '', receivedDate: today, notes: '' });
   };
 
   return (
@@ -325,6 +328,15 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
               onChange={e => setForm({ ...form, batchRef: e.target.value })}
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Brand / Make</Label>
+          <Input
+            placeholder="e.g. JK Paper, ITC, Asian Paints"
+            value={form.brand}
+            onChange={e => setForm({ ...form, brand: e.target.value })}
+          />
         </div>
 
         <div className="space-y-1.5">

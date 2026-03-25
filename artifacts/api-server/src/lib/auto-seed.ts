@@ -35,7 +35,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
     // Materials
     const [
       greyBack285, greyBack350, whiteBack300, fbbBoard350, artCard285,
-      maplitho70, cmykInk, uvInk, ledUvInk, varnish, aqueousCoating, gumAdhesive, lubricant,
+      maplitho70, cyanInk, magentaInk, yellowInk, blackInk, uvInk, ledUvInk, varnish, aqueousCoating, gumAdhesive, lubricant,
     ] = await db.insert(materialsTable).values([
       { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "500", minReorderQty: "100" },
       { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "300", minReorderQty: "100" },
@@ -43,7 +43,10 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { materialName: "FBB Board 350gsm", materialType: "board", subType: "fbb", gsm: 350, unit: "sheets", currentQty: "150", minReorderQty: "50" },
       { materialName: "Art Card 285gsm", materialType: "paper", subType: "art-card", gsm: 285, unit: "sheets", currentQty: "400", minReorderQty: "100" },
       { materialName: "Maplitho 70gsm", materialType: "paper", subType: "maplitho", gsm: 70, unit: "reams", currentQty: "800", minReorderQty: "200" },
-      { materialName: "CMYK Ink Set", materialType: "consumable", subType: "cmyk-ink", unit: "kg", currentQty: "40", minReorderQty: "10" },
+      { materialName: "Cyan Ink", materialType: "consumable", subType: "cyan-ink", unit: "kg", currentQty: "12", minReorderQty: "3" },
+      { materialName: "Magenta Ink", materialType: "consumable", subType: "magenta-ink", unit: "kg", currentQty: "10", minReorderQty: "3" },
+      { materialName: "Yellow Ink", materialType: "consumable", subType: "yellow-ink", unit: "kg", currentQty: "11", minReorderQty: "3" },
+      { materialName: "Black Ink", materialType: "consumable", subType: "black-ink", unit: "kg", currentQty: "15", minReorderQty: "3" },
       { materialName: "UV Ink", materialType: "consumable", subType: "uv-ink", unit: "kg", currentQty: "15", minReorderQty: "5" },
       { materialName: "LED UV Ink", materialType: "consumable", subType: "led-uv-ink", unit: "kg", currentQty: "10", minReorderQty: "5" },
       { materialName: "Varnish", materialType: "consumable", subType: "varnish", unit: "litre", currentQty: "20", minReorderQty: "8" },
@@ -62,7 +65,10 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { materialId: fbbBoard350.id, vendorId: bilt.id },
       { materialId: artCard285.id, vendorId: star.id },
       { materialId: maplitho70.id, vendorId: star.id },
-      { materialId: cmykInk.id, vendorId: saini.id },
+      { materialId: cyanInk.id, vendorId: saini.id },
+      { materialId: magentaInk.id, vendorId: saini.id },
+      { materialId: yellowInk.id, vendorId: saini.id },
+      { materialId: blackInk.id, vendorId: saini.id },
       { materialId: uvInk.id, vendorId: saini.id },
       { materialId: ledUvInk.id, vendorId: saini.id },
       { materialId: varnish.id, vendorId: saini.id },
@@ -173,28 +179,35 @@ export async function autoSeedIfEmpty(): Promise<void> {
     // Job Materials
     await db.insert(jobMaterialsTable).values([
       { jobId: job1.id, materialId: greyBack350.id, plannedQty: "5200", actualQty: "5100", unit: "sheets", costPerUnit: "2.50" },
-      { jobId: job1.id, materialId: cmykInk.id, plannedQty: "5", actualQty: "4.8", unit: "kg", costPerUnit: "150" },
+      { jobId: job1.id, materialId: cyanInk.id, plannedQty: "1.2", actualQty: "1.1", unit: "kg", costPerUnit: "180" },
+      { jobId: job1.id, materialId: magentaInk.id, plannedQty: "1.3", actualQty: "1.2", unit: "kg", costPerUnit: "190" },
+      { jobId: job1.id, materialId: yellowInk.id, plannedQty: "1.0", actualQty: "1.0", unit: "kg", costPerUnit: "170" },
+      { jobId: job1.id, materialId: blackInk.id, plannedQty: "1.5", actualQty: "1.5", unit: "kg", costPerUnit: "120" },
       { jobId: job1.id, materialId: varnish.id, plannedQty: "3", actualQty: "3.1", unit: "litre", costPerUnit: "80" },
       { jobId: job2.id, materialId: maplitho70.id, plannedQty: "55", actualQty: null, unit: "reams", costPerUnit: "350" },
-      { jobId: job2.id, materialId: cmykInk.id, plannedQty: "2", actualQty: null, unit: "kg", costPerUnit: "150" },
+      { jobId: job2.id, materialId: cyanInk.id, plannedQty: "0.5", actualQty: null, unit: "kg", costPerUnit: "180" },
+      { jobId: job2.id, materialId: blackInk.id, plannedQty: "1.0", actualQty: null, unit: "kg", costPerUnit: "120" },
       { jobId: job3.id, materialId: artCard285.id, plannedQty: "3100", actualQty: null, unit: "sheets", costPerUnit: "1.80" },
-      { jobId: job3.id, materialId: cmykInk.id, plannedQty: "3", actualQty: null, unit: "kg", costPerUnit: "150" },
+      { jobId: job3.id, materialId: cyanInk.id, plannedQty: "0.8", actualQty: null, unit: "kg", costPerUnit: "180" },
+      { jobId: job3.id, materialId: magentaInk.id, plannedQty: "0.8", actualQty: null, unit: "kg", costPerUnit: "190" },
+      { jobId: job3.id, materialId: yellowInk.id, plannedQty: "0.7", actualQty: null, unit: "kg", costPerUnit: "170" },
+      { jobId: job3.id, materialId: blackInk.id, plannedQty: "0.7", actualQty: null, unit: "kg", costPerUnit: "120" },
       { jobId: job3.id, materialId: uvInk.id, plannedQty: "1.5", actualQty: null, unit: "kg", costPerUnit: "280" },
     ]);
 
     // Wastage Logs
     await db.insert(wastageLogTable).values([
       { jobId: job1.id, materialId: greyBack350.id, plannedQty: "5200", actualQty: "5100", wastageQty: "100", wastagePct: "1.92", reason: "setup", loggedAt: new Date("2026-03-20T18:00:00Z") },
-      { jobId: job1.id, materialId: cmykInk.id, plannedQty: "5.00", actualQty: "5.30", wastageQty: "0.30", wastagePct: "5.66", reason: "mis-registration", loggedAt: new Date("2026-03-20T18:00:00Z") },
+      { jobId: job1.id, materialId: cyanInk.id, plannedQty: "1.20", actualQty: "1.30", wastageQty: "0.10", wastagePct: "8.33", reason: "mis-registration", loggedAt: new Date("2026-03-20T18:00:00Z") },
       { jobId: job1.id, materialId: varnish.id, plannedQty: "3.00", actualQty: "3.10", wastageQty: "0.10", wastagePct: "3.23", reason: "plate-change", loggedAt: new Date("2026-03-21T11:00:00Z") },
       { jobId: job2.id, materialId: maplitho70.id, plannedQty: "55.00", actualQty: "60.00", wastageQty: "5.00", wastagePct: "8.33", reason: "client-correction", loggedAt: new Date("2026-03-25T12:00:00Z") },
-      { jobId: job2.id, materialId: cmykInk.id, plannedQty: "2.00", actualQty: "2.50", wastageQty: "0.50", wastagePct: "20.00", reason: "other", loggedAt: new Date("2026-03-25T12:00:00Z") },
+      { jobId: job2.id, materialId: blackInk.id, plannedQty: "1.00", actualQty: "1.20", wastageQty: "0.20", wastagePct: "20.00", reason: "other", loggedAt: new Date("2026-03-25T12:00:00Z") },
     ]);
 
     // Set Komori GL37 to running (active job on it)
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, komoriGL37.id));
 
-    logger.info("✅ Auto-seed complete: 5 vendors, 13 materials, 10 machines, 5 templates, 3 jobs");
+    logger.info("✅ Auto-seed complete: 5 vendors, 16 materials (CMYK split), 10 machines, 5 templates, 3 jobs");
   } catch (err) {
     logger.error({ err }, "Auto-seed failed");
     throw err;

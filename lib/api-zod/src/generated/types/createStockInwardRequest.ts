@@ -12,6 +12,7 @@ export interface CreateStockInwardRequest {
   qtyReceived: number;
   unit: string;
   batchRef: string;
+  brand?: string | null;
   receivedDate: string;
   notes?: string | null;
 }

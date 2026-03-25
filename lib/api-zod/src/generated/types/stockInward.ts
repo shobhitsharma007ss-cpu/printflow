@@ -14,6 +14,7 @@ export interface StockInward {
   unit: string;
   batchRef: string;
   receivedDate: string;
+  brand?: string | null;
   notes?: string | null;
   vendorName?: string | null;
   materialName?: string | null;

@@ -4,8 +4,11 @@ import {
   useGetJob, 
   useCreateJob as useGeneratedCreateJob, 
   useUpdateJobStatus as useGeneratedUpdateJobStatus,
+  useUpdateJobRoutingStatus as useGeneratedUpdateRoutingStatus,
   getListJobsQueryKey,
-  getGetDashboardMetricsQueryKey
+  getGetDashboardMetricsQueryKey,
+  getListMachinesQueryKey,
+  getListNotificationsQueryKey,
 } from "@workspace/api-client-react";
 
 export function useJobs(status?: any) {
@@ -37,6 +40,21 @@ export function useUpdateJobStatus() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardMetricsQueryKey() });
+      }
+    }
+  });
+}
+
+export function useUpdateJobRoutingStatus() {
+  const queryClient = useQueryClient();
+  
+  return useGeneratedUpdateRoutingStatus({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListMachinesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardMetricsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListNotificationsQueryKey() });
       }
     }
   });

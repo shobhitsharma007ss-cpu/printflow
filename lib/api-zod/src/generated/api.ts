@@ -222,6 +222,7 @@ export const GetMaterialInwardHistoryResponseItem = zod.object({
   unit: zod.string(),
   batchRef: zod.string(),
   receivedDate: zod.string(),
+  brand: zod.string().nullish(),
   notes: zod.string().nullish(),
   vendorName: zod.string().nullish(),
   materialName: zod.string().nullish(),
@@ -241,6 +242,7 @@ export const ListStockInwardResponseItem = zod.object({
   unit: zod.string(),
   batchRef: zod.string(),
   receivedDate: zod.string(),
+  brand: zod.string().nullish(),
   notes: zod.string().nullish(),
   vendorName: zod.string().nullish(),
   materialName: zod.string().nullish(),
@@ -256,6 +258,7 @@ export const CreateStockInwardBody = zod.object({
   qtyReceived: zod.number(),
   unit: zod.string(),
   batchRef: zod.string(),
+  brand: zod.string().nullish(),
   receivedDate: zod.string(),
   notes: zod.string().nullish(),
 });
@@ -877,4 +880,44 @@ export const GetJobCostReportResponse = zod.object({
       totalCost: zod.number(),
     }),
   ),
+});
+
+/**
+ * @summary List notifications
+ */
+export const ListNotificationsResponseItem = zod.object({
+  id: zod.number(),
+  type: zod.string(),
+  title: zod.string(),
+  message: zod.string(),
+  isRead: zod.boolean(),
+  relatedId: zod.number().nullish(),
+  createdAt: zod.string(),
+});
+export const ListNotificationsResponse = zod.array(
+  ListNotificationsResponseItem,
+);
+
+/**
+ * @summary Mark a notification as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkNotificationReadResponse = zod.object({
+  id: zod.number(),
+  type: zod.string(),
+  title: zod.string(),
+  message: zod.string(),
+  isRead: zod.boolean(),
+  relatedId: zod.number().nullish(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Mark all notifications as read
+ */
+export const MarkAllNotificationsReadResponse = zod.object({
+  count: zod.number().optional(),
 });
