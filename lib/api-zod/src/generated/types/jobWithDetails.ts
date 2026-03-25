@@ -7,6 +7,7 @@
  */
 import type { JobMaterial } from "./jobMaterial";
 import type { JobRouting } from "./jobRouting";
+import type { JobWithDetailsDeductionsItem } from "./jobWithDetailsDeductionsItem";
 import type { JobWithDetailsStatus } from "./jobWithDetailsStatus";
 
 export interface JobWithDetails {
@@ -25,4 +26,5 @@ export interface JobWithDetails {
   createdAt: string;
   routing: JobRouting[];
   materials: JobMaterial[];
+  deductions?: JobWithDetailsDeductionsItem[] | null;
 }

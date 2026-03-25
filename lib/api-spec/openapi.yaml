@@ -594,6 +594,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/JobRouting"
 
+  /job-routing/{id}/notes:
+    patch:
+      operationId: updateJobRoutingNotes
+      tags: [routing]
+      summary: Update job routing step notes (report issue)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+              required: [notes]
+      responses:
+        "200":
+          description: Updated routing step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobRouting"
+
   /jobs/{id}/materials:
     get:
       operationId: getJobMaterials
@@ -1161,6 +1190,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/JobMaterial"
+        deductions:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              materialId:
+                type: integer
+              materialName:
+                type: string
+              qty:
+                type: number
+              unit:
+                type: string
+            required: [materialId, materialName, qty, unit]
       required: [id, jobCode, jobName, clientName, qtySheets, status, createdAt, routing, materials]
 
     CreateJobRequest:

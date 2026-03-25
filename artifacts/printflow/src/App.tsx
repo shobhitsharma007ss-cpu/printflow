@@ -1,5 +1,6 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 
 import { AppLayout } from "@/components/layout";
 import Dashboard from "@/pages/dashboard";
@@ -41,6 +42,7 @@ function App() {
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
         <Router />
       </WouterRouter>
+      <Toaster position="bottom-right" richColors />
     </QueryClientProvider>
   );
 }

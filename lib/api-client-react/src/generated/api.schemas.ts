@@ -244,6 +244,13 @@ export const JobWithDetailsStatus = {
   "on-hold": "on-hold",
 } as const;
 
+export type JobWithDetailsDeductionsItem = {
+  materialId: number;
+  materialName: string;
+  qty: number;
+  unit: string;
+};
+
 export interface JobWithDetails {
   id: number;
   jobCode: string;
@@ -260,6 +267,7 @@ export interface JobWithDetails {
   createdAt: string;
   routing: JobRouting[];
   materials: JobMaterial[];
+  deductions?: JobWithDetailsDeductionsItem[] | null;
 }
 
 export interface CreateJobRequest {
@@ -462,6 +470,10 @@ export const UpdateJobRoutingStatusBodyStatus = {
 export type UpdateJobRoutingStatusBody = {
   status: UpdateJobRoutingStatusBodyStatus;
   notes?: string;
+};
+
+export type UpdateJobRoutingNotesBody = {
+  notes: string;
 };
 
 export type ListWastageLogsParams = {

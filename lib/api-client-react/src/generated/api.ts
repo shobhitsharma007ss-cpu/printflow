@@ -43,6 +43,7 @@ import type {
   StockInward,
   StockSummaryRow,
   UpdateJobRequest,
+  UpdateJobRoutingNotesBody,
   UpdateJobRoutingStatusBody,
   UpdateJobStatusBody,
   Vendor,
@@ -2490,6 +2491,94 @@ export const useUpdateJobRoutingStatus = <
   TContext
 > => {
   return useMutation(getUpdateJobRoutingStatusMutationOptions(options));
+};
+
+/**
+ * @summary Update job routing step notes (report issue)
+ */
+export const getUpdateJobRoutingNotesUrl = (id: number) => {
+  return `/api/job-routing/${id}/notes`;
+};
+
+export const updateJobRoutingNotes = async (
+  id: number,
+  updateJobRoutingNotesBody: UpdateJobRoutingNotesBody,
+  options?: RequestInit,
+): Promise<JobRouting> => {
+  return customFetch<JobRouting>(getUpdateJobRoutingNotesUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateJobRoutingNotesBody),
+  });
+};
+
+export const getUpdateJobRoutingNotesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateJobRoutingNotes>>,
+    TError,
+    { id: number; data: BodyType<UpdateJobRoutingNotesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateJobRoutingNotes>>,
+  TError,
+  { id: number; data: BodyType<UpdateJobRoutingNotesBody> },
+  TContext
+> => {
+  const mutationKey = ["updateJobRoutingNotes"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateJobRoutingNotes>>,
+    { id: number; data: BodyType<UpdateJobRoutingNotesBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateJobRoutingNotes(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateJobRoutingNotesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateJobRoutingNotes>>
+>;
+export type UpdateJobRoutingNotesMutationBody =
+  BodyType<UpdateJobRoutingNotesBody>;
+export type UpdateJobRoutingNotesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update job routing step notes (report issue)
+ */
+export const useUpdateJobRoutingNotes = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateJobRoutingNotes>>,
+    TError,
+    { id: number; data: BodyType<UpdateJobRoutingNotesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateJobRoutingNotes>>,
+  TError,
+  { id: number; data: BodyType<UpdateJobRoutingNotesBody> },
+  TContext
+> => {
+  return useMutation(getUpdateJobRoutingNotesMutationOptions(options));
 };
 
 /**

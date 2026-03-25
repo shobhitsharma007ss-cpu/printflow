@@ -452,6 +452,16 @@ export const ListJobsResponseItem = zod.object({
       costPerUnit: zod.number().nullish(),
     }),
   ),
+  deductions: zod
+    .array(
+      zod.object({
+        materialId: zod.number(),
+        materialName: zod.string(),
+        qty: zod.number(),
+        unit: zod.string(),
+      }),
+    )
+    .nullish(),
 });
 export const ListJobsResponse = zod.array(ListJobsResponseItem);
 
@@ -529,6 +539,16 @@ export const GetJobResponse = zod.object({
       costPerUnit: zod.number().nullish(),
     }),
   ),
+  deductions: zod
+    .array(
+      zod.object({
+        materialId: zod.number(),
+        materialName: zod.string(),
+        qty: zod.number(),
+        unit: zod.string(),
+      }),
+    )
+    .nullish(),
 });
 
 /**
@@ -592,6 +612,16 @@ export const UpdateJobResponse = zod.object({
       costPerUnit: zod.number().nullish(),
     }),
   ),
+  deductions: zod
+    .array(
+      zod.object({
+        materialId: zod.number(),
+        materialName: zod.string(),
+        qty: zod.number(),
+        unit: zod.string(),
+      }),
+    )
+    .nullish(),
 });
 
 /**
@@ -646,6 +676,16 @@ export const UpdateJobStatusResponse = zod.object({
       costPerUnit: zod.number().nullish(),
     }),
   ),
+  deductions: zod
+    .array(
+      zod.object({
+        materialId: zod.number(),
+        materialName: zod.string(),
+        qty: zod.number(),
+        unit: zod.string(),
+      }),
+    )
+    .nullish(),
 });
 
 /**
@@ -661,6 +701,31 @@ export const UpdateJobRoutingStatusBody = zod.object({
 });
 
 export const UpdateJobRoutingStatusResponse = zod.object({
+  id: zod.number(),
+  jobId: zod.number(),
+  stepNumber: zod.number(),
+  machineId: zod.number(),
+  machineName: zod.string().nullish(),
+  machineType: zod.string().nullish(),
+  operatorName: zod.string().nullish(),
+  status: zod.enum(["pending", "in-progress", "completed"]),
+  startedAt: zod.string().nullish(),
+  completedAt: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update job routing step notes (report issue)
+ */
+export const UpdateJobRoutingNotesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateJobRoutingNotesBody = zod.object({
+  notes: zod.string(),
+});
+
+export const UpdateJobRoutingNotesResponse = zod.object({
   id: zod.number(),
   jobId: zod.number(),
   stepNumber: zod.number(),
@@ -803,6 +868,16 @@ export const GetDashboardMetricsResponse = zod.object({
           costPerUnit: zod.number().nullish(),
         }),
       ),
+      deductions: zod
+        .array(
+          zod.object({
+            materialId: zod.number(),
+            materialName: zod.string(),
+            qty: zod.number(),
+            unit: zod.string(),
+          }),
+        )
+        .nullish(),
     }),
   ),
   machineStatuses: zod.array(

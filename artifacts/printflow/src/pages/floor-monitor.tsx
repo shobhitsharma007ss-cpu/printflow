@@ -1,16 +1,19 @@
 import React, { useState } from "react";
 import { useMachines } from "@/hooks/use-machines";
-import { useJobs, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
+import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/hooks/use-jobs";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, isAnimatedStatus, cn } from "@/lib/utils";
-import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock } from "lucide-react";
+import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X } from "lucide-react";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 export default function FloorMonitor() {
   const { data: machines, isLoading: machinesLoading } = useMachines();
   const { data: jobs, isLoading: jobsLoading } = useJobs();
   const updateRouting = useUpdateJobRoutingStatus();
+  const updateNotes = useUpdateJobRoutingNotes();
   const [expandedMachine, setExpandedMachine] = useState<number | null>(null);
+  const [issueModal, setIssueModal] = useState<{ routingId: number; stepNumber: number; jobCode: string } | null>(null);
+  const [issueText, setIssueText] = useState("");
 
   const isLoading = machinesLoading || jobsLoading;
 
@@ -42,9 +45,24 @@ export default function FloorMonitor() {
   };
 
   const handleAdvanceStep = (routingId: number, newStatus: string) => {
-    updateRouting.mutate(
-      { id: routingId, data: { status: newStatus } },
-      { onError: () => alert("Failed to update step status. Please try again.") }
+    updateRouting.mutate({ id: routingId, data: { status: newStatus } });
+  };
+
+  const handleOpenIssue = (step: JobRouting, job: JobWithDetails) => {
+    setIssueText(step.notes ?? "");
+    setIssueModal({ routingId: step.id, stepNumber: step.stepNumber, jobCode: job.jobCode });
+  };
+
+  const handleSubmitIssue = () => {
+    if (!issueModal || !issueText.trim()) return;
+    updateNotes.mutate(
+      { id: issueModal.routingId, data: { notes: issueText.trim() } },
+      {
+        onSettled: () => {
+          setIssueModal(null);
+          setIssueText("");
+        }
+      }
     );
   };
 
@@ -118,10 +136,10 @@ export default function FloorMonitor() {
                       </span>
                     </div>
 
-                    {/* Step advancement controls */}
+                    {/* In-progress step: Complete + Report Issue buttons */}
                     {activeInfo && (
                       <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-2">
                           <div>
                             <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
                             <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
@@ -135,9 +153,22 @@ export default function FloorMonitor() {
                             Complete
                           </button>
                         </div>
+                        {activeInfo.step.notes && (
+                          <p className="text-[10px] text-amber-600 bg-amber-500/10 rounded px-2 py-1 mb-2 line-clamp-2">
+                            ⚠ {activeInfo.step.notes}
+                          </p>
+                        )}
+                        <button
+                          onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
+                          className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
+                        >
+                          <AlertTriangle size={10} />
+                          Report Issue
+                        </button>
                       </div>
                     )}
 
+                    {/* Pending step: Start button */}
                     {!activeInfo && pendingInfo && machine.status !== "maintenance" && (
                       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 mb-3">
                         <div className="flex items-center justify-between">
@@ -221,7 +252,7 @@ export default function FloorMonitor() {
                 </div>
 
                 {job.routing && job.routing.length > 0 && (
-                  <div className="flex items-center gap-1 mt-4">
+                  <div className="flex items-center gap-1 mt-4 flex-wrap">
                     {job.routing.map((step, idx) => (
                       <React.Fragment key={step.id}>
                         <div className={cn(
@@ -239,6 +270,7 @@ export default function FloorMonitor() {
                             {step.status === "completed" ? "✓" : step.stepNumber}
                           </span>
                           <span className="hidden sm:inline truncate max-w-[80px]">{step.machineName}</span>
+                          {step.notes && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
                         </div>
                         {idx < job.routing.length - 1 && (
                           <ArrowRight size={12} className="text-muted-foreground shrink-0" />
@@ -258,6 +290,55 @@ export default function FloorMonitor() {
           <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-xl font-bold">No Machines Found</h3>
           <p className="text-muted-foreground">Add machines to monitor them here.</p>
+        </div>
+      )}
+
+      {/* Report Issue Modal */}
+      {issueModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-amber-500" />
+                <h2 className="font-bold text-lg">Report Issue</h2>
+              </div>
+              <button onClick={() => setIssueModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Step {issueModal.stepNumber} — </span>
+                <span className="font-bold">{issueModal.jobCode}</span>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-foreground block mb-1.5">Describe the issue</label>
+                <textarea
+                  value={issueText}
+                  onChange={(e) => setIssueText(e.target.value)}
+                  placeholder="e.g. Ink density inconsistent, roller pressure off, colour shift detected..."
+                  rows={4}
+                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 pt-0">
+              <button
+                onClick={() => setIssueModal(null)}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitIssue}
+                disabled={!issueText.trim() || updateNotes.isPending}
+                className="flex-1 px-4 py-2.5 text-sm font-bold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <AlertTriangle size={14} />
+                {updateNotes.isPending ? "Saving..." : "Submit Issue"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

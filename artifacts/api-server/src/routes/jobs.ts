@@ -10,6 +10,8 @@ import {
   UpdateJobStatusBody,
   UpdateJobRoutingStatusParams,
   UpdateJobRoutingStatusBody,
+  UpdateJobRoutingNotesParams,
+  UpdateJobRoutingNotesBody,
   GetJobMaterialsParams,
   AddJobMaterialParams,
   AddJobMaterialBody,
@@ -214,11 +216,14 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [job] = await db.update(jobsTable).set({ status: parsed.data.status }).where(eq(jobsTable.id, params.data.id)).returning();
-  if (!job) {
+
+  const [currentJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, params.data.id));
+  if (!currentJob) {
     res.status(404).json({ error: "Job not found" });
     return;
   }
+
+  const [job] = await db.update(jobsTable).set({ status: parsed.data.status }).where(eq(jobsTable.id, params.data.id)).returning();
 
   // Update machine status based on job status
   if (parsed.data.status === "in-progress") {
@@ -233,8 +238,31 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     }
   }
 
+  // Auto-deduct primary material when job goes from pending → in-progress
+  const deductions: { materialId: number; materialName: string; qty: number; unit: string }[] = [];
+  if (parsed.data.status === "in-progress" && currentJob.status === "pending" && currentJob.materialId && currentJob.qtySheets > 0) {
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, currentJob.materialId));
+    if (mat) {
+      const currentQty = parseFloat(String(mat.currentQty));
+      const deductQty = currentJob.qtySheets;
+      const newQty = Math.max(0, currentQty - deductQty);
+      await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: deductQty, unit: mat.unit });
+
+      // Low-stock alert if needed
+      if (newQty <= parseFloat(String(mat.minReorderQty))) {
+        await createNotification({
+          type: "low-stock",
+          title: "Low Stock Alert",
+          message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
+          relatedId: mat.id,
+        });
+      }
+    }
+  }
+
   const result = await buildJobWithDetails(job.id);
-  res.json(result);
+  res.json({ ...result, deductions: deductions.length > 0 ? deductions : null });
 });
 
 router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
@@ -328,6 +356,39 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
       }
     }
   }
+
+  res.json({
+    ...routing,
+    machineName: machine?.machineName ?? null,
+    machineType: machine?.machineType ?? null,
+    operatorName: routing.operatorName ?? machine?.operatorName ?? null,
+  });
+});
+
+router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
+  const params = UpdateJobRoutingNotesParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = UpdateJobRoutingNotesBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [routing] = await db
+    .update(jobRoutingTable)
+    .set({ notes: parsed.data.notes })
+    .where(eq(jobRoutingTable.id, params.data.id))
+    .returning();
+
+  if (!routing) {
+    res.status(404).json({ error: "Routing step not found" });
+    return;
+  }
+
+  const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
 
   res.json({
     ...routing,
