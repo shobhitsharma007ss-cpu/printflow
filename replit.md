@@ -49,11 +49,12 @@ artifacts-monorepo/
 
 ## Frontend Pages
 
-1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs
-2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type
-3. **Inventory** (`/inventory`) — Visual stacks for board/paper, cylinder gauges for consumables
-4. **Jobs** (`/jobs`) — Job table with filters, "Create New Job" modal
-5. **Reports** (`/reports`) — Wastage report, stock reorder watchlist, job cost analysis
+1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs, auto-refreshes every 60s
+2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots
+3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel, Record Inward Stock modal
+4. **Jobs** (`/jobs`) — Job table with status/search filters; Create New Job modal (client, name, material dropdown, qty, template selector with live routing preview, scheduled date, 4% wastage preview)
+5. **Reports** (`/reports`) — Wastage chart grouped per job (PF-XXX x-axis), color-coded bars (normal/watch/critical), stock reorder watchlist
+6. **Settings** (`/settings`) — 4 tabs: Machines (inline operator edit, status toggle), Materials (inline reorder level edit), Vendors (add/delete), Job Templates (routing step visualization)
 
 ## API Routes
 

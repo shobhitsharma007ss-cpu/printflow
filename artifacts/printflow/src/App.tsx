@@ -7,6 +7,7 @@ import FloorMonitor from "@/pages/floor-monitor";
 import Inventory from "@/pages/inventory";
 import Jobs from "@/pages/jobs";
 import Reports from "@/pages/reports";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -27,7 +28,7 @@ function Router() {
         <Route path="/inventory" component={Inventory} />
         <Route path="/jobs" component={Jobs} />
         <Route path="/reports" component={Reports} />
-        <Route path="/settings" component={() => <div className="p-8 text-center text-muted-foreground">Settings configuration coming soon.</div>} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

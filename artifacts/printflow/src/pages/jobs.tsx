@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { useJobs, useCreateJob, useUpdateJobStatus } from "@/hooks/use-jobs";
+import { useMaterials } from "@/hooks/use-inventory";
+import { useJobTemplates } from "@/hooks/use-templates";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-elements";
 import { format } from "date-fns";
-import { Plus, Search, Filter, MoreVertical } from "lucide-react";
+import { Plus, Search, Filter, MoreVertical, ChevronRight, ArrowRight } from "lucide-react";
 import { getStatusColor } from "@/lib/utils";
 
 export default function Jobs() {
@@ -31,8 +33,8 @@ export default function Jobs() {
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Filter size={16} className="text-muted-foreground" />
-            <Select 
-              value={statusFilter} 
+            <Select
+              value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="bg-background w-full sm:w-40"
             >
@@ -54,7 +56,7 @@ export default function Jobs() {
                 <th className="px-6 py-4 font-bold">Material Details</th>
                 <th className="px-6 py-4 font-bold">Qty (Sheets)</th>
                 <th className="px-6 py-4 font-bold">Status</th>
-                <th className="px-6 py-4 font-bold">Date</th>
+                <th className="px-6 py-4 font-bold">Scheduled Date</th>
                 <th className="px-6 py-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
@@ -66,7 +68,7 @@ export default function Jobs() {
               ) : (
                 jobs?.map((job) => (
                   <tr key={job.id} className="bg-card border-b border-border hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 font-bold text-foreground">{job.jobCode}</td>
+                    <td className="px-6 py-4 font-bold text-foreground whitespace-nowrap">{job.jobCode}</td>
                     <td className="px-6 py-4">
                       <div className="font-semibold">{job.clientName}</div>
                       <div className="text-muted-foreground text-xs mt-0.5">{job.jobName}</div>
@@ -81,8 +83,8 @@ export default function Jobs() {
                         {job.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {job.createdAt ? format(new Date(job.createdAt), "MMM d, yyyy") : '-'}
+                    <td className="px-6 py-4 text-muted-foreground whitespace-nowrap">
+                      {job.scheduledDate ? format(new Date(job.scheduledDate), "dd MMM yyyy") : '-'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors">
@@ -102,53 +104,159 @@ export default function Jobs() {
   );
 }
 
-function NewJobModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const [formData, setFormData] = useState({
-    jobName: '',
-    clientName: '',
-    qtySheets: '',
-  });
-  
+function NewJobModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { data: materials } = useMaterials();
+  const { data: templates } = useJobTemplates();
   const createMutation = useCreateJob();
+
+  const today = new Date().toISOString().split('T')[0];
+  const [form, setForm] = useState({
+    clientName: '',
+    jobName: '',
+    materialId: '',
+    qtySheets: '',
+    templateId: '',
+    scheduledDate: today,
+  });
+
+  const selectedTemplate = templates?.find(t => t.id === parseInt(form.templateId)) ?? null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createMutation.mutate({
       data: {
-        jobName: formData.jobName,
-        clientName: formData.clientName,
-        qtySheets: parseInt(formData.qtySheets) || 0
+        clientName: form.clientName,
+        jobName: form.jobName,
+        materialId: form.materialId ? parseInt(form.materialId) : undefined,
+        materialGsm: form.materialId ? (materials?.find(m => m.id === parseInt(form.materialId))?.gsm ?? undefined) : undefined,
+        qtySheets: parseInt(form.qtySheets) || 0,
+        plannedSheets: Math.ceil((parseInt(form.qtySheets) || 0) * 1.04),
+        templateId: form.templateId ? parseInt(form.templateId) : undefined,
+        scheduledDate: form.scheduledDate || undefined,
       }
     }, {
-      onSuccess: () => onClose()
+      onSuccess: () => {
+        onClose();
+        setForm({ clientName: '', jobName: '', materialId: '', qtySheets: '', templateId: '', scheduledDate: today });
+      }
     });
   };
 
+  const handleClose = () => {
+    onClose();
+    setForm({ clientName: '', jobName: '', materialId: '', qtySheets: '', templateId: '', scheduledDate: today });
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Production Job">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Create New Production Job">
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="space-y-2">
+        {/* Client & Job Name */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
             <Label>Client Name <span className="text-destructive">*</span></Label>
-            <Input required value={formData.clientName} onChange={e => setFormData({...formData, clientName: e.target.value})} placeholder="e.g. Acme Corp" />
+            <Input
+              required
+              value={form.clientName}
+              onChange={e => setForm({ ...form, clientName: e.target.value })}
+              placeholder="e.g. Tiranga Packaging"
+            />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label>Job Name <span className="text-destructive">*</span></Label>
-            <Input required value={formData.jobName} onChange={e => setFormData({...formData, jobName: e.target.value})} placeholder="e.g. Product Boxes" />
+            <Input
+              required
+              value={form.jobName}
+              onChange={e => setForm({ ...form, jobName: e.target.value })}
+              placeholder="e.g. Carton Box 350gsm"
+            />
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>Target Quantity (Sheets) <span className="text-destructive">*</span></Label>
-          <Input type="number" required min="1" value={formData.qtySheets} onChange={e => setFormData({...formData, qtySheets: e.target.value})} placeholder="10000" />
-        </div>
-        
-        <div className="bg-muted p-4 rounded-lg border border-border">
-          <p className="text-sm text-muted-foreground mb-2"><span className="font-bold text-foreground">Note:</span> Material selection and routing template can be assigned after creation from the Job Details page.</p>
+        {/* Material & Qty */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Material</Label>
+            <Select
+              value={form.materialId}
+              onChange={e => setForm({ ...form, materialId: e.target.value })}
+            >
+              <option value="">— No material selected —</option>
+              {materials?.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.materialName}{m.gsm ? ` (${m.gsm}gsm)` : ''}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Quantity (Sheets) <span className="text-destructive">*</span></Label>
+            <Input
+              type="number"
+              required
+              min="1"
+              value={form.qtySheets}
+              onChange={e => setForm({ ...form, qtySheets: e.target.value })}
+              placeholder="e.g. 5000"
+            />
+          </div>
         </div>
 
-        <div className="pt-4 flex justify-end gap-3 border-t border-border mt-6">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+        {/* Template */}
+        <div className="space-y-1.5">
+          <Label>Job Template (Routing)</Label>
+          <Select
+            value={form.templateId}
+            onChange={e => setForm({ ...form, templateId: e.target.value })}
+          >
+            <option value="">— Custom (no template) —</option>
+            {templates?.map(t => (
+              <option key={t.id} value={t.id}>{t.templateName}</option>
+            ))}
+          </Select>
+        </div>
+
+        {/* Template routing preview */}
+        {selectedTemplate && (selectedTemplate as any).machineNames && (
+          <div className="bg-muted/50 rounded-xl p-4 border border-border">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Routing Steps</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {((selectedTemplate as any).machineNames as string[]).map((name: string, idx: number) => (
+                <React.Fragment key={idx}>
+                  <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-3 py-1.5 shadow-sm">
+                    <span className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <span className="text-sm font-semibold">{name}</span>
+                  </div>
+                  {idx < (selectedTemplate as any).machineNames.length - 1 && (
+                    <ArrowRight size={16} className="text-muted-foreground shrink-0" />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+            {selectedTemplate.description && (
+              <p className="text-xs text-muted-foreground mt-3">{selectedTemplate.description}</p>
+            )}
+          </div>
+        )}
+
+        {/* Scheduled Date */}
+        <div className="space-y-1.5">
+          <Label>Scheduled Date</Label>
+          <Input
+            type="date"
+            value={form.scheduledDate}
+            onChange={e => setForm({ ...form, scheduledDate: e.target.value })}
+          />
+        </div>
+
+        {/* Planned sheets info */}
+        {form.qtySheets && (
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-400">
+            Planned sheets (with 4% setup wastage): <strong>{Math.ceil(parseInt(form.qtySheets) * 1.04).toLocaleString()}</strong>
+          </div>
+        )}
+
+        <div className="pt-2 flex justify-end gap-3 border-t border-border">
+          <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
           <Button type="submit" isLoading={createMutation.isPending}>Create Job</Button>
         </div>
       </form>
