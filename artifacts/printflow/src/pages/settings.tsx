@@ -178,6 +178,7 @@ function MaterialsSection() {
   const [editReorder, setEditReorder] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [showConsumableForm, setShowConsumableForm] = useState(false);
 
   const startEdit = (m: Material) => {
     setEditing(m.id);
@@ -217,10 +218,14 @@ function MaterialsSection() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <Button onClick={() => setShowWizard(true)} className="flex items-center gap-2">
           <Plus size={16} />
-          Add Material
+          Add Paper / Board
+        </Button>
+        <Button variant="outline" onClick={() => setShowConsumableForm(true)} className="flex items-center gap-2">
+          <Plus size={16} />
+          Add Consumable
         </Button>
       </div>
 
@@ -279,6 +284,7 @@ function MaterialsSection() {
       ))}
 
       <AddMaterialWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
+      <AddConsumableForm isOpen={showConsumableForm} onClose={() => setShowConsumableForm(false)} />
     </div>
   );
 }
@@ -747,6 +753,87 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           )}
         </div>
       </div>
+    </Modal>
+  );
+}
+
+function AddConsumableForm({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const createMaterial = useCreateMaterial();
+  const [form, setForm] = useState({
+    materialName: '',
+    subType: '',
+    unit: 'kg' as string,
+    currentQty: '0',
+    minReorderQty: '50',
+  });
+
+  const handleClose = () => {
+    setForm({ materialName: '', subType: '', unit: 'kg', currentQty: '0', minReorderQty: '50' });
+    onClose();
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMaterial.mutate({
+      data: {
+        materialName: form.materialName,
+        materialType: 'consumable',
+        subType: form.subType || 'general',
+        unit: form.unit as CreateMaterialRequestUnit,
+        currentQty: parseFloat(form.currentQty) || 0,
+        minReorderQty: parseFloat(form.minReorderQty) || 0,
+      }
+    }, {
+      onSuccess: () => handleClose(),
+    });
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} title="Add Consumable Material">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Material Name <span className="text-destructive">*</span></Label>
+          <Input
+            required
+            placeholder="e.g. Black Ink, PVA Glue, Varnish"
+            value={form.materialName}
+            onChange={e => setForm(f => ({ ...f, materialName: e.target.value }))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Sub-type</Label>
+          <Input
+            placeholder="e.g. offset-ink, adhesive, coating"
+            value={form.subType}
+            onChange={e => setForm(f => ({ ...f, subType: e.target.value }))}
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label>Unit</Label>
+            <Select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
+              <option value="kg">KG</option>
+              <option value="litre">Litre</option>
+              <option value="sheets">Sheets</option>
+              <option value="reams">Reams</option>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Opening Qty</Label>
+            <Input type="number" min={0} value={form.currentQty} onChange={e => setForm(f => ({ ...f, currentQty: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Reorder Level</Label>
+            <Input type="number" min={0} value={form.minReorderQty} onChange={e => setForm(f => ({ ...f, minReorderQty: e.target.value }))} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
+          <Button type="submit" disabled={!form.materialName.trim() || createMaterial.isPending} isLoading={createMaterial.isPending}>
+            Add Consumable
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

@@ -574,7 +574,7 @@ function NewJobModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
               <option value="">— No material selected —</option>
               {materials?.map(m => (
                 <option key={m.id} value={m.id}>
-                  {m.materialName}{m.gsm ? ` (${m.gsm}gsm)` : ''}
+                  {m.materialName}{m.gsm ? ` ${m.gsm}gsm` : ''}{m.dimensions ? ` ${m.dimensions}"` : ''}{m.grain ? ` ${m.grain[0].toUpperCase()}G` : ''}
                 </option>
               ))}
             </Select>
