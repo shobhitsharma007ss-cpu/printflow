@@ -11,6 +11,8 @@ export const materialsTable = pgTable("materials", {
   unit: text("unit").notNull(), // reams/kg/litre/sheets
   currentQty: numeric("current_qty", { precision: 10, scale: 2 }).notNull().default("0"),
   minReorderQty: numeric("min_reorder_qty", { precision: 10, scale: 2 }).notNull().default("0"),
+  dimensions: text("dimensions"), // e.g. "25x35" in inches
+  grain: text("grain"), // "long" or "short"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { useMachines, usePatchMachineStatus, useUpdateMachine } from "@/hooks/use-machines";
-import { useMaterials, useUpdateMaterial } from "@/hooks/use-inventory";
+import { useMaterials, useUpdateMaterial, useCreateMaterial } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendors";
 import { useJobTemplates } from "@/hooks/use-templates";
-import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
-import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X } from "lucide-react";
+import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
+import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAddMaterialVendor } from "@/hooks/use-inventory";
 
 type Section = "machines" | "materials" | "vendors" | "templates";
 
@@ -29,7 +30,6 @@ export default function Settings() {
         <p className="text-muted-foreground mt-1 font-medium">Manage machines, materials, vendors, and job templates</p>
       </div>
 
-      {/* Section tabs */}
       <div className="flex gap-2 flex-wrap">
         {sections.map(s => (
           <button
@@ -176,6 +176,7 @@ function MaterialsSection() {
   const [editing, setEditing] = useState<number | null>(null);
   const [editReorder, setEditReorder] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   const startEdit = (m: any) => {
     setEditing(m.id);
@@ -193,6 +194,8 @@ function MaterialsSection() {
         unit: m.unit,
         currentQty: parseFloat(String(m.currentQty)) || 0,
         minReorderQty: parseFloat(editReorder) || 0,
+        dimensions: m.dimensions ?? undefined,
+        grain: m.grain ?? undefined,
       }
     }, {
       onSuccess: () => {
@@ -213,21 +216,33 @@ function MaterialsSection() {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button onClick={() => setShowWizard(true)} className="flex items-center gap-2">
+          <Plus size={16} />
+          Add Material
+        </Button>
+      </div>
+
       {Object.entries(grouped).map(([type, items]) => (
         items.length > 0 && (
           <Card key={type} className="overflow-hidden">
-            <div className="p-4 border-b border-border bg-muted/30">
+            <div className="p-4 border-b border-border bg-muted/30 flex items-center gap-2">
+              <Layers size={16} className="text-muted-foreground" />
               <h2 className="font-bold capitalize">{type === 'board' ? 'Boards' : type === 'paper' ? 'Paper' : 'Consumables'}</h2>
+              <span className="text-xs text-muted-foreground ml-auto">{items.length} materials</span>
             </div>
             <div className="divide-y divide-border">
               {items.map(m => (
                 <div key={m.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
                   <div className="flex-1">
                     <p className="font-semibold">{m.materialName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {m.gsm ? `${m.gsm} GSM · ` : ''}{m.unit}
-                      {saved === m.id && <span className="text-emerald-500 ml-2 font-medium">Saved ✓</span>}
-                    </p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">{m.gsm} GSM</span>}
+                      {(m as any).dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{(m as any).dimensions}&quot;</span>}
+                      {(m as any).grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{(m as any).grain} grain</span>}
+                      <span className="text-xs text-muted-foreground">{m.unit}</span>
+                      {saved === m.id && <span className="text-xs text-emerald-500 font-medium">Saved ✓</span>}
+                    </div>
                   </div>
                   <div className="flex items-center gap-4 text-sm">
                     <div>
@@ -261,7 +276,477 @@ function MaterialsSection() {
           </Card>
         )
       ))}
+
+      <AddMaterialWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
     </div>
+  );
+}
+
+const PAPER_TYPES = [
+  'Grey Back Duplex',
+  'White Back Duplex',
+  'FBB Board',
+  'SBS Board',
+  'Art Card',
+  'Maplitho',
+  'Non Woven',
+  'Other',
+];
+
+const GSM_PRESETS = [70, 90, 130, 170, 200, 250, 285, 300, 350, 400];
+const DIM_PRESETS = ['20x30', '23x36', '25x35', '26x38', '28x40'];
+
+function getMaterialMeta(paperType: string): { materialType: 'board' | 'paper' | 'consumable'; subType: string; unit: 'sheets' | 'reams' | 'kg' | 'litre' } {
+  const map: Record<string, { materialType: 'board' | 'paper' | 'consumable'; subType: string; unit: 'sheets' | 'reams' | 'kg' | 'litre' }> = {
+    'Grey Back Duplex': { materialType: 'board', subType: 'grey-back', unit: 'sheets' },
+    'White Back Duplex': { materialType: 'board', subType: 'white-back', unit: 'sheets' },
+    'FBB Board': { materialType: 'board', subType: 'fbb', unit: 'sheets' },
+    'SBS Board': { materialType: 'board', subType: 'sbs', unit: 'sheets' },
+    'Art Card': { materialType: 'paper', subType: 'art-card', unit: 'sheets' },
+    'Maplitho': { materialType: 'paper', subType: 'maplitho', unit: 'reams' },
+    'Non Woven': { materialType: 'paper', subType: 'non-woven', unit: 'sheets' },
+  };
+  return map[paperType] ?? { materialType: 'paper', subType: 'other', unit: 'sheets' };
+}
+
+type WizardState = {
+  paperType: string;
+  paperTypeOther: string;
+  gsm: string;
+  dimWidth: string;
+  dimHeight: string;
+  grain: 'long' | 'short' | '';
+  vendorId: string;
+  addingNewVendor: boolean;
+  newVendorName: string;
+  openingQty: string;
+  unit: string;
+  reorderLevel: string;
+};
+
+const defaultWizard: WizardState = {
+  paperType: '',
+  paperTypeOther: '',
+  gsm: '',
+  dimWidth: '',
+  dimHeight: '',
+  grain: '',
+  vendorId: '',
+  addingNewVendor: false,
+  newVendorName: '',
+  openingQty: '0',
+  unit: 'sheets',
+  reorderLevel: '100',
+};
+
+function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<WizardState>(defaultWizard);
+
+  const { data: vendors } = useVendors();
+  const createVendor = useCreateVendor();
+  const createMaterial = useCreateMaterial();
+  const addVendorHook = useAddMaterialVendor();
+
+  const totalSteps = 6;
+
+  const handleClose = () => {
+    setStep(1);
+    setForm(defaultWizard);
+    onClose();
+  };
+
+  const canNext = () => {
+    if (step === 1) return !!form.paperType;
+    if (step === 2) return !!form.gsm && parseInt(form.gsm) >= 50 && parseInt(form.gsm) <= 450;
+    if (step === 3) return !!form.dimWidth && !!form.dimHeight;
+    if (step === 4) return !!form.grain;
+    if (step === 5) return true;
+    if (step === 6) return !!form.openingQty && !!form.unit && !!form.reorderLevel;
+    return false;
+  };
+
+  const handleSubmit = async () => {
+    const effectivePaperType = form.paperType === 'Other' ? form.paperTypeOther : form.paperType;
+    const meta = getMaterialMeta(form.paperType);
+    const dimensions = `${form.dimWidth}x${form.dimHeight}`;
+    const materialName = `${effectivePaperType} ${form.gsm}gsm`;
+
+    createMaterial.mutate({
+      data: {
+        materialName,
+        materialType: meta.materialType,
+        subType: meta.subType,
+        gsm: parseInt(form.gsm),
+        unit: form.unit as any,
+        currentQty: parseFloat(form.openingQty) || 0,
+        minReorderQty: parseFloat(form.reorderLevel) || 0,
+        dimensions,
+        grain: form.grain || undefined,
+      }
+    }, {
+      onSuccess: async (newMaterial) => {
+        const matId = (newMaterial as any).id;
+
+        let vendorIdToLink: number | null = null;
+
+        if (form.addingNewVendor && form.newVendorName) {
+          await new Promise<void>((resolve) => {
+            createVendor.mutate({ data: { vendorName: form.newVendorName, contactPerson: '', phone: '', city: '' } }, {
+              onSuccess: (v: any) => {
+                vendorIdToLink = (v as any).id;
+                resolve();
+              },
+              onError: () => resolve(),
+            });
+          });
+        } else if (form.vendorId) {
+          vendorIdToLink = parseInt(form.vendorId);
+        }
+
+        if (vendorIdToLink && matId) {
+          addVendorHook.mutate({ id: matId, data: { vendorId: vendorIdToLink } }, {
+            onSettled: () => handleClose(),
+          });
+        } else {
+          handleClose();
+        }
+      }
+    });
+  };
+
+  const setDimPreset = (preset: string) => {
+    const [w, h] = preset.split('x');
+    setForm(f => ({ ...f, dimWidth: w, dimHeight: h }));
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} title="Add New Material">
+      <div className="space-y-6">
+        {/* Step indicator */}
+        <div className="flex items-center gap-1">
+          {Array.from({ length: totalSteps }, (_, i) => (
+            <div key={i} className="flex items-center gap-1 flex-1">
+              <div className={cn(
+                "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all",
+                i + 1 < step ? "bg-emerald-500 text-white" :
+                i + 1 === step ? "bg-primary text-white" :
+                "bg-muted text-muted-foreground"
+              )}>
+                {i + 1 < step ? <Check size={12} /> : i + 1}
+              </div>
+              {i < totalSteps - 1 && (
+                <div className={cn("h-0.5 flex-1 transition-all", i + 1 < step ? "bg-emerald-500" : "bg-muted")} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Step content */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Paper Type</h3>
+              <p className="text-sm text-muted-foreground">Select the type of board or paper</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {PAPER_TYPES.map(pt => (
+                <button
+                  key={pt}
+                  onClick={() => setForm(f => ({ ...f, paperType: pt }))}
+                  className={cn(
+                    "p-3 rounded-lg border-2 text-sm font-semibold text-left transition-all",
+                    form.paperType === pt
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border hover:border-primary/50 text-foreground"
+                  )}
+                >
+                  {pt}
+                </button>
+              ))}
+            </div>
+            {form.paperType === 'Other' && (
+              <div className="space-y-1.5">
+                <Label>Specify paper type</Label>
+                <Input
+                  placeholder="e.g. Kraft Board"
+                  value={form.paperTypeOther}
+                  onChange={e => setForm(f => ({ ...f, paperTypeOther: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">GSM</h3>
+              <p className="text-sm text-muted-foreground">Grams per square metre</p>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={50}
+                  max={450}
+                  value={form.gsm}
+                  onChange={e => setForm(f => ({ ...f, gsm: e.target.value }))}
+                  placeholder="e.g. 300"
+                  className="w-28 text-lg font-bold"
+                />
+                <span className="text-muted-foreground font-medium">GSM</span>
+              </div>
+              <input
+                type="range"
+                min={50}
+                max={450}
+                step={5}
+                value={form.gsm || 200}
+                onChange={e => setForm(f => ({ ...f, gsm: e.target.value }))}
+                className="w-full h-2 rounded-full accent-primary cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>50</span><span>250</span><span>450</span>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground font-medium mb-2">Quick select</p>
+                <div className="flex flex-wrap gap-2">
+                  {GSM_PRESETS.map(g => (
+                    <button
+                      key={g}
+                      onClick={() => setForm(f => ({ ...f, gsm: String(g) }))}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-sm font-semibold border transition-all",
+                        form.gsm === String(g)
+                          ? "bg-primary text-white border-primary"
+                          : "border-border hover:border-primary/50 text-foreground"
+                      )}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Dimensions</h3>
+              <p className="text-sm text-muted-foreground">Sheet size in inches (Width × Height)</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Width (in)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 25"
+                  value={form.dimWidth}
+                  onChange={e => setForm(f => ({ ...f, dimWidth: e.target.value }))}
+                  className="w-24 text-center font-bold text-lg"
+                />
+              </div>
+              <span className="text-2xl font-bold text-muted-foreground mt-5">×</span>
+              <div className="space-y-1">
+                <Label className="text-xs">Height (in)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 35"
+                  value={form.dimHeight}
+                  onChange={e => setForm(f => ({ ...f, dimHeight: e.target.value }))}
+                  className="w-24 text-center font-bold text-lg"
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-medium mb-2">Common sizes</p>
+              <div className="flex flex-wrap gap-2">
+                {DIM_PRESETS.map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setDimPreset(d)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-sm font-semibold border transition-all",
+                      `${form.dimWidth}x${form.dimHeight}` === d
+                        ? "bg-primary text-white border-primary"
+                        : "border-border hover:border-primary/50 text-foreground"
+                    )}
+                  >
+                    {d}&quot;
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.dimWidth && form.dimHeight && (
+              <div className="bg-muted/50 rounded-lg p-3 text-sm text-center font-semibold text-foreground">
+                {form.dimWidth}&quot; × {form.dimHeight}&quot;
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Grain Direction</h3>
+              <p className="text-sm text-muted-foreground">Fibre alignment relative to longer edge</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              {(['long', 'short'] as const).map(g => (
+                <button
+                  key={g}
+                  onClick={() => setForm(f => ({ ...f, grain: g }))}
+                  className={cn(
+                    "py-8 rounded-xl border-2 font-bold text-base uppercase tracking-wider transition-all",
+                    form.grain === g
+                      ? "border-primary bg-primary text-white shadow-lg scale-[1.02]"
+                      : "border-border text-foreground hover:border-primary/50 hover:bg-muted/30"
+                  )}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div className={cn(
+                      "rounded",
+                      g === 'long' ? "w-6 h-12 bg-current opacity-30" : "w-12 h-6 bg-current opacity-30"
+                    )} />
+                    {g} grain
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 5 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Vendor</h3>
+              <p className="text-sm text-muted-foreground">Primary supplier for this material (optional)</p>
+            </div>
+            {!form.addingNewVendor ? (
+              <div className="space-y-3">
+                <Select
+                  value={form.vendorId}
+                  onChange={e => setForm(f => ({ ...f, vendorId: e.target.value }))}
+                >
+                  <option value="">— No vendor / Skip —</option>
+                  {vendors?.map(v => (
+                    <option key={v.id} value={v.id}>{v.vendorName} {v.city ? `(${v.city})` : ''}</option>
+                  ))}
+                </Select>
+                <button
+                  onClick={() => setForm(f => ({ ...f, addingNewVendor: true, vendorId: '' }))}
+                  className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
+                >
+                  <Plus size={14} />
+                  Add new vendor
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/20">
+                <p className="text-sm font-bold">New Vendor</p>
+                <Input
+                  placeholder="Vendor name (required)"
+                  value={form.newVendorName}
+                  onChange={e => setForm(f => ({ ...f, newVendorName: e.target.value }))}
+                  autoFocus
+                />
+                <button
+                  onClick={() => setForm(f => ({ ...f, addingNewVendor: false, newVendorName: '' }))}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ← Back to vendor list
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 6 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">Opening Stock</h3>
+              <p className="text-sm text-muted-foreground">Set initial stock quantity and reorder level</p>
+            </div>
+
+            {/* Summary card */}
+            <div className="bg-muted/40 rounded-lg p-4 text-sm space-y-1">
+              <p className="font-bold text-foreground">{form.paperType === 'Other' ? form.paperTypeOther : form.paperType} {form.gsm}gsm</p>
+              <p className="text-muted-foreground">{form.dimWidth}″ × {form.dimHeight}″ · {form.grain} grain</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Opening Stock Qty</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.openingQty}
+                  onChange={e => setForm(f => ({ ...f, openingQty: e.target.value }))}
+                  placeholder="e.g. 500"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit</Label>
+                <Select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
+                  <option value="sheets">Sheets</option>
+                  <option value="reams">Reams</option>
+                  <option value="kg">KG</option>
+                  <option value="litre">Litre</option>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Reorder Level</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.reorderLevel}
+                onChange={e => setForm(f => ({ ...f, reorderLevel: e.target.value }))}
+                placeholder="e.g. 100"
+              />
+              <p className="text-xs text-muted-foreground">Alert when stock falls below this quantity</p>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between pt-4 border-t border-border">
+          <Button
+            variant="ghost"
+            onClick={step === 1 ? handleClose : () => setStep(s => s - 1)}
+            className="flex items-center gap-1"
+          >
+            <ChevronLeft size={16} />
+            {step === 1 ? 'Cancel' : 'Back'}
+          </Button>
+
+          {step < totalSteps ? (
+            <Button
+              onClick={() => setStep(s => s + 1)}
+              disabled={!canNext()}
+              className="flex items-center gap-1"
+            >
+              Next
+              <ChevronRight size={16} />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSubmit}
+              disabled={!canNext() || createMaterial.isPending}
+              isLoading={createMaterial.isPending}
+            >
+              Create Material
+            </Button>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 

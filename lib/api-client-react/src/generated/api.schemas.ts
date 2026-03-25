@@ -52,6 +52,8 @@ export interface Material {
   unit: MaterialUnit;
   currentQty: number;
   minReorderQty: number;
+  dimensions?: string | null;
+  grain?: string | null;
   createdAt: string;
 }
 
@@ -82,6 +84,8 @@ export interface CreateMaterialRequest {
   unit: CreateMaterialRequestUnit;
   currentQty: number;
   minReorderQty: number;
+  dimensions?: string | null;
+  grain?: string | null;
 }
 
 export interface StockInward {

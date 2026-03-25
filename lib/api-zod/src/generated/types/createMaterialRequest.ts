@@ -16,4 +16,6 @@ export interface CreateMaterialRequest {
   unit: CreateMaterialRequestUnit;
   currentQty: number;
   minReorderQty: number;
+  dimensions?: string | null;
+  grain?: string | null;
 }

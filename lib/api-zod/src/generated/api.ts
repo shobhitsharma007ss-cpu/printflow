@@ -95,6 +95,8 @@ export const ListMaterialsResponseItem = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListMaterialsResponse = zod.array(ListMaterialsResponseItem);
@@ -110,6 +112,8 @@ export const CreateMaterialBody = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
 });
 
 /**
@@ -128,6 +132,8 @@ export const GetMaterialResponse = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
   createdAt: zod.string(),
 });
 
@@ -146,6 +152,8 @@ export const UpdateMaterialBody = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
 });
 
 export const UpdateMaterialResponse = zod.object({
@@ -157,6 +165,8 @@ export const UpdateMaterialResponse = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
   createdAt: zod.string(),
 });
 

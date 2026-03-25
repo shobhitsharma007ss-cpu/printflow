@@ -793,6 +793,12 @@ components:
           type: number
         minReorderQty:
           type: number
+        dimensions:
+          type: string
+          nullable: true
+        grain:
+          type: string
+          nullable: true
         createdAt:
           type: string
       required: [id, materialName, materialType, subType, unit, currentQty, minReorderQty, createdAt]
@@ -817,6 +823,12 @@ components:
           type: number
         minReorderQty:
           type: number
+        dimensions:
+          type: string
+          nullable: true
+        grain:
+          type: string
+          nullable: true
       required: [materialName, materialType, subType, unit, currentQty, minReorderQty]
 
     StockInward:

@@ -17,5 +17,7 @@ export interface Material {
   unit: MaterialUnit;
   currentQty: number;
   minReorderQty: number;
+  dimensions?: string | null;
+  grain?: string | null;
   createdAt: string;
 }

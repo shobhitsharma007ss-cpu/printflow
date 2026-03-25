@@ -152,12 +152,18 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           </div>
         </div>
 
-        {material.gsm && (
-          <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {material.gsm && (
             <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold">{material.gsm} GSM</span>
-            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.materialType}</span>
-          </div>
-        )}
+          )}
+          {(material as any).dimensions && (
+            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{(material as any).dimensions}&quot;</span>
+          )}
+          {(material as any).grain && (
+            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs capitalize">{(material as any).grain} grain</span>
+          )}
+          <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.materialType}</span>
+        </div>
 
         {/* Stock bar */}
         <div className="mb-5">
