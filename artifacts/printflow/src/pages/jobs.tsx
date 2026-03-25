@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import {
   Plus, Search, Filter, ChevronRight, ArrowRight, X,
   CheckCircle, Play, AlertTriangle,
-  Clock, User, TrendingDown
+  Clock, User, TrendingDown, Check, Loader2, Timer
 } from "lucide-react";
 import { cn, getStatusColor } from "@/lib/utils";
 import {
@@ -155,7 +155,16 @@ export default function Jobs() {
 }
 
 function StandaloneWastageModal({ jobId, onClose }: { jobId: number; onClose: () => void }) {
-  const { data: job } = useJob(jobId);
+  const { data: job, isLoading } = useJob(jobId);
+  if (isLoading) {
+    return (
+      <Modal isOpen={true} onClose={onClose} title="Log Wastage">
+        <div className="flex items-center justify-center py-10">
+          <Loader2 size={28} className="animate-spin text-muted-foreground" />
+        </div>
+      </Modal>
+    );
+  }
   return (
     <LogWastageModal
       isOpen={true}
@@ -284,10 +293,12 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                             <span className={cn(
                               "w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5",
                               step.status === "completed" ? "bg-emerald-500 text-white" :
-                              step.status === "in-progress" ? "bg-blue-500 text-white animate-pulse" :
+                              step.status === "in-progress" ? "bg-blue-500 text-white" :
                               "bg-muted-foreground/20 text-muted-foreground"
                             )}>
-                              {step.status === "completed" ? "✓" : step.status === "in-progress" ? "▶" : idx + 1}
+                              {step.status === "completed" ? <Check size={11} strokeWidth={3} /> :
+                               step.status === "in-progress" ? <Loader2 size={11} className="animate-spin" /> :
+                               <Timer size={11} />}
                             </span>
                             <div className="min-w-0">
                               <p className="text-xs font-bold">{step.machineName || `Machine ${step.machineId}`}</p>
