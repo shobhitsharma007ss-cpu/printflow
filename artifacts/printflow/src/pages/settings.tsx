@@ -368,7 +368,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     if (step === 2) return !!form.gsm && parseInt(form.gsm) >= 50 && parseInt(form.gsm) <= 450;
     if (step === 3) return !!form.dimWidth && !!form.dimHeight;
     if (step === 4) return !!form.grain;
-    if (step === 5) return true;
+    if (step === 5) return !form.addingNewVendor || !!form.newVendorName.trim();
     if (step === 6) return !!form.openingQty && !!form.unit && !!form.reorderLevel;
     return false;
   };
