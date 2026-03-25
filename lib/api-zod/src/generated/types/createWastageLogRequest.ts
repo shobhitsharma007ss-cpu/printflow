@@ -13,4 +13,5 @@ export interface CreateWastageLogRequest {
   plannedQty: number;
   actualQty: number;
   reason: CreateWastageLogRequestReason;
+  notes?: string | null;
 }

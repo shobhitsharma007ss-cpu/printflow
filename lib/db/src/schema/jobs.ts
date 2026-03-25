@@ -57,6 +57,7 @@ export const wastageLogTable = pgTable("wastage_log", {
   wastageQty: numeric("wastage_qty", { precision: 10, scale: 2 }).notNull(),
   wastagePct: numeric("wastage_pct", { precision: 5, scale: 2 }).notNull(),
   reason: text("reason").notNull(), // setup/mis-registration/client-correction/plate-change/other
+  notes: text("notes"),
   loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

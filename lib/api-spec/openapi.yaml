@@ -1312,6 +1312,9 @@ components:
         reason:
           type: string
           enum: [setup, mis-registration, client-correction, plate-change, other]
+        notes:
+          type: string
+          nullable: true
         loggedAt:
           type: string
       required: [id, jobId, materialId, plannedQty, actualQty, wastageQty, wastagePct, reason, loggedAt]
@@ -1330,6 +1333,9 @@ components:
         reason:
           type: string
           enum: [setup, mis-registration, client-correction, plate-change, other]
+        notes:
+          type: string
+          nullable: true
       required: [jobId, materialId, plannedQty, actualQty, reason]
 
     DashboardMetrics:

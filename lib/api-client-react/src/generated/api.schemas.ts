@@ -326,6 +326,7 @@ export interface WastageLog {
   wastageQty: number;
   wastagePct: number;
   reason: WastageLogReason;
+  notes?: string | null;
   loggedAt: string;
 }
 
@@ -346,6 +347,7 @@ export interface CreateWastageLogRequest {
   plannedQty: number;
   actualQty: number;
   reason: CreateWastageLogRequestReason;
+  notes?: string | null;
 }
 
 export interface DashboardMetrics {

@@ -18,5 +18,6 @@ export interface WastageLog {
   wastageQty: number;
   wastagePct: number;
   reason: WastageLogReason;
+  notes?: string | null;
   loggedAt: string;
 }

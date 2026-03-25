@@ -812,6 +812,7 @@ export const ListWastageLogsResponseItem = zod.object({
     "plate-change",
     "other",
   ]),
+  notes: zod.string().nullish(),
   loggedAt: zod.string(),
 });
 export const ListWastageLogsResponse = zod.array(ListWastageLogsResponseItem);
@@ -831,6 +832,7 @@ export const CreateWastageLogBody = zod.object({
     "plate-change",
     "other",
   ]),
+  notes: zod.string().nullish(),
 });
 
 /**

@@ -504,6 +504,7 @@ router.get("/wastage-log", async (req, res): Promise<void> => {
       wastageQty: wastageLogTable.wastageQty,
       wastagePct: wastageLogTable.wastagePct,
       reason: wastageLogTable.reason,
+      notes: wastageLogTable.notes,
       loggedAt: wastageLogTable.loggedAt,
     })
     .from(wastageLogTable)
@@ -535,6 +536,7 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
     wastageQty: String(Math.abs(wastageQty)),
     wastagePct: String(Math.abs(wastagePct).toFixed(2)),
     reason: parsed.data.reason,
+    notes: parsed.data.notes ?? null,
   }).returning();
 
   res.status(201).json(row);
