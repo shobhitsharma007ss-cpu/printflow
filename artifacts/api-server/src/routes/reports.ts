@@ -108,6 +108,8 @@ router.get("/reports/stock-summary", async (_req, res): Promise<void> => {
       unit: m.unit,
       currentQty,
       minReorderQty,
+      dimensions: m.dimensions,
+      grain: m.grain,
       isLowStock,
       stockPct,
     };

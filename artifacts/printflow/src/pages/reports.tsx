@@ -12,8 +12,8 @@ export default function Reports() {
   const formattedWastage = wastageData?.map(w => ({
     name: w.jobCode ?? `Job ${w.jobId}`,
     label: `${w.jobCode} — ${w.jobName}`,
-    wastage: parseFloat(String((w as any).wastagePct ?? 0)),
-    client: (w as any).clientName,
+    wastage: w.wastagePct,
+    client: w.clientName,
   })) || [];
 
   return (
@@ -57,8 +57,8 @@ export default function Reports() {
                   <Tooltip
                     cursor={{ fill: 'hsl(var(--muted))' }}
                     contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'hsl(var(--card))' }}
-                    formatter={(value: any, _name: any, props: any) => [
-                      `${parseFloat(String(value)).toFixed(2)}%`,
+                    formatter={(value: number, _name: string, props: { payload?: { label?: string } }) => [
+                      `${value.toFixed(2)}%`,
                       props.payload?.label ?? 'Wastage'
                     ]}
                     labelFormatter={(label) => {

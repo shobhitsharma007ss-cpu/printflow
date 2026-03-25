@@ -169,7 +169,7 @@ function StatusDot({ status }: { status: string }) {
   );
 }
 
-function MetricCard({ title, value, icon: Icon, color, bgColor }: any) {
+function MetricCard({ title, value, icon: Icon, color, bgColor }: { title: string; value: string | number; icon: React.ElementType; color: string; bgColor: string }) {
   return (
     <Card className="p-6 flex items-center gap-4 hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
       <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${bgColor} ${color}`}>

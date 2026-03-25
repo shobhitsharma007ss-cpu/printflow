@@ -4,6 +4,7 @@ import { useJobs, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, isAnimatedStatus, cn } from "@/lib/utils";
 import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock } from "lucide-react";
+import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 export default function FloorMonitor() {
   const { data: machines, isLoading: machinesLoading } = useMachines();
@@ -16,25 +17,25 @@ export default function FloorMonitor() {
   if (isLoading) return <div className="flex justify-center p-12"><div className="animate-spin w-8 h-8 border-2 border-primary rounded-full border-t-transparent" /></div>;
   if (!machines) return null;
 
-  const activeJobs = jobs?.filter((j: any) => j.status === "in-progress" || j.status === "pending") ?? [];
+  const activeJobs: JobWithDetails[] = jobs?.filter((j) => j.status === "in-progress" || j.status === "pending") ?? [];
 
   const getMachineJobs = (machineId: number) => {
-    return activeJobs.filter((j: any) => 
-      j.routing?.some((r: any) => r.machineId === machineId && r.status !== "completed")
+    return activeJobs.filter((j) => 
+      j.routing?.some((r) => r.machineId === machineId && r.status !== "completed")
     );
   };
 
-  const getMachineActiveStep = (machineId: number) => {
+  const getMachineActiveStep = (machineId: number): { step: JobRouting; job: JobWithDetails } | null => {
     for (const job of activeJobs) {
-      const step = (job as any).routing?.find((r: any) => r.machineId === machineId && r.status === "in-progress");
+      const step = job.routing?.find((r) => r.machineId === machineId && r.status === "in-progress");
       if (step) return { step, job };
     }
     return null;
   };
 
-  const getMachinePendingStep = (machineId: number) => {
+  const getMachinePendingStep = (machineId: number): { step: JobRouting; job: JobWithDetails } | null => {
     for (const job of activeJobs) {
-      const step = (job as any).routing?.find((r: any) => r.machineId === machineId && r.status === "pending");
+      const step = job.routing?.find((r) => r.machineId === machineId && r.status === "pending");
       if (step) return { step, job };
     }
     return null;
@@ -47,11 +48,11 @@ export default function FloorMonitor() {
     );
   };
 
-  const groupedMachines = machines.reduce((acc: any, machine: any) => {
+  const groupedMachines = machines.reduce((acc, machine) => {
     if (!acc[machine.machineType]) acc[machine.machineType] = [];
     acc[machine.machineType].push(machine);
     return acc;
-  }, {} as Record<string, typeof machines>);
+  }, {} as Record<string, Machine[]>);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -75,13 +76,13 @@ export default function FloorMonitor() {
         </div>
       </div>
 
-      {Object.entries(groupedMachines).map(([type, typeMachines]: [string, any]) => (
+      {Object.entries(groupedMachines).map(([type, typeMachines]) => (
         <div key={type} className="space-y-4">
           <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground px-2 border-b border-border pb-2">
             {type} Area
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {typeMachines.map((machine: any) => {
+            {typeMachines.map((machine) => {
               const activeInfo = getMachineActiveStep(machine.id);
               const pendingInfo = getMachinePendingStep(machine.id);
               const machineJobs = getMachineJobs(machine.id);
@@ -123,7 +124,7 @@ export default function FloorMonitor() {
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
-                            <span className="text-xs font-semibold text-foreground">{(activeInfo.job as any).jobCode}</span>
+                            <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
                           </div>
                           <button
                             onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
@@ -142,7 +143,7 @@ export default function FloorMonitor() {
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="text-[10px] uppercase tracking-wider font-bold text-blue-600 block">Step {pendingInfo.step.stepNumber} — Waiting</span>
-                            <span className="text-xs font-semibold text-foreground">{(pendingInfo.job as any).jobCode} — {(pendingInfo.job as any).jobName}</span>
+                            <span className="text-xs font-semibold text-foreground">{pendingInfo.job.jobCode} — {pendingInfo.job.jobName}</span>
                           </div>
                           <button
                             onClick={() => handleAdvanceStep(pendingInfo.step.id, "in-progress")}
@@ -170,7 +171,7 @@ export default function FloorMonitor() {
 
                     {isExpanded && machineJobs.length > 1 && (
                       <div className="space-y-1.5 mb-3">
-                        {machineJobs.slice(1).map((j: any) => (
+                        {machineJobs.slice(1).map((j) => (
                           <div key={j.id} className="text-xs bg-muted/50 rounded px-2 py-1.5 flex items-center gap-1.5">
                             <span className="font-mono font-bold">{j.jobCode}</span>
                             <span className="text-muted-foreground truncate">{j.jobName}</span>
@@ -203,7 +204,7 @@ export default function FloorMonitor() {
             Active Job Progress
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {activeJobs.map((job: any) => (
+            {activeJobs.map((job) => (
               <Card key={job.id} className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -221,7 +222,7 @@ export default function FloorMonitor() {
 
                 {job.routing && job.routing.length > 0 && (
                   <div className="flex items-center gap-1 mt-4">
-                    {job.routing.map((step: any, idx: number) => (
+                    {job.routing.map((step, idx) => (
                       <React.Fragment key={step.id}>
                         <div className={cn(
                           "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all",

@@ -15,6 +15,8 @@ export interface StockSummaryRow {
   unit: string;
   currentQty: number;
   minReorderQty: number;
+  dimensions?: string | null;
+  grain?: string | null;
   isLowStock: boolean;
   stockPct: number;
 }

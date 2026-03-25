@@ -1336,6 +1336,12 @@ components:
           type: number
         minReorderQty:
           type: number
+        dimensions:
+          type: string
+          nullable: true
+        grain:
+          type: string
+          nullable: true
         isLowStock:
           type: boolean
         stockPct:

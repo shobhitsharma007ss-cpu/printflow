@@ -7,6 +7,7 @@ import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-eleme
 import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
+import type { Machine, Material, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
 
 type Section = "machines" | "materials" | "vendors" | "templates";
 
@@ -64,12 +65,12 @@ function MachinesSection() {
   const [editOperator, setEditOperator] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
 
-  const startEdit = (machine: any) => {
+  const startEdit = (machine: Machine) => {
     setEditing(machine.id);
     setEditOperator(machine.operatorName ?? '');
   };
 
-  const saveOperator = (machine: any) => {
+  const saveOperator = (machine: Machine) => {
     updateMachine.mutate({
       id: machine.id,
       data: {
@@ -93,7 +94,7 @@ function MachinesSection() {
     });
   };
 
-  const toggleStatus = (machine: any) => {
+  const toggleStatus = (machine: Machine) => {
     const next = machine.status === 'maintenance' ? 'idle' : 'maintenance';
     patchStatus.mutate({ id: machine.id, data: { status: next } });
   };
@@ -178,12 +179,12 @@ function MaterialsSection() {
   const [saved, setSaved] = useState<number | null>(null);
   const [showWizard, setShowWizard] = useState(false);
 
-  const startEdit = (m: any) => {
+  const startEdit = (m: Material) => {
     setEditing(m.id);
     setEditReorder(String(m.minReorderQty));
   };
 
-  const save = (m: any) => {
+  const save = (m: Material) => {
     updateMaterial.mutate({
       id: m.id,
       data: {
@@ -238,8 +239,8 @@ function MaterialsSection() {
                     <p className="font-semibold">{m.materialName}</p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">{m.gsm} GSM</span>}
-                      {(m as any).dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{(m as any).dimensions}&quot;</span>}
-                      {(m as any).grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{(m as any).grain} grain</span>}
+                      {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{m.dimensions}&quot;</span>}
+                      {m.grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{m.grain} grain</span>}
                       <span className="text-xs text-muted-foreground">{m.unit}</span>
                       {saved === m.id && <span className="text-xs text-emerald-500 font-medium">Saved ✓</span>}
                     </div>
@@ -357,7 +358,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   };
 
   const canNext = () => {
-    if (step === 1) return !!form.paperType;
+    if (step === 1) return !!form.paperType && (form.paperType !== 'Other' || !!form.paperTypeOther.trim());
     if (step === 2) return !!form.gsm && parseInt(form.gsm) >= 50 && parseInt(form.gsm) <= 450;
     if (step === 3) return !!form.dimWidth && !!form.dimHeight;
     if (step === 4) return !!form.grain;
@@ -378,7 +379,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         materialType: meta.materialType,
         subType: meta.subType,
         gsm: parseInt(form.gsm),
-        unit: form.unit as any,
+        unit: form.unit as CreateMaterialRequestUnit,
         currentQty: parseFloat(form.openingQty) || 0,
         minReorderQty: parseFloat(form.reorderLevel) || 0,
         dimensions,
@@ -386,15 +387,15 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       }
     }, {
       onSuccess: async (newMaterial) => {
-        const matId = (newMaterial as any).id;
+        const matId = newMaterial.id;
 
         let vendorIdToLink: number | null = null;
 
         if (form.addingNewVendor && form.newVendorName) {
           await new Promise<void>((resolve) => {
             createVendor.mutate({ data: { vendorName: form.newVendorName, contactPerson: '', phone: '', city: '' } }, {
-              onSuccess: (v: any) => {
-                vendorIdToLink = (v as any).id;
+              onSuccess: (v) => {
+                vendorIdToLink = v.id;
                 resolve();
               },
               onError: () => resolve(),
@@ -861,19 +862,19 @@ function TemplatesSection() {
               {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
             </div>
             <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded font-mono">
-              {(t as any).machineNames?.length ?? t.routingSteps?.length ?? 0} steps
+              {t.machineNames?.length ?? t.routingSteps?.length ?? 0} steps
             </span>
           </div>
 
-          {(t as any).machineNames && (
+          {t.machineNames && (
             <div className="flex flex-wrap items-center gap-2 mt-3">
-              {((t as any).machineNames as string[]).map((name: string, idx: number) => (
+              {t.machineNames.map((name, idx) => (
                 <React.Fragment key={idx}>
                   <div className="flex items-center gap-1.5 bg-muted rounded-lg px-3 py-1.5 text-sm">
                     <span className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
                     <span className="font-medium">{name}</span>
                   </div>
-                  {idx < (t as any).machineNames.length - 1 && (
+                  {idx < t.machineNames.length - 1 && (
                     <ArrowRight size={14} className="text-muted-foreground shrink-0" />
                   )}
                 </React.Fragment>

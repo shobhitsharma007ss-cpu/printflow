@@ -17,6 +17,7 @@ import {
   getGetJobMaterialsQueryKey,
   getListJobsQueryKey,
 } from "@workspace/api-client-react";
+import type { JobWithDetails, JobRouting, JobMaterial, WastageLog, JobTemplate, CreateWastageLogRequestReason } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Jobs() {
@@ -155,8 +156,8 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
 
   if (!job) return null;
 
-  const completedSteps = (job as any).routing?.filter((r: any) => r.status === "completed").length ?? 0;
-  const totalSteps = (job as any).routing?.length ?? 0;
+  const completedSteps = job.routing?.filter((r) => r.status === "completed").length ?? 0;
+  const totalSteps = job.routing?.length ?? 0;
   const progressPct = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
   return (
@@ -211,7 +212,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
         )}
 
         {/* Routing Progress */}
-        {(job as any).routing && (job as any).routing.length > 0 && (
+        {job.routing && job.routing.length > 0 && (
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Routing Progress</h4>
@@ -221,7 +222,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
               <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
             </div>
             <div className="space-y-2">
-              {(job as any).routing.map((step: any) => (
+              {job.routing.map((step) => (
                 <div key={step.id} className={cn(
                   "flex items-center justify-between rounded-lg p-2.5 text-xs border transition-all",
                   step.status === "completed" ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800" :
@@ -271,7 +272,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
           <div className="mb-5">
             <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Materials</h4>
             <div className="space-y-1.5">
-              {materials.map((m: any) => (
+              {materials.map((m) => (
                 <div key={m.id} className="bg-muted/40 rounded-lg p-2.5 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="font-bold">{m.materialName || `Material #${m.materialId}`}</span>
@@ -304,12 +305,12 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
             <p className="text-xs text-muted-foreground">No wastage recorded yet</p>
           ) : (
             <div className="space-y-1.5">
-              {wastageLogs.map((w: any) => (
+              {wastageLogs.map((w) => (
                 <div key={w.id} className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5 text-xs">
                   <div className="flex justify-between items-center">
                     <span className="font-bold">{w.materialName || `Material #${w.materialId}`}</span>
-                    <span className={cn("font-bold", parseFloat(w.wastagePct) > 5 ? "text-rose-500" : "text-amber-600")}>
-                      {parseFloat(w.wastagePct).toFixed(1)}%
+                    <span className={cn("font-bold", w.wastagePct > 5 ? "text-rose-500" : "text-amber-600")}>
+                      {w.wastagePct.toFixed(1)}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-1 text-muted-foreground">
@@ -409,7 +410,7 @@ function LogWastageModal({ isOpen, onClose, jobId }: { isOpen: boolean; onClose:
         materialId: parseInt(form.materialId),
         plannedQty: parseFloat(form.plannedQty),
         actualQty: parseFloat(form.actualQty),
-        reason: form.reason as any,
+        reason: form.reason as CreateWastageLogRequestReason,
       }
     });
   };
@@ -604,17 +605,17 @@ function NewJobModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
           </Select>
         </div>
 
-        {selectedTemplate && (selectedTemplate as any).machineNames && (
+        {selectedTemplate && selectedTemplate.machineNames && (
           <div className="bg-muted/50 rounded-xl p-4 border border-border">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Routing Steps</p>
             <div className="flex flex-wrap items-center gap-2">
-              {((selectedTemplate as any).machineNames as string[]).map((name: string, idx: number) => (
+              {selectedTemplate.machineNames.map((name, idx) => (
                 <React.Fragment key={idx}>
                   <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-3 py-1.5 shadow-sm">
                     <span className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
                     <span className="text-sm font-semibold">{name}</span>
                   </div>
-                  {idx < (selectedTemplate as any).machineNames.length - 1 && (
+                  {idx < selectedTemplate.machineNames.length - 1 && (
                     <ArrowRight size={16} className="text-muted-foreground shrink-0" />
                   )}
                 </React.Fragment>

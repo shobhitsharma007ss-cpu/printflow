@@ -123,6 +123,7 @@ router.get("/materials/:id/inward-history", async (req, res): Promise<void> => {
       qtyReceived: stockInwardTable.qtyReceived,
       unit: stockInwardTable.unit,
       batchRef: stockInwardTable.batchRef,
+      brand: stockInwardTable.brand,
       receivedDate: stockInwardTable.receivedDate,
       notes: stockInwardTable.notes,
       vendorName: vendorsTable.vendorName,

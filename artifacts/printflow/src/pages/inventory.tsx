@@ -7,6 +7,7 @@ import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/u
 import { Package, AlertTriangle, Layers, X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import type { StockSummaryRow } from "@workspace/api-client-react";
 
 export default function Inventory() {
   const { data: stock, isLoading } = useStockSummary();
@@ -117,7 +118,7 @@ export default function Inventory() {
 
 function MaterialDetailPanel({ materialId, material, onClose }: {
   materialId: number;
-  material: any;
+  material: StockSummaryRow;
   onClose: () => void;
 }) {
   const { data: vendors, isLoading: loadingVendors } = useMaterialVendors(materialId);
@@ -156,11 +157,11 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           {material.gsm && (
             <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold">{material.gsm} GSM</span>
           )}
-          {(material as any).dimensions && (
-            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{(material as any).dimensions}&quot;</span>
+          {material.dimensions && (
+            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.dimensions}&quot;</span>
           )}
-          {(material as any).grain && (
-            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs capitalize">{(material as any).grain} grain</span>
+          {material.grain && (
+            <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs capitalize">{material.grain} grain</span>
           )}
           <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.materialType}</span>
         </div>
@@ -213,7 +214,7 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
             <p className="text-xs text-muted-foreground">No inward records yet</p>
           ) : (
             <div className="space-y-2">
-              {recentHistory.map((h: any) => (
+              {recentHistory.map((h) => (
                 <div key={h.id} className="bg-muted/40 rounded-lg p-2.5 text-xs">
                   <div className="flex justify-between items-center mb-0.5">
                     <span className="font-bold text-foreground">+{h.qtyReceived} {h.unit}</span>
@@ -378,7 +379,7 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
   );
 }
 
-function StackVisual({ item, isSelected, onClick }: { item: any; isSelected: boolean; onClick: () => void }) {
+function StackVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isSelected: boolean; onClick: () => void }) {
   const fillPct = Math.min(Math.max(item.stockPct, 5), 100);
   let color = "bg-emerald-500";
   if (item.stockPct < 30) color = "bg-rose-500";
@@ -418,7 +419,7 @@ function StackVisual({ item, isSelected, onClick }: { item: any; isSelected: boo
   );
 }
 
-function CylinderVisual({ item, isSelected, onClick }: { item: any; isSelected: boolean; onClick: () => void }) {
+function CylinderVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isSelected: boolean; onClick: () => void }) {
   const fillPct = Math.min(Math.max(item.stockPct, 5), 100);
   let colorClass = "from-emerald-400 to-emerald-600";
   if (item.stockPct < 30) colorClass = "from-rose-400 to-rose-600";

@@ -65,7 +65,7 @@ function NotificationBell() {
   };
 
   const handleMarkAllRead = () => {
-    markAllRead.mutate(undefined as any);
+    markAllRead.mutate();
   };
 
   const timeAgo = (dateStr: string) => {

@@ -852,6 +852,8 @@ export const GetStockSummaryResponseItem = zod.object({
   unit: zod.string(),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  dimensions: zod.string().nullish(),
+  grain: zod.string().nullish(),
   isLowStock: zod.boolean(),
   stockPct: zod.number(),
 });
