@@ -62,7 +62,7 @@ export default function FloorMonitor() {
                   <div className="space-y-4 mt-6">
                     <div className="bg-muted rounded-lg p-3">
                       <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
-                      <span className="text-lg font-bold text-primary truncate block">
+                      <span className="text-lg font-bold text-primary break-words block">
                         {machine.currentJobName || "--- IDLE ---"}
                       </span>
                     </div>

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, machinesTable, jobRoutingTable, jobsTable } from "@workspace/db";
 import {
   CreateMachineBody,
@@ -16,12 +16,16 @@ async function getMachinesWithCurrentJob() {
   const machines = await db.select().from(machinesTable).orderBy(machinesTable.id);
   const result = [];
   for (const machine of machines) {
-    // Find current active job
+    // Find current active job — only routing steps that are in-progress on an in-progress job
     const activeRouting = await db
       .select({ jobName: jobsTable.jobName, jobCode: jobsTable.jobCode })
       .from(jobRoutingTable)
       .innerJoin(jobsTable, eq(jobRoutingTable.jobId, jobsTable.id))
-      .where(eq(jobRoutingTable.machineId, machine.id))
+      .where(and(
+        eq(jobRoutingTable.machineId, machine.id),
+        eq(jobRoutingTable.status, 'in-progress'),
+        eq(jobsTable.status, 'in-progress')
+      ))
       .limit(1);
 
     const currentJobName = activeRouting[0]

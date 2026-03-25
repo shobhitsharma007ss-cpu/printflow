@@ -1,11 +1,21 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useDashboardMetrics } from "@/hooks/use-dashboard";
 import { Card } from "@/components/ui-elements";
-import { Activity, Briefcase, AlertTriangle, CheckCircle2, Factory } from "lucide-react";
+import { Activity, Briefcase, AlertTriangle, CheckCircle2, Factory, Clock } from "lucide-react";
 import { getStatusColor, getStatusDotColor, isAnimatedStatus } from "@/lib/utils";
+import { format } from "date-fns";
 
 export default function Dashboard() {
-  const { data: metrics, isLoading, error } = useDashboardMetrics();
+  const { data: metrics, isLoading, error, refetch } = useDashboardMetrics();
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetch();
+      setLastUpdated(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [refetch]);
 
   if (isLoading) {
     return <div className="flex h-full items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
@@ -23,9 +33,15 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Plant Overview</h1>
-        <p className="text-muted-foreground mt-1">Real-time metrics and operations status.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Plant Overview</h1>
+          <p className="text-muted-foreground mt-1">Real-time metrics and operations status.</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 border border-border rounded-lg px-3 py-2 shrink-0">
+          <Clock size={13} />
+          <span>Updated {format(lastUpdated, "hh:mm a")}</span>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -77,16 +93,16 @@ export default function Dashboard() {
                     <h3 className="font-bold text-foreground text-lg leading-none mb-1">{machine.machineName}</h3>
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{machine.machineType}</span>
                   </div>
-                  <div className={`w-4 h-4 rounded-full ${getStatusDotColor(machine.status)} ${isAnimatedStatus(machine.status) ? 'animate-pulse' : ''}`} />
+                  <StatusDot status={machine.status} />
                 </div>
-                <div className="pt-3 border-t border-border mt-auto flex justify-between items-end">
-                  <div>
+                <div className="pt-3 border-t border-border mt-auto flex justify-between items-end gap-2">
+                  <div className="min-w-0">
                     <span className="text-xs text-muted-foreground block">Current Job</span>
-                    <span className="text-sm font-semibold truncate max-w-[120px] block">
+                    <span className="text-sm font-semibold block">
                       {machine.currentJobName || 'Idle'}
                     </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${getStatusColor(machine.status)}`}>
+                  <span className={`shrink-0 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${getStatusColor(machine.status)}`}>
                     {machine.status}
                   </span>
                 </div>
@@ -112,7 +128,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground mt-0.5">{job.jobName}</p>
                   <p className="text-xs font-medium mt-1">{job.clientName}</p>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getStatusColor(job.status)}`}>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border shrink-0 ml-2 ${getStatusColor(job.status)}`}>
                   {job.status}
                 </span>
               </div>
@@ -123,6 +139,32 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const isRunning = status.toLowerCase() === 'running';
+  const isMaintenance = status.toLowerCase() === 'maintenance';
+
+  if (isRunning) {
+    return (
+      <div className="relative flex h-5 w-5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: '#22c55e' }} />
+        <span className="relative inline-flex rounded-full h-5 w-5" style={{ backgroundColor: '#22c55e', boxShadow: '0 0 12px 3px rgba(34,197,94,0.6)' }} />
+      </div>
+    );
+  }
+  if (isMaintenance) {
+    return (
+      <div className="relative flex h-5 w-5 shrink-0">
+        <span className="relative inline-flex rounded-full h-5 w-5" style={{ backgroundColor: '#ef4444', boxShadow: '0 0 10px 2px rgba(239,68,68,0.5)' }} />
+      </div>
+    );
+  }
+  return (
+    <div className="relative flex h-5 w-5 shrink-0">
+      <span className="relative inline-flex rounded-full h-5 w-5 bg-gray-400" />
     </div>
   );
 }
