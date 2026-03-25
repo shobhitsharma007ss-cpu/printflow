@@ -2941,81 +2941,6 @@ export const useCreateWastageLog = <
 };
 
 /**
- * @summary Get live plant alerts (low stock, overdue jobs, completed today)
- */
-export const getGetPlantAlertsUrl = () => {
-  return `/api/plant-alerts`;
-};
-
-export const getPlantAlerts = async (
-  options?: RequestInit,
-): Promise<PlantAlerts> => {
-  return customFetch<PlantAlerts>(getGetPlantAlertsUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetPlantAlertsQueryKey = () => {
-  return [`/api/plant-alerts`] as const;
-};
-
-export const getGetPlantAlertsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getPlantAlerts>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getPlantAlerts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetPlantAlertsQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlantAlerts>>> = ({
-    signal,
-  }) => getPlantAlerts({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getPlantAlerts>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetPlantAlertsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getPlantAlerts>>
->;
-export type GetPlantAlertsQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get live plant alerts (low stock, overdue jobs, completed today)
- */
-
-export function useGetPlantAlerts<
-  TData = Awaited<ReturnType<typeof getPlantAlerts>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getPlantAlerts>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetPlantAlertsQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
  * @summary Get dashboard metrics
  */
 export const getGetDashboardMetricsUrl = () => {
@@ -3328,7 +3253,7 @@ export function useGetJobCostReport<
 }
 
 /**
- * @summary List notifications
+ * @summary Get plant alerts (low stock, overdue jobs, completed today)
  */
 export const getListNotificationsUrl = () => {
   return `/api/notifications`;
@@ -3336,8 +3261,8 @@ export const getListNotificationsUrl = () => {
 
 export const listNotifications = async (
   options?: RequestInit,
-): Promise<Notification[]> => {
-  return customFetch<Notification[]>(getListNotificationsUrl(), {
+): Promise<PlantAlerts> => {
+  return customFetch<PlantAlerts>(getListNotificationsUrl(), {
     ...options,
     method: "GET",
   });
@@ -3379,7 +3304,7 @@ export type ListNotificationsQueryResult = NonNullable<
 export type ListNotificationsQueryError = ErrorType<unknown>;
 
 /**
- * @summary List notifications
+ * @summary Get plant alerts (low stock, overdue jobs, completed today)
  */
 
 export function useListNotifications<

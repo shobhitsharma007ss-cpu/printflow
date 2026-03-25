@@ -4,7 +4,6 @@ import {
   useMarkNotificationRead as useGeneratedMarkRead,
   useMarkAllNotificationsRead as useGeneratedMarkAllRead,
   getListNotificationsQueryKey,
-  useGetPlantAlerts,
 } from "@workspace/api-client-react";
 
 export function useNotifications() {
@@ -12,7 +11,7 @@ export function useNotifications() {
 }
 
 export function usePlantAlerts() {
-  return useGetPlantAlerts({ query: { refetchInterval: 60000 } });
+  return useListNotifications({ query: { refetchInterval: 60000 } });
 }
 
 export function useMarkNotificationRead() {

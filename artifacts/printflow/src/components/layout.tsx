@@ -134,7 +134,7 @@ function NotificationBell() {
                           <span className="font-mono text-primary text-xs">{j.jobCode}</span> {j.jobName}
                         </p>
                         <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                          {j.clientName} · {j.daysOverdue + 2}d in pending
+                          {j.clientName} · {j.daysOverdue}d overdue
                         </p>
                       </div>
                     </Link>

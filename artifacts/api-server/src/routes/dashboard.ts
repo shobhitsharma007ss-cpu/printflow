@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, lte, lt, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, jobsTable, machinesTable, materialsTable, jobRoutingTable, jobMaterialsTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -100,66 +100,6 @@ router.get("/dashboard/metrics", async (_req, res): Promise<void> => {
     recentJobs: recentJobsWithDetails,
     machineStatuses,
   });
-});
-
-router.get("/plant-alerts", async (_req, res): Promise<void> => {
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
-  const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
-
-  const [allMaterials, allJobs] = await Promise.all([
-    db.select({
-      id: materialsTable.id,
-      materialName: materialsTable.materialName,
-      currentQty: materialsTable.currentQty,
-      minReorderQty: materialsTable.minReorderQty,
-      unit: materialsTable.unit,
-    }).from(materialsTable),
-    db.select({
-      id: jobsTable.id,
-      jobCode: jobsTable.jobCode,
-      jobName: jobsTable.jobName,
-      clientName: jobsTable.clientName,
-      status: jobsTable.status,
-      scheduledDate: jobsTable.scheduledDate,
-      createdAt: jobsTable.createdAt,
-    }).from(jobsTable),
-  ]);
-
-  const lowStock = allMaterials
-    .filter(m => parseFloat(String(m.currentQty)) <= parseFloat(String(m.minReorderQty)) && parseFloat(String(m.minReorderQty)) > 0)
-    .map(m => ({
-      id: m.id,
-      materialName: m.materialName,
-      currentQty: parseFloat(String(m.currentQty)),
-      minReorderQty: parseFloat(String(m.minReorderQty)),
-      unit: m.unit,
-    }));
-
-  const overdueJobs = allJobs
-    .filter(j => j.status === "pending" && new Date(j.createdAt) < twoDaysAgo)
-    .map(j => {
-      const diffMs = now.getTime() - new Date(j.createdAt).getTime();
-      const daysOverdue = Math.floor(diffMs / (24 * 60 * 60 * 1000)) - 2;
-      return {
-        id: j.id,
-        jobCode: j.jobCode,
-        jobName: j.jobName,
-        clientName: j.clientName,
-        daysOverdue: Math.max(0, daysOverdue),
-      };
-    });
-
-  const completedToday = allJobs
-    .filter(j => j.status === "completed" && j.scheduledDate === todayStr)
-    .map(j => ({
-      id: j.id,
-      jobCode: j.jobCode,
-      jobName: j.jobName,
-      clientName: j.clientName,
-    }));
-
-  res.json({ lowStock, overdueJobs, completedToday });
 });
 
 export default router;

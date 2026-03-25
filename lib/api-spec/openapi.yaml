@@ -719,19 +719,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/WastageLog"
 
-  /plant-alerts:
-    get:
-      operationId: getPlantAlerts
-      tags: [dashboard]
-      summary: Get live plant alerts (low stock, overdue jobs, completed today)
-      responses:
-        "200":
-          description: Plant alerts
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PlantAlerts"
-
   /dashboard/metrics:
     get:
       operationId: getDashboardMetrics
@@ -798,16 +785,14 @@ paths:
     get:
       operationId: listNotifications
       tags: [notifications]
-      summary: List notifications
+      summary: Get plant alerts (low stock, overdue jobs, completed today)
       responses:
         "200":
-          description: List of notifications
+          description: Plant alerts with three alert categories
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Notification"
+                $ref: "#/components/schemas/PlantAlerts"
 
   /notifications/{id}/read:
     patch:

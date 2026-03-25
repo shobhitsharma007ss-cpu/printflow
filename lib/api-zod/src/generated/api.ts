@@ -932,38 +932,6 @@ export const CreateWastageLogBody = zod.object({
 });
 
 /**
- * @summary Get live plant alerts (low stock, overdue jobs, completed today)
- */
-export const GetPlantAlertsResponse = zod.object({
-  lowStock: zod.array(
-    zod.object({
-      id: zod.number(),
-      materialName: zod.string(),
-      currentQty: zod.number(),
-      minReorderQty: zod.number(),
-      unit: zod.string(),
-    }),
-  ),
-  overdueJobs: zod.array(
-    zod.object({
-      id: zod.number(),
-      jobCode: zod.string(),
-      jobName: zod.string(),
-      clientName: zod.string(),
-      daysOverdue: zod.number(),
-    }),
-  ),
-  completedToday: zod.array(
-    zod.object({
-      id: zod.number(),
-      jobCode: zod.string(),
-      jobName: zod.string(),
-      clientName: zod.string(),
-    }),
-  ),
-});
-
-/**
  * @summary Get dashboard metrics
  */
 export const GetDashboardMetricsResponse = zod.object({
@@ -1129,20 +1097,36 @@ export const GetJobCostReportResponse = zod.object({
 });
 
 /**
- * @summary List notifications
+ * @summary Get plant alerts (low stock, overdue jobs, completed today)
  */
-export const ListNotificationsResponseItem = zod.object({
-  id: zod.number(),
-  type: zod.string(),
-  title: zod.string(),
-  message: zod.string(),
-  isRead: zod.boolean(),
-  relatedId: zod.number().nullish(),
-  createdAt: zod.string(),
+export const ListNotificationsResponse = zod.object({
+  lowStock: zod.array(
+    zod.object({
+      id: zod.number(),
+      materialName: zod.string(),
+      currentQty: zod.number(),
+      minReorderQty: zod.number(),
+      unit: zod.string(),
+    }),
+  ),
+  overdueJobs: zod.array(
+    zod.object({
+      id: zod.number(),
+      jobCode: zod.string(),
+      jobName: zod.string(),
+      clientName: zod.string(),
+      daysOverdue: zod.number(),
+    }),
+  ),
+  completedToday: zod.array(
+    zod.object({
+      id: zod.number(),
+      jobCode: zod.string(),
+      jobName: zod.string(),
+      clientName: zod.string(),
+    }),
+  ),
 });
-export const ListNotificationsResponse = zod.array(
-  ListNotificationsResponseItem,
-);
 
 /**
  * @summary Mark a notification as read
