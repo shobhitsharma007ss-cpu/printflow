@@ -547,7 +547,7 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const wastageQty = parsed.data.actualQty - parsed.data.plannedQty;
+  const wastageQty = Math.max(0, parsed.data.actualQty - parsed.data.plannedQty);
   const wastagePct = parsed.data.plannedQty > 0 ? (wastageQty / parsed.data.plannedQty) * 100 : 0;
 
   const [row] = await db.insert(wastageLogTable).values({
@@ -555,8 +555,8 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
     materialId: parsed.data.materialId,
     plannedQty: String(parsed.data.plannedQty),
     actualQty: String(parsed.data.actualQty),
-    wastageQty: String(Math.abs(wastageQty)),
-    wastagePct: String(Math.abs(wastagePct).toFixed(2)),
+    wastageQty: String(wastageQty.toFixed(2)),
+    wastagePct: String(wastagePct.toFixed(2)),
     reason: parsed.data.reason,
     notes: parsed.data.notes ?? null,
   }).returning();
