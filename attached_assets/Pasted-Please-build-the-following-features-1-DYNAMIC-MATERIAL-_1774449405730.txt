@@ -1,0 +1,66 @@
+Please build the following features:
+
+1. DYNAMIC MATERIAL CREATION — Replace the fixed material form with a 
+structured multi-step selector:
+
+Step 1 — Paper Type (dropdown):
+Grey Back Duplex, White Back Duplex, FBB Board, SBS Board, 
+Art Card, Maplitho, Non Woven, Other (with text input if Other)
+
+Step 2 — GSM (number input with slider from 50 to 450 GSM, 
+common presets as quick-select chips: 70, 90, 130, 170, 200, 
+250, 285, 300, 350, 400)
+
+Step 3 — Dimensions in inches (two number inputs: Width x Height, 
+e.g. 20 x 30) with common presets as chips: 
+20x30, 23x36, 25x35, 26x38, 28x40
+
+Step 4 — Grain Direction (two large toggle buttons: 
+LONG GRAIN | SHORT GRAIN)
+
+Step 5 — Vendor (dropdown from vendors table + "Add new vendor" option)
+
+Step 6 — Opening Stock quantity + unit + reorder level
+
+On save: create new entry in materials table with all these fields.
+This material now appears in all dropdowns across the system.
+Add a "dimensions" and "grain" column to the materials table.
+
+2. JOB STATUS ADVANCEMENT on Floor Monitor:
+Each machine card that shows a RUNNING job should have two buttons:
+- "Mark Step Complete" — advances that job_routing step to completed, 
+  sets completed_at timestamp, moves job to next routing step
+- "Report Issue" — opens a small modal to log a note
+
+When all routing steps of a job are completed, job status 
+automatically changes to COMPLETED.
+
+3. INVENTORY AUTO-DEDUCTION:
+When a job status changes from pending to in-progress, 
+automatically deduct planned_qty from the material's current_qty 
+in the materials table. Show a confirmation toast: 
+"Stock updated — X sheets deducted from [material name]"
+
+4. LOG WASTAGE button on every completed job row in the Jobs table:
+Opens a modal with:
+- Planned qty (pre-filled, read only)
+- Actual qty used (number input)
+- Auto-calculates wastage qty and wastage %
+- Reason dropdown (Setup sheets, Mis-registration, 
+  Client correction, Plate change, Other)
+- Notes (optional)
+On save: inserts into wastage_log table
+
+5. JOB DETAIL PANEL — clicking any job row opens a right side panel showing:
+- Job info (client, material, GSM, dimensions, grain, qty)
+- Routing steps as a visual timeline 
+  (Step 1 ✅ Wohlenberg → Step 2 🔄 Komori LA37 → Step 3 ⏳ Bobst DC1)
+- Material usage (planned vs actual)
+- Wastage log entries for this job
+- Cost breakdown if available
+
+6. NOTIFICATION BELL — clicking it opens a dropdown panel showing:
+- All materials below reorder level (red)
+- Jobs that have been pending for more than 2 days (amber)  
+- Jobs completed today (green)
+Show count badge on the bell icon when there are active alerts.
