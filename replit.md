@@ -1,8 +1,8 @@
-# Workspace
+# PrintFlow — Plant Management System
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Full-stack Plant Management System for a printing and packaging factory, built as a pnpm monorepo using TypeScript. The system is designed for non-tech factory workers with a highly visual, easy-to-use interface.
 
 ## Stack
 
@@ -10,7 +10,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
+- **Frontend**: React + Vite (artifacts/printflow) with Recharts, wouter, TailwindCSS
+- **Backend**: Express 5 (artifacts/api-server)
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
@@ -20,77 +21,74 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
+├── artifacts/
+│   ├── api-server/         # Express API server with all PrintFlow routes
+│   └── printflow/          # React + Vite frontend (served at /)
+├── lib/
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── scripts/
+│   └── src/seed.ts         # Database seed script
+└── ...
 ```
 
-## TypeScript & Composite Projects
+## Database Schema
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+- `vendors` — vendor management
+- `materials` — all materials (board/paper/consumable)
+- `material_vendors` — many-to-many linking materials to vendors
+- `stock_inward` — stock receipt tracking
+- `machines` — machine fleet with capabilities/status
+- `job_templates` — reusable routing templates
+- `jobs` — production jobs with auto PF-XXX codes
+- `job_routing` — per-job machine routing steps
+- `job_materials` — material allocation per job
+- `wastage_log` — wastage recording and tracking
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## Frontend Pages
 
-## Root Scripts
+1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs
+2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type
+3. **Inventory** (`/inventory`) — Visual stacks for board/paper, cylinder gauges for consumables
+4. **Jobs** (`/jobs`) — Job table with filters, "Create New Job" modal
+5. **Reports** (`/reports`) — Wastage report, stock reorder watchlist, job cost analysis
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## API Routes
 
-## Packages
+- `/api/vendors` — CRUD
+- `/api/materials` — CRUD + vendor linking + inward history
+- `/api/stock-inward` — CRUD (auto-updates material qty)
+- `/api/machines` — CRUD + PATCH status
+- `/api/job-templates` — CRUD
+- `/api/jobs` — CRUD + PATCH status (auto-creates routing from template)
+- `/api/job-routing/:id/status` — Update routing step status
+- `/api/wastage-log` — CRUD
+- `/api/dashboard/metrics` — Aggregate dashboard data
+- `/api/reports/wastage` — Wastage report
+- `/api/reports/stock-summary` — Stock with reorder status
+- `/api/reports/job-cost/:jobId` — Per-job cost breakdown
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## Running Locally
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+```bash
+# Seed database
+pnpm --filter @workspace/scripts run seed
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+# Start API server
+pnpm --filter @workspace/api-server run dev
 
-### `lib/db` (`@workspace/db`)
+# Start frontend
+pnpm --filter @workspace/printflow run dev
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+# Re-run codegen after OpenAPI changes
+pnpm --filter @workspace/api-spec run codegen
+```
 
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
+## Status Colors
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- Green `#22c55e` — Running / Good stock
+- Amber `#f59e0b` — Idle / Medium stock  
+- Red `#ef4444` — Maintenance / Low stock
+- Blue `#3b82f6` — In-progress

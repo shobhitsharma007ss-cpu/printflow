@@ -1,0 +1,12 @@
+packages:
+  "recharts": "For dashboard and report data visualizations"
+  "date-fns": "For human-readable date formatting in tables and logs"
+  "clsx": "For conditional tailwind class merging"
+  "tailwind-merge": "For resolving tailwind class conflicts"
+
+images: []
+
+notes:
+  - Using pre-generated orval React Query hooks from @workspace/api-client-react
+  - Forms use standard React state for reliability without adding extra form libraries
+  - Modals and UI elements are built with raw Tailwind for guaranteed execution and visual polish

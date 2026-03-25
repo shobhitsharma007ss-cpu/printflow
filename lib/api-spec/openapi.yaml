@@ -1,22 +1,41 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PrintFlow Plant Management System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: vendors
+    description: Vendor management
+  - name: materials
+    description: Material inventory management
+  - name: machines
+    description: Machine management
+  - name: jobs
+    description: Job management
+  - name: templates
+    description: Job template management
+  - name: routing
+    description: Job routing management
+  - name: stock
+    description: Stock inward management
+  - name: wastage
+    description: Wastage log management
+  - name: dashboard
+    description: Dashboard metrics
+  - name: reports
+    description: Reports
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +43,695 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /vendors:
+    get:
+      operationId: listVendors
+      tags: [vendors]
+      summary: List all vendors
+      responses:
+        "200":
+          description: List of vendors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+    post:
+      operationId: createVendor
+      tags: [vendors]
+      summary: Create a vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVendorRequest"
+      responses:
+        "201":
+          description: Created vendor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+
+  /vendors/{id}:
+    get:
+      operationId: getVendor
+      tags: [vendors]
+      summary: Get a vendor by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vendor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+    put:
+      operationId: updateVendor
+      tags: [vendors]
+      summary: Update a vendor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVendorRequest"
+      responses:
+        "200":
+          description: Updated vendor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+    delete:
+      operationId: deleteVendor
+      tags: [vendors]
+      summary: Delete a vendor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /materials:
+    get:
+      operationId: listMaterials
+      tags: [materials]
+      summary: List all materials
+      responses:
+        "200":
+          description: List of materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Material"
+    post:
+      operationId: createMaterial
+      tags: [materials]
+      summary: Create a material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaterialRequest"
+      responses:
+        "201":
+          description: Created material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+
+  /materials/{id}:
+    get:
+      operationId: getMaterial
+      tags: [materials]
+      summary: Get a material by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+    put:
+      operationId: updateMaterial
+      tags: [materials]
+      summary: Update a material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMaterialRequest"
+      responses:
+        "200":
+          description: Updated material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+    delete:
+      operationId: deleteMaterial
+      tags: [materials]
+      summary: Delete a material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /materials/{id}/vendors:
+    get:
+      operationId: getMaterialVendors
+      tags: [materials]
+      summary: Get vendors for a material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of vendors for this material
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+    post:
+      operationId: addMaterialVendor
+      tags: [materials]
+      summary: Add a vendor to a material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendorId:
+                  type: integer
+              required: [vendorId]
+      responses:
+        "201":
+          description: Added
+
+  /materials/{id}/inward-history:
+    get:
+      operationId: getMaterialInwardHistory
+      tags: [materials]
+      summary: Get stock inward history for a material
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of stock inward entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockInward"
+
+  /stock-inward:
+    get:
+      operationId: listStockInward
+      tags: [stock]
+      summary: List stock inward entries
+      responses:
+        "200":
+          description: List of stock inward
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockInward"
+    post:
+      operationId: createStockInward
+      tags: [stock]
+      summary: Record stock inward
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockInwardRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockInward"
+
+  /machines:
+    get:
+      operationId: listMachines
+      tags: [machines]
+      summary: List all machines
+      responses:
+        "200":
+          description: List of machines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Machine"
+    post:
+      operationId: createMachine
+      tags: [machines]
+      summary: Create a machine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMachineRequest"
+      responses:
+        "201":
+          description: Created machine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Machine"
+
+  /machines/{id}:
+    get:
+      operationId: getMachine
+      tags: [machines]
+      summary: Get a machine
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Machine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Machine"
+    put:
+      operationId: updateMachine
+      tags: [machines]
+      summary: Update a machine
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMachineRequest"
+      responses:
+        "200":
+          description: Updated machine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Machine"
+    patch:
+      operationId: patchMachineStatus
+      tags: [machines]
+      summary: Update machine status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [idle, running, maintenance]
+              required: [status]
+      responses:
+        "200":
+          description: Updated machine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Machine"
+
+  /job-templates:
+    get:
+      operationId: listJobTemplates
+      tags: [templates]
+      summary: List all job templates
+      responses:
+        "200":
+          description: List of job templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobTemplate"
+    post:
+      operationId: createJobTemplate
+      tags: [templates]
+      summary: Create a job template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobTemplateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobTemplate"
+
+  /jobs:
+    get:
+      operationId: listJobs
+      tags: [jobs]
+      summary: List all jobs
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, in-progress, completed, on-hold]
+      responses:
+        "200":
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobWithDetails"
+    post:
+      operationId: createJob
+      tags: [jobs]
+      summary: Create a new job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobRequest"
+      responses:
+        "201":
+          description: Created job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobWithDetails"
+
+  /jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: Get a job by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobWithDetails"
+    put:
+      operationId: updateJob
+      tags: [jobs]
+      summary: Update a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateJobRequest"
+      responses:
+        "200":
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobWithDetails"
+
+  /jobs/{id}/status:
+    patch:
+      operationId: updateJobStatus
+      tags: [jobs]
+      summary: Update job status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, in-progress, completed, on-hold]
+              required: [status]
+      responses:
+        "200":
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobWithDetails"
+
+  /job-routing/{id}/status:
+    patch:
+      operationId: updateJobRoutingStatus
+      tags: [routing]
+      summary: Update job routing step status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, in-progress, completed]
+                notes:
+                  type: string
+              required: [status]
+      responses:
+        "200":
+          description: Updated routing step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobRouting"
+
+  /jobs/{id}/materials:
+    get:
+      operationId: getJobMaterials
+      tags: [jobs]
+      summary: Get materials for a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobMaterial"
+    post:
+      operationId: addJobMaterial
+      tags: [jobs]
+      summary: Add material to a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobMaterialRequest"
+      responses:
+        "201":
+          description: Added
+
+  /wastage-log:
+    get:
+      operationId: listWastageLogs
+      tags: [wastage]
+      summary: List wastage logs
+      parameters:
+        - name: jobId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Wastage logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WastageLog"
+    post:
+      operationId: createWastageLog
+      tags: [wastage]
+      summary: Log wastage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWastageLogRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WastageLog"
+
+  /dashboard/metrics:
+    get:
+      operationId: getDashboardMetrics
+      tags: [dashboard]
+      summary: Get dashboard metrics
+      responses:
+        "200":
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardMetrics"
+
+  /reports/wastage:
+    get:
+      operationId: getWastageReport
+      tags: [reports]
+      summary: Get wastage report
+      responses:
+        "200":
+          description: Wastage report
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WastageReportRow"
+
+  /reports/stock-summary:
+    get:
+      operationId: getStockSummary
+      tags: [reports]
+      summary: Get stock summary report
+      responses:
+        "200":
+          description: Stock summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockSummaryRow"
+
+  /reports/job-cost/{jobId}:
+    get:
+      operationId: getJobCostReport
+      tags: [reports]
+      summary: Get job cost report
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job cost
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobCostReport"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +739,570 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Vendor:
+      type: object
+      properties:
+        id:
+          type: integer
+        vendorName:
+          type: string
+        contactPerson:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+        createdAt:
+          type: string
+      required: [id, vendorName, contactPerson, phone, city, createdAt]
+
+    CreateVendorRequest:
+      type: object
+      properties:
+        vendorName:
+          type: string
+        contactPerson:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+      required: [vendorName, contactPerson, phone, city]
+
+    Material:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialName:
+          type: string
+        materialType:
+          type: string
+          enum: [board, paper, consumable]
+        subType:
+          type: string
+        gsm:
+          type: integer
+          nullable: true
+        unit:
+          type: string
+          enum: [reams, kg, litre, sheets]
+        currentQty:
+          type: number
+        minReorderQty:
+          type: number
+        createdAt:
+          type: string
+      required: [id, materialName, materialType, subType, unit, currentQty, minReorderQty, createdAt]
+
+    CreateMaterialRequest:
+      type: object
+      properties:
+        materialName:
+          type: string
+        materialType:
+          type: string
+          enum: [board, paper, consumable]
+        subType:
+          type: string
+        gsm:
+          type: integer
+          nullable: true
+        unit:
+          type: string
+          enum: [reams, kg, litre, sheets]
+        currentQty:
+          type: number
+        minReorderQty:
+          type: number
+      required: [materialName, materialType, subType, unit, currentQty, minReorderQty]
+
+    StockInward:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialId:
+          type: integer
+        vendorId:
+          type: integer
+        qtyReceived:
+          type: number
+        unit:
+          type: string
+        batchRef:
+          type: string
+        receivedDate:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        vendorName:
+          type: string
+          nullable: true
+        materialName:
+          type: string
+          nullable: true
+      required: [id, materialId, vendorId, qtyReceived, unit, batchRef, receivedDate]
+
+    CreateStockInwardRequest:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        vendorId:
+          type: integer
+        qtyReceived:
+          type: number
+        unit:
+          type: string
+        batchRef:
+          type: string
+        receivedDate:
+          type: string
+        notes:
+          type: string
+          nullable: true
+      required: [materialId, vendorId, qtyReceived, unit, batchRef, receivedDate]
+
+    Machine:
+      type: object
+      properties:
+        id:
+          type: integer
+        machineName:
+          type: string
+        machineCode:
+          type: string
+        machineType:
+          type: string
+          enum: [printing, cutting, coating, gluing]
+        maxPaperWidth:
+          type: string
+          nullable: true
+        maxPaperLength:
+          type: string
+          nullable: true
+        speedPerHour:
+          type: integer
+          nullable: true
+        capabilities:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [idle, running, maintenance]
+        operatorName:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        currentJobName:
+          type: string
+          nullable: true
+      required: [id, machineName, machineCode, machineType, capabilities, status, operatorName]
+
+    CreateMachineRequest:
+      type: object
+      properties:
+        machineName:
+          type: string
+        machineCode:
+          type: string
+        machineType:
+          type: string
+          enum: [printing, cutting, coating, gluing]
+        maxPaperWidth:
+          type: string
+          nullable: true
+        maxPaperLength:
+          type: string
+          nullable: true
+        speedPerHour:
+          type: integer
+          nullable: true
+        capabilities:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [idle, running, maintenance]
+        operatorName:
+          type: string
+        notes:
+          type: string
+          nullable: true
+      required: [machineName, machineCode, machineType, capabilities, status, operatorName]
+
+    JobTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        templateName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        routingSteps:
+          type: array
+          items:
+            type: integer
+        machineNames:
+          type: array
+          items:
+            type: string
+      required: [id, templateName, routingSteps, machineNames]
+
+    CreateJobTemplateRequest:
+      type: object
+      properties:
+        templateName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        routingSteps:
+          type: array
+          items:
+            type: integer
+      required: [templateName, routingSteps]
+
+    JobRouting:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobId:
+          type: integer
+        stepNumber:
+          type: integer
+        machineId:
+          type: integer
+        machineName:
+          type: string
+          nullable: true
+        machineType:
+          type: string
+          nullable: true
+        operatorName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in-progress, completed]
+        startedAt:
+          type: string
+          nullable: true
+        completedAt:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [id, jobId, stepNumber, machineId, status]
+
+    JobMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobId:
+          type: integer
+        materialId:
+          type: integer
+        materialName:
+          type: string
+          nullable: true
+        plannedQty:
+          type: number
+        actualQty:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        costPerUnit:
+          type: number
+          nullable: true
+      required: [id, jobId, materialId, plannedQty, unit]
+
+    CreateJobMaterialRequest:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        plannedQty:
+          type: number
+        actualQty:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        costPerUnit:
+          type: number
+          nullable: true
+      required: [materialId, plannedQty, unit]
+
+    JobWithDetails:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobCode:
+          type: string
+        jobName:
+          type: string
+        clientName:
+          type: string
+        materialId:
+          type: integer
+          nullable: true
+        materialName:
+          type: string
+          nullable: true
+        materialGsm:
+          type: integer
+          nullable: true
+        qtySheets:
+          type: integer
+        plannedSheets:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in-progress, completed, on-hold]
+        templateId:
+          type: integer
+          nullable: true
+        scheduledDate:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        routing:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobRouting"
+        materials:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobMaterial"
+      required: [id, jobCode, jobName, clientName, qtySheets, status, createdAt, routing, materials]
+
+    CreateJobRequest:
+      type: object
+      properties:
+        jobName:
+          type: string
+        clientName:
+          type: string
+        materialId:
+          type: integer
+          nullable: true
+        materialGsm:
+          type: integer
+          nullable: true
+        qtySheets:
+          type: integer
+        plannedSheets:
+          type: integer
+          nullable: true
+        templateId:
+          type: integer
+          nullable: true
+        customRouting:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        scheduledDate:
+          type: string
+          nullable: true
+        materials:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateJobMaterialRequest"
+          nullable: true
+      required: [jobName, clientName, qtySheets]
+
+    UpdateJobRequest:
+      type: object
+      properties:
+        jobName:
+          type: string
+        clientName:
+          type: string
+        materialId:
+          type: integer
+          nullable: true
+        materialGsm:
+          type: integer
+          nullable: true
+        qtySheets:
+          type: integer
+        plannedSheets:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in-progress, completed, on-hold]
+        scheduledDate:
+          type: string
+          nullable: true
+
+    WastageLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        jobId:
+          type: integer
+        jobCode:
+          type: string
+          nullable: true
+        materialId:
+          type: integer
+        materialName:
+          type: string
+          nullable: true
+        plannedQty:
+          type: number
+        actualQty:
+          type: number
+        wastageQty:
+          type: number
+        wastagePct:
+          type: number
+        reason:
+          type: string
+          enum: [setup, mis-registration, client-correction, plate-change, other]
+        loggedAt:
+          type: string
+      required: [id, jobId, materialId, plannedQty, actualQty, wastageQty, wastagePct, reason, loggedAt]
+
+    CreateWastageLogRequest:
+      type: object
+      properties:
+        jobId:
+          type: integer
+        materialId:
+          type: integer
+        plannedQty:
+          type: number
+        actualQty:
+          type: number
+        reason:
+          type: string
+          enum: [setup, mis-registration, client-correction, plate-change, other]
+      required: [jobId, materialId, plannedQty, actualQty, reason]
+
+    DashboardMetrics:
+      type: object
+      properties:
+        activeJobs:
+          type: integer
+        machinesRunning:
+          type: integer
+        lowStockAlerts:
+          type: integer
+        jobsCompletedToday:
+          type: integer
+        recentJobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobWithDetails"
+        machineStatuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Machine"
+      required: [activeJobs, machinesRunning, lowStockAlerts, jobsCompletedToday, recentJobs, machineStatuses]
+
+    WastageReportRow:
+      type: object
+      properties:
+        jobId:
+          type: integer
+        jobCode:
+          type: string
+        jobName:
+          type: string
+        clientName:
+          type: string
+        plannedQty:
+          type: number
+        actualQty:
+          type: number
+        wastageQty:
+          type: number
+        wastagePct:
+          type: number
+        reason:
+          type: string
+        materialName:
+          type: string
+      required: [jobId, jobCode, jobName, clientName, plannedQty, actualQty, wastageQty, wastagePct, reason, materialName]
+
+    StockSummaryRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        materialName:
+          type: string
+        materialType:
+          type: string
+        subType:
+          type: string
+        gsm:
+          type: integer
+          nullable: true
+        unit:
+          type: string
+        currentQty:
+          type: number
+        minReorderQty:
+          type: number
+        isLowStock:
+          type: boolean
+        stockPct:
+          type: number
+      required: [id, materialName, materialType, subType, unit, currentQty, minReorderQty, isLowStock, stockPct]
+
+    JobCostReport:
+      type: object
+      properties:
+        jobId:
+          type: integer
+        jobCode:
+          type: string
+        jobName:
+          type: string
+        clientName:
+          type: string
+        totalCost:
+          type: number
+        materials:
+          type: array
+          items:
+            type: object
+            properties:
+              materialName:
+                type: string
+              plannedQty:
+                type: number
+              actualQty:
+                type: number
+                nullable: true
+              unit:
+                type: string
+              costPerUnit:
+                type: number
+                nullable: true
+              totalCost:
+                type: number
+            required: [materialName, plannedQty, unit, totalCost]
+      required: [jobId, jobCode, jobName, clientName, totalCost, materials]

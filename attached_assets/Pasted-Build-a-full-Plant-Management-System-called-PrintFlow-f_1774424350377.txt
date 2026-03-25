@@ -1,0 +1,180 @@
+Build a full Plant Management System called "PrintFlow" for a printing and packaging unit. This is a real production system — it must be easy to use for non-tech factory workers.
+
+TECH STACK:
+- Node.js + Express backend
+- SQLite with better-sqlite3
+- React frontend (Vite)
+- Recharts for data visualization
+- React Router for navigation
+- All in one Replit project
+
+---
+
+DATABASE SCHEMA:
+
+1. vendors — id, vendor_name, contact_person, phone, city, created_at
+
+2. materials — id, material_name, material_type (board/paper/consumable), 
+   sub_type (grey-back/white-back/fbb/sbs/art-card/maplitho/uv-ink/led-uv-ink/
+   varnish/aqueous-coating/cmyk-ink/gum/lubricant/other),
+   gsm (nullable), unit (reams/kg/litre/sheets), 
+   current_qty, min_reorder_qty, created_at
+
+3. material_vendors — id, material_id (FK), vendor_id (FK) — many to many
+
+4. stock_inward — id, material_id (FK), vendor_id (FK), qty_received, 
+   unit, batch_ref, received_date, notes
+
+5. machines — id, machine_name, machine_code, machine_type 
+   (printing/cutting/coating/gluing), max_paper_width, max_paper_length,
+   speed_per_hour, capabilities (JSON array: uv/varnish/non-woven),
+   status (idle/running/maintenance), operator_name, notes
+
+6. job_templates — id, template_name, description, 
+   routing_steps (JSON array of machine_ids in order)
+
+7. jobs — id, job_code (PF-001 auto), job_name, client_name, 
+   material_id (FK), material_gsm, qty_sheets, 
+   planned_sheets, status (pending/in-progress/completed/on-hold),
+   template_id (FK nullable), scheduled_date, created_at
+
+8. job_routing — id, job_id (FK), step_number, machine_id (FK), 
+   operator_name, status (pending/in-progress/completed), 
+   started_at, completed_at, notes
+
+9. job_materials — id, job_id (FK), material_id (FK), 
+   planned_qty, actual_qty, unit, cost_per_unit
+
+10. wastage_log — id, job_id (FK), material_id (FK), 
+    planned_qty, actual_qty, wastage_qty, wastage_pct,
+    reason (setup/mis-registration/client-correction/plate-change/other), logged_at
+
+---
+
+SEED DATA:
+
+Vendors: Khanna Paper, Emami Paper, BILT, Star Paper, Saini Traders
+
+Materials:
+- Grey Back Duplex 285gsm (board, qty:500 sheets, reorder:100)
+- Grey Back Duplex 350gsm (board, qty:300 sheets, reorder:100)
+- White Back Duplex 300gsm (board, qty:200 sheets, reorder:80)
+- FBB Board 350gsm (board, qty:150 sheets, reorder:50)
+- Art Card 285gsm (paper, qty:400 sheets, reorder:100)
+- Maplitho 70gsm (paper, qty:800 reams, reorder:200)
+- CMYK Ink Set (consumable, qty:40 kg, reorder:10)
+- UV Ink (consumable, qty:15 kg, reorder:5)
+- LED UV Ink (consumable, qty:10 kg, reorder:5)
+- Varnish (consumable, qty:20 litre, reorder:8)
+- Aqueous Coating (consumable, qty:25 litre, reorder:10)
+- Gum/Adhesive (consumable, qty:30 kg, reorder:10)
+- Lubricant Oil (consumable, qty:10 litre, reorder:3)
+
+Machines:
+- Komori LA37 (printing, 25x37in, 12000/hr, uv+varnish capable, operator: Operator 1)
+- Komori GL37 (printing, 25x37in, 13000/hr, uv+varnish capable, operator: Operator 2)
+- Planeta Super Variant (printing, 28x40in, 5000/hr, non-woven capable, legacy machine, operator: Operator 3)
+- Bobst Die Cutter 1 (cutting, operator: Operator 4)
+- Bobst Die Cutter 2 (cutting, operator: Operator 5)
+- Bobst Folder Gluer (gluing, operator: Operator 6)
+- DGM Folder Gluer (gluing, operator: Operator 7)
+- Hyong Jung Folder Gluer (gluing, operator: Operator 8)
+- Single Coater (coating, uv+varnish, operator: Operator 9)
+- Wohlenberg Cutter (cutting/pre-press, operator: Operator 10)
+
+Job Templates:
+- "Full Finish Box" → Wohlenberg → Komori LA37 → Single Coater → Bobst DC1 → Bobst Gluer
+- "Print Only" → Komori GL37
+- "Print + Die Cut" → Komori LA37 → Bobst DC1
+- "Print + Coat + Cut" → Komori GL37 → Single Coater → Bobst DC2
+- "Non Woven Job" → Planeta → Bobst DC1
+
+Sample Jobs:
+- "Tiranga T10 Box" PF-001, Grey Back 350gsm, 5000 sheets, completed, Full Finish Box template
+- "Nova Pharma Leaflet" PF-002, Maplitho 70gsm, 10000 sheets, in-progress, Print Only
+- "Gupta Packaging Box" PF-003, Art Card 285gsm, 3000 sheets, pending, Print + Die Cut
+
+---
+
+REST API:
+CRUD for all tables
+PATCH /api/jobs/:id/status
+PATCH /api/job-routing/:id/status  
+GET /api/dashboard/metrics
+GET /api/reports/wastage
+GET /api/reports/stock-summary
+GET /api/reports/job-cost/:jobId (calculates total material cost from job_materials)
+
+---
+
+FRONTEND — VERY IMPORTANT — NON-TECH USERS, MUST BE VISUAL:
+
+Use React Router. Layout: fixed left sidebar (dark, #1a1a2e), main content area (light grey bg).
+
+Sidebar links with icons:
+- Dashboard (home)
+- Floor Monitor (machines)
+- Jobs
+- Inventory
+- Reports
+- Settings
+
+PAGE 1 — DASHBOARD:
+- Top: 4 metric cards (Active Jobs, Machines Running, Low Stock Alerts, Jobs Completed Today)
+- Middle: Machine status row — each machine as a card with its name, operator, current job name or "IDLE", colored indicator (green=running, grey=idle, red=maintenance)
+- Bottom: 3 recent jobs with status badges
+
+PAGE 2 — FLOOR MONITOR:
+Full screen layout. Each machine as a large card with:
+- Machine name big and bold
+- Type badge (PRINTING / CUTTING / COATING / GLUING)
+- Operator name
+- Status indicator (big colored dot — green/grey/red)
+- Current job name or "IDLE"
+- Speed spec
+Group machines by type: Printing Machines, Cutting, Coating, Gluing
+
+PAGE 3 — INVENTORY (MOST VISUAL PAGE):
+Split into two tabs: Boards & Paper | Consumables
+
+For Boards & Paper:
+Show each material as a VISUAL STACK — a rectangular block where the HEIGHT of the block represents quantity relative to max stock. 
+- Full stack = green
+- Half stack = amber  
+- Low stack = red with warning
+Show material name, GSM, current qty, unit below each stack.
+Clicking a stack opens a side panel with vendor info and inward history.
+
+For Consumables:
+Show as gauge/cylinder visuals — a vertical cylinder filled proportionally.
+Same color logic (green/amber/red).
+
+PAGE 4 — JOBS:
+Table of all jobs with columns: Job Code, Job Name, Client, Material, Qty, Status badge, Assigned Machine(s), Scheduled Date, Action buttons.
+Filter by status. 
+"New Job" button opens a form:
+- Job name, client name
+- Select material + GSM
+- Select template (auto-fills routing) OR build custom routing
+- Enter qty sheets
+- Schedule date
+On save: auto-generates PF-XXX code, creates job_routing steps, deducts planned material from stock.
+
+PAGE 5 — REPORTS:
+Three report cards:
+- Wastage Report: table per job showing planned vs actual with wastage % bar
+- Stock Report: all materials with current qty, reorder status
+- Job Cost Report: per job total material cost breakdown
+
+---
+
+DESIGN RULES:
+- Font: Inter or system sans-serif
+- Sidebar: dark navy #1a1a2e with white text
+- Cards: white with subtle border and slight shadow
+- Status colors: green #22c55e, amber #f59e0b, red #ef4444, blue #3b82f6
+- All tables have alternating row colors
+- All forms have large clear labels — minimum 16px font
+- Buttons are large and clearly labeled
+- Mobile responsive — works on tablet
+- Empty states have helpful messages like "No jobs today — click New Job to get started"
