@@ -67,15 +67,24 @@ export function useUpdateJobRoutingStatus() {
   
   return useGeneratedUpdateRoutingStatus({
     mutation: {
-      onSuccess: (_data, variables) => {
+      onSuccess: (data, variables) => {
         queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListMachinesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetDashboardMetricsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListNotificationsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetStockSummaryQueryKey() });
 
         const status = variables.data?.status;
         if (status === "in-progress") {
           toast.success("Step started", { description: "Machine is now running." });
+          if (data?.deductions && data.deductions.length > 0) {
+            for (const d of data.deductions) {
+              toast.success("Stock updated", {
+                description: `${d.qty} ${d.unit} deducted from ${d.materialName}`,
+                duration: 5000,
+              });
+            }
+          }
         } else if (status === "completed") {
           toast.success("Step completed", { description: "Next step will start automatically." });
         }

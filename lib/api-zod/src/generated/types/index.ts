@@ -49,6 +49,8 @@ export * from "./stockSummaryRow";
 export * from "./updateJobRequest";
 export * from "./updateJobRequestStatus";
 export * from "./updateJobRoutingNotesBody";
+export * from "./updateJobRoutingStatus200";
+export * from "./updateJobRoutingStatus200DeductionsItem";
 export * from "./updateJobRoutingStatusBody";
 export * from "./updateJobRoutingStatusBodyStatus";
 export * from "./updateJobStatusBody";

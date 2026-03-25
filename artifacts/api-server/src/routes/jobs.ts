@@ -23,6 +23,72 @@ import { createNotification } from "./notifications";
 
 const router: IRouter = Router();
 
+type DeductionInfo = { materialId: number; materialName: string; qty: number; unit: string };
+
+/**
+ * Deduct planned materials for a job when it transitions pending → in-progress.
+ * Covers both job_materials rows and the primary materialId+qtySheets on the job.
+ * Returns deduction details for the UI toast and fires low-stock notifications.
+ */
+async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
+  const deductions: DeductionInfo[] = [];
+
+  // 1. Deduct job_materials (explicitly linked consumables / substrates)
+  const jobMats = await db
+    .select({
+      materialId: jobMaterialsTable.materialId,
+      plannedQty: jobMaterialsTable.plannedQty,
+    })
+    .from(jobMaterialsTable)
+    .where(eq(jobMaterialsTable.jobId, jobId));
+
+  const deductedMaterialIds = new Set<number>();
+
+  for (const jm of jobMats) {
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, jm.materialId));
+    if (!mat) continue;
+    const plannedQty = parseFloat(String(jm.plannedQty));
+    const currentQty = parseFloat(String(mat.currentQty));
+    const newQty = Math.max(0, currentQty - plannedQty);
+    await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+    deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: plannedQty, unit: mat.unit });
+    deductedMaterialIds.add(mat.id);
+
+    if (newQty <= parseFloat(String(mat.minReorderQty))) {
+      await createNotification({
+        type: "low-stock",
+        title: "Low Stock Alert",
+        message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
+        relatedId: mat.id,
+      });
+    }
+  }
+
+  // 2. Deduct primary material on the job (materialId + qtySheets) if not already covered above
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+  if (job?.materialId && job.qtySheets > 0 && !deductedMaterialIds.has(job.materialId)) {
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId));
+    if (mat) {
+      const currentQty = parseFloat(String(mat.currentQty));
+      const deductQty = job.qtySheets;
+      const newQty = Math.max(0, currentQty - deductQty);
+      await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: deductQty, unit: mat.unit });
+
+      if (newQty <= parseFloat(String(mat.minReorderQty))) {
+        await createNotification({
+          type: "low-stock",
+          title: "Low Stock Alert",
+          message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
+          relatedId: mat.id,
+        });
+      }
+    }
+  }
+
+  return deductions;
+}
+
 async function buildJobWithDetails(jobId: number) {
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job) return null;
@@ -136,7 +202,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
     });
   }
 
-  // Add job materials
+  // Record job materials (deduction happens when job transitions to in-progress)
   if (jobMats && jobMats.length > 0) {
     for (const mat of jobMats) {
       await db.insert(jobMaterialsTable).values({
@@ -147,13 +213,6 @@ router.post("/jobs", async (req, res): Promise<void> => {
         unit: mat.unit,
         costPerUnit: mat.costPerUnit != null ? String(mat.costPerUnit) : null,
       });
-
-      // Deduct from stock
-      const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, mat.materialId));
-      if (material) {
-        const newQty = Math.max(0, parseFloat(String(material.currentQty)) - mat.plannedQty);
-        await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.materialId));
-      }
     }
   }
 
@@ -238,27 +297,10 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     }
   }
 
-  // Auto-deduct primary material when job goes from pending → in-progress
-  const deductions: { materialId: number; materialName: string; qty: number; unit: string }[] = [];
-  if (parsed.data.status === "in-progress" && currentJob.status === "pending" && currentJob.materialId && currentJob.qtySheets > 0) {
-    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, currentJob.materialId));
-    if (mat) {
-      const currentQty = parseFloat(String(mat.currentQty));
-      const deductQty = currentJob.qtySheets;
-      const newQty = Math.max(0, currentQty - deductQty);
-      await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
-      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: deductQty, unit: mat.unit });
-
-      // Low-stock alert if needed
-      if (newQty <= parseFloat(String(mat.minReorderQty))) {
-        await createNotification({
-          type: "low-stock",
-          title: "Low Stock Alert",
-          message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
-          relatedId: mat.id,
-        });
-      }
-    }
+  // Auto-deduct materials when job transitions pending → in-progress
+  let deductions: DeductionInfo[] = [];
+  if (parsed.data.status === "in-progress" && currentJob.status === "pending") {
+    deductions = await deductJobMaterials(job.id);
   }
 
   const result = await buildJobWithDetails(job.id);
@@ -296,10 +338,13 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
 
+  let deductions: DeductionInfo[] = [];
   if (parsed.data.status === "in-progress") {
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
     if (job && job.status === "pending") {
       await db.update(jobsTable).set({ status: "in-progress" }).where(eq(jobsTable.id, job.id));
+      // Deduct materials now that job is starting (pending → in-progress)
+      deductions = await deductJobMaterials(job.id);
     }
     await createNotification({
       type: "step-started",
@@ -362,6 +407,7 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
     machineName: machine?.machineName ?? null,
     machineType: machine?.machineType ?? null,
     operatorName: routing.operatorName ?? machine?.operatorName ?? null,
+    deductions: deductions.length > 0 ? deductions : null,
   });
 });
 

@@ -592,7 +592,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/JobRouting"
+                allOf:
+                  - $ref: "#/components/schemas/JobRouting"
+                  - type: object
+                    properties:
+                      deductions:
+                        type: array
+                        nullable: true
+                        items:
+                          type: object
+                          properties:
+                            materialId:
+                              type: integer
+                            materialName:
+                              type: string
+                            qty:
+                              type: number
+                            unit:
+                              type: string
+                          required: [materialId, materialName, qty, unit]
 
   /job-routing/{id}/notes:
     patch:

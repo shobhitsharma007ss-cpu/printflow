@@ -44,6 +44,7 @@ import type {
   StockSummaryRow,
   UpdateJobRequest,
   UpdateJobRoutingNotesBody,
+  UpdateJobRoutingStatus200,
   UpdateJobRoutingStatusBody,
   UpdateJobStatusBody,
   Vendor,
@@ -2416,13 +2417,16 @@ export const updateJobRoutingStatus = async (
   id: number,
   updateJobRoutingStatusBody: UpdateJobRoutingStatusBody,
   options?: RequestInit,
-): Promise<JobRouting> => {
-  return customFetch<JobRouting>(getUpdateJobRoutingStatusUrl(id), {
-    ...options,
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(updateJobRoutingStatusBody),
-  });
+): Promise<UpdateJobRoutingStatus200> => {
+  return customFetch<UpdateJobRoutingStatus200>(
+    getUpdateJobRoutingStatusUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateJobRoutingStatusBody),
+    },
+  );
 };
 
 export const getUpdateJobRoutingStatusMutationOptions = <

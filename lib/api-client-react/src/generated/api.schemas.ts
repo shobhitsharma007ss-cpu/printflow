@@ -472,6 +472,17 @@ export type UpdateJobRoutingStatusBody = {
   notes?: string;
 };
 
+export type UpdateJobRoutingStatus200DeductionsItem = {
+  materialId: number;
+  materialName: string;
+  qty: number;
+  unit: string;
+};
+
+export type UpdateJobRoutingStatus200 = JobRouting & {
+  deductions?: UpdateJobRoutingStatus200DeductionsItem[] | null;
+};
+
 export type UpdateJobRoutingNotesBody = {
   notes: string;
 };
