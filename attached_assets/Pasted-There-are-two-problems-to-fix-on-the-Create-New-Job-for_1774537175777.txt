@@ -1,0 +1,51 @@
+There are two problems to fix on the Create New Job form:
+
+PROBLEM 1 — Material dropdown is empty ("No material selected"):
+The dropdown should load all materials from the database and display them as:
+"Grey Back Duplex 350gsm — Khanna Paper (300 sheets available)"
+"Grey Back Duplex 350gsm — BILT (100 sheets available)"
+"Art Card 285gsm — Star Paper (400 sheets available)"
+etc.
+
+If the materials table is empty, seed it now with all materials 
+including the vendor splits we discussed:
+- Grey Back Duplex 285gsm — Khanna Paper, 300 sheets, reorder 100
+- Grey Back Duplex 285gsm — Emami Paper, 200 sheets, reorder 100
+- Grey Back Duplex 350gsm — Khanna Paper, 200 sheets, reorder 100
+- Grey Back Duplex 350gsm — BILT, 100 sheets, reorder 50
+- White Back Duplex 300gsm — Star Paper, 200 sheets, reorder 80
+- FBB Board 350gsm — BILT, 150 sheets, reorder 50
+- Art Card 285gsm — Khanna Paper, 400 sheets, reorder 100
+- Maplitho 70gsm — Saini Traders, 800 reams, reorder 200
+- Cyan Ink — 12kg, reorder 4kg
+- Magenta Ink — 10kg, reorder 4kg
+- Yellow Ink — 8kg, reorder 4kg
+- Black Ink (K) — 15kg, reorder 4kg
+- UV Ink — 15kg, reorder 5kg
+- LED UV Ink — 10kg, reorder 5kg
+- Varnish — 20L, reorder 8L
+- Aqueous Coating — 25L, reorder 10L
+- Gum/Adhesive — 30kg, reorder 10kg
+- Lubricant Oil — 10L, reorder 3L
+
+PROBLEM 2 — Job Template dropdown not loading templates:
+Seed the job_templates table if empty:
+- Full Finish Box: Wohlenberg → Komori LA37 → Single Coater → Bobst Die Cutter 1 → Bobst Folder Gluer
+- Print Only: Komori GL37
+- Print + Die Cut: Komori LA37 → Bobst Die Cutter 1
+- Print + Coat + Cut: Komori GL37 → Single Coater → Bobst Die Cutter 2
+- Non Woven Job: Planeta Super Variant → Bobst Die Cutter 1
+
+When a template is selected in the form, show the routing steps 
+visually below the dropdown as a horizontal flow:
+[Wohlenberg] → [Komori LA37] → [Single Coater] → [Bobst DC1] → [Bobst Gluer]
+
+PROBLEM 3 — Add "Quick Add Material" link inside the job form:
+Below the material dropdown, add a small link: 
+"+ Add new material to inventory"
+Clicking it opens the multi-step material creation wizard 
+(paper type → GSM → dimensions → grain → vendor → quantity)
+After saving, the new material appears in the dropdown automatically.
+
+After all fixes, make sure the production database is also seeded 
+with this data — not just development. Then republish the app.

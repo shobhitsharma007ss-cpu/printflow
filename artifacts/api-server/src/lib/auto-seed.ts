@@ -23,7 +23,6 @@ export async function autoSeedIfEmpty(): Promise<void> {
   logger.info("Empty database detected — running auto-seed...");
 
   try {
-    // Vendors
     const [khanna, emami, bilt, star, saini] = await db.insert(vendorsTable).values([
       { vendorName: "Khanna Paper", contactPerson: "Rajesh Khanna", phone: "9876543210", city: "Delhi" },
       { vendorName: "Emami Paper", contactPerson: "Arun Emami", phone: "9876543211", city: "Kolkata" },
@@ -32,21 +31,25 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { vendorName: "Saini Traders", contactPerson: "Manoj Saini", phone: "9876543214", city: "Delhi" },
     ]).returning();
 
-    // Materials
     const [
-      greyBack285, greyBack350, whiteBack300, fbbBoard350, artCard285,
-      maplitho70, cyanInk, magentaInk, yellowInk, blackInk, uvInk, ledUvInk, varnish, aqueousCoating, gumAdhesive, lubricant,
+      greyBack285_khanna, greyBack285_emami,
+      greyBack350_khanna, greyBack350_bilt,
+      whiteBack300, fbbBoard350, artCard285, maplitho70,
+      cyanInk, magentaInk, yellowInk, blackInk,
+      uvInk, ledUvInk, varnish, aqueousCoating, gumAdhesive, lubricant,
     ] = await db.insert(materialsTable).values([
-      { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "500", minReorderQty: "100" },
-      { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "300", minReorderQty: "100" },
+      { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "300", minReorderQty: "100" },
+      { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "200", minReorderQty: "100" },
+      { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "200", minReorderQty: "100" },
+      { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "100", minReorderQty: "50" },
       { materialName: "White Back Duplex 300gsm", materialType: "board", subType: "white-back", gsm: 300, unit: "sheets", currentQty: "200", minReorderQty: "80" },
       { materialName: "FBB Board 350gsm", materialType: "board", subType: "fbb", gsm: 350, unit: "sheets", currentQty: "150", minReorderQty: "50" },
       { materialName: "Art Card 285gsm", materialType: "paper", subType: "art-card", gsm: 285, unit: "sheets", currentQty: "400", minReorderQty: "100" },
       { materialName: "Maplitho 70gsm", materialType: "paper", subType: "maplitho", gsm: 70, unit: "reams", currentQty: "800", minReorderQty: "200" },
-      { materialName: "Cyan Ink", materialType: "consumable", subType: "cyan-ink", unit: "kg", currentQty: "12", minReorderQty: "3" },
-      { materialName: "Magenta Ink", materialType: "consumable", subType: "magenta-ink", unit: "kg", currentQty: "10", minReorderQty: "3" },
-      { materialName: "Yellow Ink", materialType: "consumable", subType: "yellow-ink", unit: "kg", currentQty: "11", minReorderQty: "3" },
-      { materialName: "Black Ink", materialType: "consumable", subType: "black-ink", unit: "kg", currentQty: "15", minReorderQty: "3" },
+      { materialName: "Cyan Ink", materialType: "consumable", subType: "cyan-ink", unit: "kg", currentQty: "12", minReorderQty: "4" },
+      { materialName: "Magenta Ink", materialType: "consumable", subType: "magenta-ink", unit: "kg", currentQty: "10", minReorderQty: "4" },
+      { materialName: "Yellow Ink", materialType: "consumable", subType: "yellow-ink", unit: "kg", currentQty: "8", minReorderQty: "4" },
+      { materialName: "Black Ink (K)", materialType: "consumable", subType: "black-ink", unit: "kg", currentQty: "15", minReorderQty: "4" },
       { materialName: "UV Ink", materialType: "consumable", subType: "uv-ink", unit: "kg", currentQty: "15", minReorderQty: "5" },
       { materialName: "LED UV Ink", materialType: "consumable", subType: "led-uv-ink", unit: "kg", currentQty: "10", minReorderQty: "5" },
       { materialName: "Varnish", materialType: "consumable", subType: "varnish", unit: "litre", currentQty: "20", minReorderQty: "8" },
@@ -55,16 +58,15 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { materialName: "Lubricant Oil", materialType: "consumable", subType: "lubricant", unit: "litre", currentQty: "10", minReorderQty: "3" },
     ]).returning();
 
-    // Material-vendor relationships
     await db.insert(materialVendorsTable).values([
-      { materialId: greyBack285.id, vendorId: khanna.id },
-      { materialId: greyBack285.id, vendorId: emami.id },
-      { materialId: greyBack350.id, vendorId: khanna.id },
-      { materialId: greyBack350.id, vendorId: bilt.id },
-      { materialId: whiteBack300.id, vendorId: emami.id },
+      { materialId: greyBack285_khanna.id, vendorId: khanna.id },
+      { materialId: greyBack285_emami.id, vendorId: emami.id },
+      { materialId: greyBack350_khanna.id, vendorId: khanna.id },
+      { materialId: greyBack350_bilt.id, vendorId: bilt.id },
+      { materialId: whiteBack300.id, vendorId: star.id },
       { materialId: fbbBoard350.id, vendorId: bilt.id },
-      { materialId: artCard285.id, vendorId: star.id },
-      { materialId: maplitho70.id, vendorId: star.id },
+      { materialId: artCard285.id, vendorId: khanna.id },
+      { materialId: maplitho70.id, vendorId: saini.id },
       { materialId: cyanInk.id, vendorId: saini.id },
       { materialId: magentaInk.id, vendorId: saini.id },
       { materialId: yellowInk.id, vendorId: saini.id },
@@ -77,7 +79,6 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { materialId: lubricant.id, vendorId: saini.id },
     ]);
 
-    // Machines
     const [
       komoriLA37, komoriGL37, planetaVariant,
       bobstDC1, bobstDC2, bobstGluer, dgmGluer, hyongJungGluer,
@@ -95,7 +96,6 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { machineName: "Wohlenberg Cutter", machineCode: "WOHL-01", machineType: "cutting", capabilities: [], status: "idle", operatorName: "Operator 10", notes: "Pre-press cutter" },
     ]).returning();
 
-    // Job Templates
     const [fullFinish, printOnly, printDieCut, _printCoatCut, _nonWoven] = await db.insert(jobTemplatesTable).values([
       {
         templateName: "Full Finish Box",
@@ -124,12 +124,11 @@ export async function autoSeedIfEmpty(): Promise<void> {
       },
     ]).returning();
 
-    // Sample Jobs
     const [job1] = await db.insert(jobsTable).values({
       jobCode: "PF-001",
       jobName: "Tiranga T10 Box",
       clientName: "Tiranga Packaging",
-      materialId: greyBack350.id,
+      materialId: greyBack350_khanna.id,
       materialGsm: 350,
       qtySheets: 5000,
       plannedSheets: 5200,
@@ -164,7 +163,6 @@ export async function autoSeedIfEmpty(): Promise<void> {
       scheduledDate: "2026-03-28",
     }).returning();
 
-    // Job Routing
     await db.insert(jobRoutingTable).values([
       { jobId: job1.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "completed", startedAt: "2026-03-20T08:00:00Z", completedAt: "2026-03-20T10:00:00Z" },
       { jobId: job1.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "completed", startedAt: "2026-03-20T10:30:00Z", completedAt: "2026-03-20T14:00:00Z" },
@@ -176,9 +174,8 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { jobId: job3.id, stepNumber: 2, machineId: bobstDC1.id, operatorName: "Operator 4", status: "pending" },
     ]);
 
-    // Job Materials
     await db.insert(jobMaterialsTable).values([
-      { jobId: job1.id, materialId: greyBack350.id, plannedQty: "5200", actualQty: "5100", unit: "sheets", costPerUnit: "2.50" },
+      { jobId: job1.id, materialId: greyBack350_khanna.id, plannedQty: "5200", actualQty: "5100", unit: "sheets", costPerUnit: "2.50" },
       { jobId: job1.id, materialId: cyanInk.id, plannedQty: "1.2", actualQty: "1.1", unit: "kg", costPerUnit: "180" },
       { jobId: job1.id, materialId: magentaInk.id, plannedQty: "1.3", actualQty: "1.2", unit: "kg", costPerUnit: "190" },
       { jobId: job1.id, materialId: yellowInk.id, plannedQty: "1.0", actualQty: "1.0", unit: "kg", costPerUnit: "170" },
@@ -195,19 +192,17 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { jobId: job3.id, materialId: uvInk.id, plannedQty: "1.5", actualQty: null, unit: "kg", costPerUnit: "280" },
     ]);
 
-    // Wastage Logs
     await db.insert(wastageLogTable).values([
-      { jobId: job1.id, materialId: greyBack350.id, plannedQty: "5200", actualQty: "5100", wastageQty: "100", wastagePct: "1.92", reason: "setup", loggedAt: new Date("2026-03-20T18:00:00Z") },
+      { jobId: job1.id, materialId: greyBack350_khanna.id, plannedQty: "5200", actualQty: "5100", wastageQty: "100", wastagePct: "1.92", reason: "setup", loggedAt: new Date("2026-03-20T18:00:00Z") },
       { jobId: job1.id, materialId: cyanInk.id, plannedQty: "1.20", actualQty: "1.30", wastageQty: "0.10", wastagePct: "8.33", reason: "mis-registration", loggedAt: new Date("2026-03-20T18:00:00Z") },
       { jobId: job1.id, materialId: varnish.id, plannedQty: "3.00", actualQty: "3.10", wastageQty: "0.10", wastagePct: "3.23", reason: "plate-change", loggedAt: new Date("2026-03-21T11:00:00Z") },
       { jobId: job2.id, materialId: maplitho70.id, plannedQty: "55.00", actualQty: "60.00", wastageQty: "5.00", wastagePct: "8.33", reason: "client-correction", loggedAt: new Date("2026-03-25T12:00:00Z") },
       { jobId: job2.id, materialId: blackInk.id, plannedQty: "1.00", actualQty: "1.20", wastageQty: "0.20", wastagePct: "20.00", reason: "other", loggedAt: new Date("2026-03-25T12:00:00Z") },
     ]);
 
-    // Set Komori GL37 to running (active job on it)
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, komoriGL37.id));
 
-    logger.info("✅ Auto-seed complete: 5 vendors, 16 materials (CMYK split), 10 machines, 5 templates, 3 jobs");
+    logger.info("Auto-seed complete: 5 vendors, 18 materials (vendor-split), 10 machines, 5 templates, 3 jobs");
   } catch (err) {
     logger.error({ err }, "Auto-seed failed");
     throw err;

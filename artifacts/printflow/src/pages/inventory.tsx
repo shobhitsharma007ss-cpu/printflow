@@ -4,14 +4,16 @@ import { useCreateStockInward, useMaterialVendors, useMaterialInwardHistory } fr
 import { useVendors } from "@/hooks/use-vendors";
 import { useMaterials } from "@/hooks/use-inventory";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-elements";
-import { Package, AlertTriangle, Layers, X, ChevronRight } from "lucide-react";
+import { Package, AlertTriangle, Layers, X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StockSummaryRow } from "@workspace/api-client-react";
+import { AddStockWizard } from "@/components/add-stock-wizard";
 
 export default function Inventory() {
   const { data: stock, isLoading } = useStockSummary();
   const [activeTab, setActiveTab] = useState<"boards" | "consumables">("boards");
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
 
@@ -28,13 +30,18 @@ export default function Inventory() {
           <h1 className="text-3xl font-black tracking-tight">Inventory Management</h1>
           <p className="text-muted-foreground mt-1 font-medium">Visual stock levels and reorder alerts</p>
         </div>
-        <Button className="flex items-center gap-2" onClick={() => setIsInwardOpen(true)}>
-          <Package size={18} />
-          Record Inward Stock
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsInwardOpen(true)}>
+            <Package size={18} />
+            Record Inward Stock
+          </Button>
+          <Button className="flex items-center gap-2" onClick={() => setIsWizardOpen(true)}>
+            <Plus size={18} />
+            Add New Material
+          </Button>
+        </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex space-x-1 p-1 bg-muted rounded-xl w-full max-w-md">
         <button
           onClick={() => setActiveTab("boards")}
@@ -57,7 +64,6 @@ export default function Inventory() {
       </div>
 
       <div className="flex gap-6">
-        {/* Main grid */}
         <div className="flex-1 min-w-0">
           {activeTab === "boards" && (
             <Card className="p-8">
@@ -100,7 +106,6 @@ export default function Inventory() {
           )}
         </div>
 
-        {/* Side panel */}
         {selectedMaterialId && selectedMaterial && (
           <MaterialDetailPanel
             materialId={selectedMaterialId}
@@ -110,7 +115,7 @@ export default function Inventory() {
         )}
       </div>
 
-      {/* Record Inward Stock Modal */}
+      <AddStockWizard isOpen={isWizardOpen} onClose={() => setIsWizardOpen(false)} />
       <InwardStockModal isOpen={isInwardOpen} onClose={() => setIsInwardOpen(false)} />
     </div>
   );
@@ -139,7 +144,6 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           </button>
         </div>
 
-        {/* Stock level */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-muted/50 rounded-lg p-3">
             <p className="text-xs text-muted-foreground mb-1">Current Stock</p>
@@ -166,7 +170,6 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.materialType}</span>
         </div>
 
-        {/* Stock bar */}
         <div className="mb-5">
           <div className="flex justify-between text-xs mb-1 font-medium">
             <span className="text-muted-foreground">Stock Level</span>
@@ -185,7 +188,6 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           )}
         </div>
 
-        {/* Vendors */}
         <div className="mb-5">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Vendors</h4>
           {loadingVendors ? (
@@ -205,7 +207,6 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           )}
         </div>
 
-        {/* Last 5 inward entries */}
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Recent Inward</h4>
           {loadingHistory ? (
@@ -279,6 +280,9 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     setForm({ materialId: '', vendorId: '', qtyReceived: '', batchRef: '', brand: '', receivedDate: today, notes: '' });
   };
 
+  const boardsMats = materials?.filter(m => m.materialType === 'board' || m.materialType === 'paper') || [];
+  const consumableMats = materials?.filter(m => m.materialType === 'consumable') || [];
+
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Record Inward Stock">
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -290,11 +294,24 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
             onChange={e => setForm({ ...form, materialId: e.target.value })}
           >
             <option value="">— Select Material —</option>
-            {materials?.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.materialName} {m.gsm ? `(${m.gsm}gsm)` : ''} [{m.unit}]
-              </option>
-            ))}
+            {boardsMats.length > 0 && (
+              <optgroup label="BOARDS & PAPER">
+                {boardsMats.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.materialName}{m.vendorName ? ` — ${m.vendorName}` : ''} ({m.currentQty} {m.unit})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {consumableMats.length > 0 && (
+              <optgroup label="CONSUMABLES">
+                {consumableMats.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.materialName}{m.vendorName ? ` — ${m.vendorName}` : ''} ({m.currentQty} {m.unit})
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </Select>
         </div>
 
@@ -353,7 +370,7 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
         <div className="space-y-1.5">
           <Label>Notes</Label>
           <textarea
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 transition-all resize-none"
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 transition-all resize-none"
             rows={2}
             placeholder="Any notes about this delivery..."
             value={form.notes}
@@ -361,7 +378,6 @@ function InwardStockModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
           />
         </div>
 
-        {/* Preview: current → new qty */}
         {form.materialId && form.qtyReceived && (
           <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-sm">
             <p className="text-emerald-700 dark:text-emerald-400 font-medium">

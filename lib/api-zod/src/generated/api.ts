@@ -98,6 +98,7 @@ export const ListMaterialsResponseItem = zod.object({
   dimensions: zod.string().nullish(),
   grain: zod.string().nullish(),
   createdAt: zod.string(),
+  vendorName: zod.string().nullish(),
 });
 export const ListMaterialsResponse = zod.array(ListMaterialsResponseItem);
 
@@ -135,6 +136,7 @@ export const GetMaterialResponse = zod.object({
   dimensions: zod.string().nullish(),
   grain: zod.string().nullish(),
   createdAt: zod.string(),
+  vendorName: zod.string().nullish(),
 });
 
 /**
@@ -168,6 +170,7 @@ export const UpdateMaterialResponse = zod.object({
   dimensions: zod.string().nullish(),
   grain: zod.string().nullish(),
   createdAt: zod.string(),
+  vendorName: zod.string().nullish(),
 });
 
 /**

@@ -898,6 +898,9 @@ components:
           nullable: true
         createdAt:
           type: string
+        vendorName:
+          type: string
+          nullable: true
       required: [id, materialName, materialType, subType, unit, currentQty, minReorderQty, createdAt]
 
     CreateMaterialRequest:

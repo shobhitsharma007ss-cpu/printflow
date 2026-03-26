@@ -52,8 +52,8 @@ artifacts-monorepo/
 
 1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs, auto-refreshes every 60s
 2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots, step advancement buttons (Start/Complete), active job progress visualization with routing step pipeline
-3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel with vendor list and inward history (includes brand), Record Inward Stock modal with brand/make field
-4. **Jobs** (`/jobs`) — Job table with status/search filters; clickable rows open detail slide-over panel with routing progress, materials, wastage logs, and quick status actions; Log Wastage modal; Create New Job modal (client, name, material dropdown, qty, template selector with live routing preview, scheduled date, 4% wastage preview)
+3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel with vendor list and inward history (includes brand). Two action buttons: "Record Inward Stock" (modal for logging stock arrivals) and "Add New Material" (multi-step wizard: category → paper type → GSM → dimensions → grain → vendor → stock details → review)
+4. **Jobs** (`/jobs`) — Job table with status/search filters; clickable rows open detail slide-over panel with routing progress, materials, wastage logs, and quick status actions; Log Wastage modal; Create New Job modal (client, name, material dropdown grouped by type with vendor names and available qty, qty, template selector with live routing preview as horizontal flow, scheduled date, 4% wastage preview, "+ Add new material to inventory" quick link)
 5. **Reports** (`/reports`) — Wastage chart grouped per job (PF-XXX x-axis), color-coded bars (normal/watch/critical), stock reorder watchlist
 6. **Settings** (`/settings`) — 4 tabs: Machines (inline operator edit, status toggle), Materials (inline reorder level edit, 6-step AddMaterialWizard), Vendors (add/delete), Job Templates (routing step visualization)
 

@@ -16,8 +16,26 @@ import {
 const router: IRouter = Router();
 
 router.get("/materials", async (_req, res): Promise<void> => {
-  const materials = await db.select().from(materialsTable).orderBy(materialsTable.id);
-  res.json(materials);
+  const rows = await db
+    .select({
+      id: materialsTable.id,
+      materialName: materialsTable.materialName,
+      materialType: materialsTable.materialType,
+      subType: materialsTable.subType,
+      gsm: materialsTable.gsm,
+      unit: materialsTable.unit,
+      currentQty: materialsTable.currentQty,
+      minReorderQty: materialsTable.minReorderQty,
+      dimensions: materialsTable.dimensions,
+      grain: materialsTable.grain,
+      createdAt: materialsTable.createdAt,
+      vendorName: vendorsTable.vendorName,
+    })
+    .from(materialsTable)
+    .leftJoin(materialVendorsTable, eq(materialVendorsTable.materialId, materialsTable.id))
+    .leftJoin(vendorsTable, eq(vendorsTable.id, materialVendorsTable.vendorId))
+    .orderBy(materialsTable.materialType, materialsTable.materialName);
+  res.json(rows);
 });
 
 router.post("/materials", async (req, res): Promise<void> => {

@@ -1,0 +1,77 @@
+The Add Stock form on Inventory and the material selection on Jobs 
+are both broken. Rebuild both completely from scratch:
+
+INVENTORY — "Add Stock" button must open a proper multi-step wizard:
+
+Step 1 — Material Category (large visual buttons, not dropdown):
+[ BOARD / DUPLEX ]  [ PAPER ]  [ CONSUMABLE ]
+
+Step 2 (if Board/Paper selected) — Paper Type (large clickable cards):
+[ Grey Back Duplex ]  [ White Back Duplex ]  [ FBB Board ]  
+[ SBS Board ]  [ Art Card ]  [ Maplitho ]  [ Non Woven ]  [ Other ]
+
+Step 3 — GSM selection:
+- Slider from 50 to 450 GSM
+- Quick pick chips below slider: 70  90  130  170  200  250  285  300  350  400
+- Clicking a chip sets the slider value
+
+Step 4 — Dimensions in inches:
+- Two number inputs side by side: [ Width ] x [ Height ]
+- Quick presets as chips: 20×30  23×36  25×35  26×38  28×40
+- Clicking a preset fills the inputs
+
+Step 5 — Grain Direction:
+- Two large toggle buttons taking full width:
+  [ LONG GRAIN ]  [ SHORT GRAIN ]
+- Selected one highlights in blue
+
+Step 6 — Vendor / Brand:
+- Dropdown showing all vendors from database
+- Below dropdown: "+ Add new vendor" which reveals 
+  inline input fields for vendor name + phone
+
+Step 7 — Stock Details:
+- Opening Quantity (number input)
+- Unit (Sheets / Reams / kg / Litre — auto-selected based on material type)
+- Reorder Alert Level (number input)
+- Notes (optional textarea)
+
+Step 8 — Review & Save:
+- Show a summary card of everything entered before saving
+- "Back" and "Confirm & Save" buttons
+- On save: insert into materials table with all fields 
+  (paper_type, gsm, width_inches, height_inches, grain, 
+  vendor_id, quantity, unit, reorder_qty)
+- Show success toast: "Grey Back Duplex 350gsm (Khanna Paper) added to inventory"
+- New material appears immediately in the warehouse stack view
+
+If Step 1 = CONSUMABLE:
+- Show consumable type dropdown: 
+  Cyan Ink / Magenta Ink / Yellow Ink / Black Ink / UV Ink / 
+  LED UV Ink / Varnish / Aqueous Coating / Gum / Lubricant / Other
+- Unit selection: kg / Litre
+- Quantity + Reorder level
+- Vendor (optional for consumables)
+
+WIZARD UI RULES:
+- Show step progress at top: Step 1 of 7 with dots ● ● ○ ○ ○ ○ ○
+- Each step takes full modal height — one step at a time, 
+  not all fields visible at once
+- Large touch-friendly buttons (min 48px height) — 
+  operators use this on tablets
+- "Back" and "Next" navigation between steps
+- Cannot proceed to next step without completing current step
+- Completed steps show a green checkmark in the progress dots
+
+JOBS — Material dropdown fix:
+- Load all materials from database grouped by type:
+  "BOARDS & PAPER" group then "CONSUMABLES" group
+- Each option shows: "Grey Back Duplex 350gsm — Khanna Paper (300 sheets)"
+- If no materials exist, show message: 
+  "No materials in inventory. Add stock first." 
+  with a button linking to Inventory page
+- After material is selected, show a small info card below:
+  GSM | Dimensions | Grain | Vendor | Available Qty
+
+Make sure all this data saves to the production database, 
+not just in-memory. Republish after completing.

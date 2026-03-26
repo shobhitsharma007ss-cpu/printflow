@@ -55,6 +55,7 @@ export interface Material {
   dimensions?: string | null;
   grain?: string | null;
   createdAt: string;
+  vendorName?: string | null;
 }
 
 export type CreateMaterialRequestMaterialType =
