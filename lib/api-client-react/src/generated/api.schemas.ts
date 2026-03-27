@@ -293,6 +293,8 @@ export interface JobWithDetails {
   status: JobWithDetailsStatus;
   templateId?: number | null;
   scheduledDate?: string | null;
+  coatingType?: string | null;
+  finishRequirements?: string[] | null;
   createdAt: string;
   routing: JobRouting[];
   materials: JobMaterial[];
@@ -310,6 +312,8 @@ export interface CreateJobRequest {
   templateId?: number | null;
   customRouting?: number[] | null;
   scheduledDate?: string | null;
+  coatingType?: string | null;
+  finishRequirements?: string[] | null;
   materials?: CreateJobMaterialRequest[] | null;
 }
 

@@ -429,6 +429,8 @@ export const ListJobsResponseItem = zod.object({
   status: zod.enum(["pending", "in-progress", "completed", "on-hold"]),
   templateId: zod.number().nullish(),
   scheduledDate: zod.string().nullish(),
+  coatingType: zod.string().nullish(),
+  finishRequirements: zod.array(zod.string()).nullish(),
   createdAt: zod.string(),
   routing: zod.array(
     zod.object({
@@ -505,6 +507,8 @@ export const CreateJobBody = zod.object({
   templateId: zod.number().nullish(),
   customRouting: zod.array(zod.number()).nullish(),
   scheduledDate: zod.string().nullish(),
+  coatingType: zod.string().nullish(),
+  finishRequirements: zod.array(zod.string()).nullish(),
   materials: zod
     .array(
       zod.object({
@@ -540,6 +544,8 @@ export const GetJobResponse = zod.object({
   status: zod.enum(["pending", "in-progress", "completed", "on-hold"]),
   templateId: zod.number().nullish(),
   scheduledDate: zod.string().nullish(),
+  coatingType: zod.string().nullish(),
+  finishRequirements: zod.array(zod.string()).nullish(),
   createdAt: zod.string(),
   routing: zod.array(
     zod.object({
@@ -637,6 +643,8 @@ export const UpdateJobResponse = zod.object({
   status: zod.enum(["pending", "in-progress", "completed", "on-hold"]),
   templateId: zod.number().nullish(),
   scheduledDate: zod.string().nullish(),
+  coatingType: zod.string().nullish(),
+  finishRequirements: zod.array(zod.string()).nullish(),
   createdAt: zod.string(),
   routing: zod.array(
     zod.object({
@@ -725,6 +733,8 @@ export const UpdateJobStatusResponse = zod.object({
   status: zod.enum(["pending", "in-progress", "completed", "on-hold"]),
   templateId: zod.number().nullish(),
   scheduledDate: zod.string().nullish(),
+  coatingType: zod.string().nullish(),
+  finishRequirements: zod.array(zod.string()).nullish(),
   createdAt: zod.string(),
   routing: zod.array(
     zod.object({
@@ -958,6 +968,8 @@ export const GetDashboardMetricsResponse = zod.object({
       status: zod.enum(["pending", "in-progress", "completed", "on-hold"]),
       templateId: zod.number().nullish(),
       scheduledDate: zod.string().nullish(),
+      coatingType: zod.string().nullish(),
+      finishRequirements: zod.array(zod.string()).nullish(),
       createdAt: zod.string(),
       routing: zod.array(
         zod.object({

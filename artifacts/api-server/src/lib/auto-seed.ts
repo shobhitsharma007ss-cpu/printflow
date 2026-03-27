@@ -84,41 +84,41 @@ export async function autoSeedIfEmpty(): Promise<void> {
       bobstDC1, bobstDC2, bobstGluer, dgmGluer, hyongJungGluer,
       singleCoater, wohlenberg,
     ] = await db.insert(machinesTable).values([
-      { machineName: "Komori LA37", machineCode: "KOM-LA37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 12000, capabilities: ["uv", "varnish"], status: "idle", operatorName: "Operator 1" },
-      { machineName: "Komori GL37", machineCode: "KOM-GL37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 13000, capabilities: ["uv", "varnish"], status: "running", operatorName: "Operator 2" },
-      { machineName: "Planeta Super Variant", machineCode: "PLAN-SV", machineType: "printing", maxPaperWidth: "28in", maxPaperLength: "40in", speedPerHour: 5000, capabilities: ["non-woven"], status: "idle", operatorName: "Operator 3", notes: "Legacy machine" },
-      { machineName: "Bobst Die Cutter 1", machineCode: "BOB-DC1", machineType: "cutting", capabilities: [], status: "idle", operatorName: "Operator 4" },
-      { machineName: "Bobst Die Cutter 2", machineCode: "BOB-DC2", machineType: "cutting", capabilities: [], status: "maintenance", operatorName: "Operator 5" },
-      { machineName: "Bobst Folder Gluer", machineCode: "BOB-FG", machineType: "gluing", capabilities: [], status: "idle", operatorName: "Operator 6" },
-      { machineName: "DGM Folder Gluer", machineCode: "DGM-FG", machineType: "gluing", capabilities: [], status: "idle", operatorName: "Operator 7" },
-      { machineName: "Hyong Jung Folder Gluer", machineCode: "HJ-FG", machineType: "gluing", capabilities: [], status: "idle", operatorName: "Operator 8" },
-      { machineName: "Single Coater", machineCode: "COAT-01", machineType: "coating", capabilities: ["uv", "varnish"], status: "idle", operatorName: "Operator 9" },
-      { machineName: "Wohlenberg Cutter", machineCode: "WOHL-01", machineType: "cutting", capabilities: [], status: "idle", operatorName: "Operator 10", notes: "Pre-press cutter" },
+      { machineName: "Komori LA37", machineCode: "KOM-LA37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 12000, capabilities: ["print", "uv-single-pass", "texture", "drip-off"], status: "idle", operatorName: "Operator 1", notes: "Prints and applies UV coating, texture, drip-off in single pass. 12000 sheets/hour. Primary machine for UV/special finish jobs." },
+      { machineName: "Komori GL37", machineCode: "KOM-GL37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 13000, capabilities: ["print", "varnish-single-pass"], status: "running", operatorName: "Operator 2", notes: "Prints and applies varnish coating in a single pass. 13000 sheets/hour. Primary machine for varnish jobs." },
+      { machineName: "Planeta Super Variant", machineCode: "PLAN-SV", machineType: "printing", maxPaperWidth: "28in", maxPaperLength: "40in", speedPerHour: 5000, capabilities: ["print", "non-woven"], status: "idle", operatorName: "Operator 3", notes: "Legacy machine. 5000 sheets/hour. Only for non-woven fabric jobs and basic print. Not suitable for modern packaging jobs." },
+      { machineName: "Bobst Die Cutter 1", machineCode: "BOB-DC1", machineType: "cutting", capabilities: ["die-cutting"], status: "idle", operatorName: "Operator 4" },
+      { machineName: "Bobst Die Cutter 2", machineCode: "BOB-DC2", machineType: "cutting", capabilities: ["die-cutting"], status: "maintenance", operatorName: "Operator 5" },
+      { machineName: "Bobst Folder Gluer", machineCode: "BOB-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 6" },
+      { machineName: "DGM Folder Gluer", machineCode: "DGM-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 7" },
+      { machineName: "Hyong Jung Folder Gluer", machineCode: "HJ-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 8" },
+      { machineName: "Single Coater", machineCode: "COAT-01", machineType: "coating", capabilities: ["uv-standalone", "varnish-standalone"], status: "idle", operatorName: "Operator 9", notes: "Standalone coating only. Used as standby when Komoris are busy or for jobs that need coating on already-printed sheets." },
+      { machineName: "Wohlenberg Cutter", machineCode: "WOHL-01", machineType: "cutting", capabilities: ["pre-press-cutting"], status: "idle", operatorName: "Operator 10", notes: "Pre-press cutter" },
     ]).returning();
 
-    const [fullFinish, printOnly, printDieCut, _printCoatCut, _nonWoven] = await db.insert(jobTemplatesTable).values([
+    const [fullFinishUv, fullFinishVarnish, printOnly, printStandaloneCoat, nonWoven] = await db.insert(jobTemplatesTable).values([
       {
-        templateName: "Full Finish Box",
-        description: "Full finish: Wohlenberg → Komori LA37 → Single Coater → Bobst DC1 → Bobst Gluer",
-        routingSteps: [wohlenberg.id, komoriLA37.id, singleCoater.id, bobstDC1.id, bobstGluer.id],
+        templateName: "Full Finish Box (UV)",
+        description: "Full finish with UV: Wohlenberg → Komori LA37 (print + UV single pass) → Bobst DC1 → Bobst Gluer",
+        routingSteps: [wohlenberg.id, komoriLA37.id, bobstDC1.id, bobstGluer.id],
+      },
+      {
+        templateName: "Full Finish Box (Varnish)",
+        description: "Full finish with Varnish: Wohlenberg → Komori GL37 (print + varnish single pass) → Bobst DC1 → Bobst Gluer",
+        routingSteps: [wohlenberg.id, komoriGL37.id, bobstDC1.id, bobstGluer.id],
       },
       {
         templateName: "Print Only",
-        description: "Print only: Komori GL37",
+        description: "Print only: Komori GL37 or LA37 (auto-assign based on availability)",
         routingSteps: [komoriGL37.id],
       },
       {
-        templateName: "Print + Die Cut",
-        description: "Print and die cut: Komori LA37 → Bobst DC1",
-        routingSteps: [komoriLA37.id, bobstDC1.id],
+        templateName: "Print + Standalone Coat",
+        description: "For already printed sheets: Single Coater → Bobst DC1",
+        routingSteps: [singleCoater.id, bobstDC1.id],
       },
       {
-        templateName: "Print + Coat + Cut",
-        description: "Print, coat and cut: Komori GL37 → Single Coater → Bobst DC2",
-        routingSteps: [komoriGL37.id, singleCoater.id, bobstDC2.id],
-      },
-      {
-        templateName: "Non Woven Job",
+        templateName: "Non Woven",
         description: "Non-woven: Planeta → Bobst DC1",
         routingSteps: [planetaVariant.id, bobstDC1.id],
       },
@@ -133,7 +133,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
       qtySheets: 5000,
       plannedSheets: 5200,
       status: "completed",
-      templateId: fullFinish.id,
+      templateId: fullFinishUv.id,
       scheduledDate: "2026-03-20",
     }).returning();
 
@@ -159,19 +159,20 @@ export async function autoSeedIfEmpty(): Promise<void> {
       qtySheets: 3000,
       plannedSheets: 3100,
       status: "pending",
-      templateId: printDieCut.id,
+      templateId: fullFinishUv.id,
       scheduledDate: "2026-03-28",
     }).returning();
 
     await db.insert(jobRoutingTable).values([
       { jobId: job1.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "completed", startedAt: "2026-03-20T08:00:00Z", completedAt: "2026-03-20T10:00:00Z" },
       { jobId: job1.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "completed", startedAt: "2026-03-20T10:30:00Z", completedAt: "2026-03-20T14:00:00Z" },
-      { jobId: job1.id, stepNumber: 3, machineId: singleCoater.id, operatorName: "Operator 9", status: "completed", startedAt: "2026-03-20T14:30:00Z", completedAt: "2026-03-20T16:00:00Z" },
-      { jobId: job1.id, stepNumber: 4, machineId: bobstDC1.id, operatorName: "Operator 4", status: "completed", startedAt: "2026-03-20T16:30:00Z", completedAt: "2026-03-20T18:00:00Z" },
-      { jobId: job1.id, stepNumber: 5, machineId: bobstGluer.id, operatorName: "Operator 6", status: "completed", startedAt: "2026-03-21T08:00:00Z", completedAt: "2026-03-21T11:00:00Z" },
+      { jobId: job1.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "completed", startedAt: "2026-03-20T16:30:00Z", completedAt: "2026-03-20T18:00:00Z" },
+      { jobId: job1.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "completed", startedAt: "2026-03-21T08:00:00Z", completedAt: "2026-03-21T11:00:00Z" },
       { jobId: job2.id, stepNumber: 1, machineId: komoriGL37.id, operatorName: "Operator 2", status: "in-progress", startedAt: "2026-03-25T08:00:00Z" },
-      { jobId: job3.id, stepNumber: 1, machineId: komoriLA37.id, operatorName: "Operator 1", status: "pending" },
-      { jobId: job3.id, stepNumber: 2, machineId: bobstDC1.id, operatorName: "Operator 4", status: "pending" },
+      { jobId: job3.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "pending" },
+      { jobId: job3.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "pending" },
+      { jobId: job3.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "pending" },
+      { jobId: job3.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "pending" },
     ]);
 
     await db.insert(jobMaterialsTable).values([
@@ -180,7 +181,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { jobId: job1.id, materialId: magentaInk.id, plannedQty: "1.3", actualQty: "1.2", unit: "kg", costPerUnit: "190" },
       { jobId: job1.id, materialId: yellowInk.id, plannedQty: "1.0", actualQty: "1.0", unit: "kg", costPerUnit: "170" },
       { jobId: job1.id, materialId: blackInk.id, plannedQty: "1.5", actualQty: "1.5", unit: "kg", costPerUnit: "120" },
-      { jobId: job1.id, materialId: varnish.id, plannedQty: "3", actualQty: "3.1", unit: "litre", costPerUnit: "80" },
+      { jobId: job1.id, materialId: uvInk.id, plannedQty: "2.0", actualQty: "2.1", unit: "kg", costPerUnit: "280" },
       { jobId: job2.id, materialId: maplitho70.id, plannedQty: "55", actualQty: null, unit: "reams", costPerUnit: "350" },
       { jobId: job2.id, materialId: cyanInk.id, plannedQty: "0.5", actualQty: null, unit: "kg", costPerUnit: "180" },
       { jobId: job2.id, materialId: blackInk.id, plannedQty: "1.0", actualQty: null, unit: "kg", costPerUnit: "120" },
@@ -195,7 +196,7 @@ export async function autoSeedIfEmpty(): Promise<void> {
     await db.insert(wastageLogTable).values([
       { jobId: job1.id, materialId: greyBack350_khanna.id, plannedQty: "5200", actualQty: "5100", wastageQty: "100", wastagePct: "1.92", reason: "setup", loggedAt: new Date("2026-03-20T18:00:00Z") },
       { jobId: job1.id, materialId: cyanInk.id, plannedQty: "1.20", actualQty: "1.30", wastageQty: "0.10", wastagePct: "8.33", reason: "mis-registration", loggedAt: new Date("2026-03-20T18:00:00Z") },
-      { jobId: job1.id, materialId: varnish.id, plannedQty: "3.00", actualQty: "3.10", wastageQty: "0.10", wastagePct: "3.23", reason: "plate-change", loggedAt: new Date("2026-03-21T11:00:00Z") },
+      { jobId: job1.id, materialId: uvInk.id, plannedQty: "2.00", actualQty: "2.10", wastageQty: "0.10", wastagePct: "5.00", reason: "plate-change", loggedAt: new Date("2026-03-21T11:00:00Z") },
       { jobId: job2.id, materialId: maplitho70.id, plannedQty: "55.00", actualQty: "60.00", wastageQty: "5.00", wastagePct: "8.33", reason: "client-correction", loggedAt: new Date("2026-03-25T12:00:00Z") },
       { jobId: job2.id, materialId: blackInk.id, plannedQty: "1.00", actualQty: "1.20", wastageQty: "0.20", wastagePct: "20.00", reason: "other", loggedAt: new Date("2026-03-25T12:00:00Z") },
     ]);

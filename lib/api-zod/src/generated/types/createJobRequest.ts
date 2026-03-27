@@ -17,5 +17,7 @@ export interface CreateJobRequest {
   templateId?: number | null;
   customRouting?: number[] | null;
   scheduledDate?: string | null;
+  coatingType?: string | null;
+  finishRequirements?: string[] | null;
   materials?: CreateJobMaterialRequest[] | null;
 }

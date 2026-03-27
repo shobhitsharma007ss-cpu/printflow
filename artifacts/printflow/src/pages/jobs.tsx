@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useJobs, useJob, useCreateJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
+import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
-import { useMaterials } from "@/hooks/use-inventory";
-import { useJobTemplates } from "@/hooks/use-templates";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
 import { format } from "date-fns";
 import {
-  Plus, Search, Filter, ChevronRight, ArrowRight, X,
+  Plus, Search, Filter, ChevronRight, X,
   CheckCircle, Play, AlertTriangle,
   Clock, User, TrendingDown, Check, Loader2, Timer
 } from "lucide-react";
@@ -18,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import type { JobMaterial, CreateWastageLogRequestReason } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AddStockWizard } from "@/components/add-stock-wizard";
+import { CreateJobWizard } from "@/components/create-job-wizard";
 import { toast } from "sonner";
 
 export default function Jobs() {
@@ -150,7 +148,7 @@ export default function Jobs() {
         />
       )}
 
-      <NewJobModal isOpen={isNewJobOpen} onClose={() => setIsNewJobOpen(false)} />
+      <CreateJobWizard isOpen={isNewJobOpen} onClose={() => setIsNewJobOpen(false)} />
     </div>
   );
 }
@@ -709,197 +707,3 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
   );
 }
 
-function NewJobModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { data: materials } = useMaterials();
-  const { data: templates } = useJobTemplates();
-  const createMutation = useCreateJob();
-  const [isWizardOpen, setIsWizardOpen] = useState(false);
-
-  const today = new Date().toISOString().split('T')[0];
-  const [form, setForm] = useState({
-    clientName: '',
-    jobName: '',
-    materialId: '',
-    qtySheets: '',
-    templateId: '',
-    scheduledDate: today,
-  });
-
-  const selectedTemplate = templates?.find(t => t.id === parseInt(form.templateId)) ?? null;
-  const selectedMaterial = materials?.find(m => m.id === parseInt(form.materialId)) ?? null;
-
-  const boardsMats = materials?.filter(m => m.materialType === 'board' || m.materialType === 'paper') || [];
-  const consumableMats = materials?.filter(m => m.materialType === 'consumable') || [];
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createMutation.mutate({
-      data: {
-        clientName: form.clientName,
-        jobName: form.jobName,
-        materialId: form.materialId ? parseInt(form.materialId) : undefined,
-        materialGsm: form.materialId ? (materials?.find(m => m.id === parseInt(form.materialId))?.gsm ?? undefined) : undefined,
-        qtySheets: parseInt(form.qtySheets) || 0,
-        plannedSheets: Math.ceil((parseInt(form.qtySheets) || 0) * 1.04),
-        templateId: form.templateId ? parseInt(form.templateId) : undefined,
-        scheduledDate: form.scheduledDate || undefined,
-      }
-    }, {
-      onSuccess: () => {
-        onClose();
-        setForm({ clientName: '', jobName: '', materialId: '', qtySheets: '', templateId: '', scheduledDate: today });
-      }
-    });
-  };
-
-  const handleClose = () => {
-    onClose();
-    setForm({ clientName: '', jobName: '', materialId: '', qtySheets: '', templateId: '', scheduledDate: today });
-  };
-
-  return (
-    <>
-      <Modal isOpen={isOpen} onClose={handleClose} title="Create New Production Job">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Client Name <span className="text-destructive">*</span></Label>
-              <Input
-                required
-                value={form.clientName}
-                onChange={e => setForm({ ...form, clientName: e.target.value })}
-                placeholder="e.g. Tiranga Packaging"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Job Name <span className="text-destructive">*</span></Label>
-              <Input
-                required
-                value={form.jobName}
-                onChange={e => setForm({ ...form, jobName: e.target.value })}
-                placeholder="e.g. Carton Box 350gsm"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Material</Label>
-              <Select
-                value={form.materialId}
-                onChange={e => setForm({ ...form, materialId: e.target.value })}
-              >
-                <option value="">— No material selected —</option>
-                {boardsMats.length > 0 && (
-                  <optgroup label="BOARDS & PAPER">
-                    {boardsMats.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.materialName}{m.vendorName ? ` — ${m.vendorName}` : ''} ({parseFloat(String(m.currentQty)).toLocaleString()} {m.unit} available)
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {consumableMats.length > 0 && (
-                  <optgroup label="CONSUMABLES">
-                    {consumableMats.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.materialName}{m.vendorName ? ` — ${m.vendorName}` : ''} ({parseFloat(String(m.currentQty)).toLocaleString()} {m.unit} available)
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
-              <button
-                type="button"
-                onClick={() => setIsWizardOpen(true)}
-                className="text-xs text-primary font-semibold hover:underline mt-1"
-              >
-                + Add new material to inventory
-              </button>
-              {(!materials || materials.length === 0) && (
-                <p className="text-xs text-amber-600 mt-1">No materials in inventory. Add stock first.</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Quantity (Sheets) <span className="text-destructive">*</span></Label>
-              <Input
-                type="number"
-                required
-                min="1"
-                value={form.qtySheets}
-                onChange={e => setForm({ ...form, qtySheets: e.target.value })}
-                placeholder="e.g. 5000"
-              />
-            </div>
-          </div>
-
-          {selectedMaterial && (
-            <div className="flex flex-wrap items-center gap-2 bg-muted/50 rounded-lg px-3 py-2 text-xs">
-              {selectedMaterial.gsm && <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-bold">{selectedMaterial.gsm} GSM</span>}
-              {selectedMaterial.dimensions && <span className="bg-muted px-2 py-0.5 rounded">{selectedMaterial.dimensions}"</span>}
-              {selectedMaterial.grain && <span className="bg-muted px-2 py-0.5 rounded capitalize">{selectedMaterial.grain} grain</span>}
-              {selectedMaterial.vendorName && <span className="bg-muted px-2 py-0.5 rounded">{selectedMaterial.vendorName}</span>}
-              <span className="bg-muted px-2 py-0.5 rounded font-semibold">{parseFloat(String(selectedMaterial.currentQty)).toLocaleString()} {selectedMaterial.unit} in stock</span>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Job Template (Routing)</Label>
-            <Select
-              value={form.templateId}
-              onChange={e => setForm({ ...form, templateId: e.target.value })}
-            >
-              <option value="">— Custom (no template) —</option>
-              {templates?.map(t => (
-                <option key={t.id} value={t.id}>{t.templateName}</option>
-              ))}
-            </Select>
-          </div>
-
-          {selectedTemplate && selectedTemplate.machineNames && (
-            <div className="bg-muted/50 rounded-xl p-4 border border-border">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Routing Steps</p>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedTemplate.machineNames.map((name, idx) => (
-                  <React.Fragment key={idx}>
-                    <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg px-3 py-1.5 shadow-sm">
-                      <span className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
-                      <span className="text-sm font-semibold">{name}</span>
-                    </div>
-                    {idx < selectedTemplate.machineNames.length - 1 && (
-                      <ArrowRight size={16} className="text-muted-foreground shrink-0" />
-                    )}
-                  </React.Fragment>
-                ))}
-              </div>
-              {selectedTemplate.description && (
-                <p className="text-xs text-muted-foreground mt-3">{selectedTemplate.description}</p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Scheduled Date</Label>
-            <Input
-              type="date"
-              value={form.scheduledDate}
-              onChange={e => setForm({ ...form, scheduledDate: e.target.value })}
-            />
-          </div>
-
-          {form.qtySheets && (
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-400">
-              Planned sheets (with 4% setup wastage): <strong>{Math.ceil(parseInt(form.qtySheets) * 1.04).toLocaleString()}</strong>
-            </div>
-          )}
-
-          <div className="pt-2 flex justify-end gap-3 border-t border-border">
-            <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
-            <Button type="submit" isLoading={createMutation.isPending}>Create Job</Button>
-          </div>
-        </form>
-      </Modal>
-      <AddStockWizard isOpen={isWizardOpen} onClose={() => setIsWizardOpen(false)} />
-    </>
-  );
-}

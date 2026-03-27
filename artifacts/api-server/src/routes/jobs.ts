@@ -194,12 +194,14 @@ router.post("/jobs", async (req, res): Promise<void> => {
   }
 
   const jobCode = await getNextJobCode();
-  const { customRouting, materials: jobMats, templateId, ...jobData } = parsed.data;
+  const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, ...jobData } = parsed.data;
 
   const [job] = await db.insert(jobsTable).values({
     ...jobData,
     jobCode,
     templateId: templateId ?? null,
+    coatingType: coatingType ?? null,
+    finishRequirements: finishRequirements ?? [],
     status: "pending",
   }).returning();
 

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { autoSeedIfEmpty } from "./lib/auto-seed";
+import { runProdMigration } from "./lib/prod-migration";
 
 const rawPort = process.env["PORT"];
 
@@ -19,8 +20,9 @@ if (Number.isNaN(port) || port <= 0) {
 async function start() {
   try {
     await autoSeedIfEmpty();
+    await runProdMigration();
   } catch (err) {
-    logger.error({ err }, "Auto-seed error — server will start anyway");
+    logger.error({ err }, "Auto-seed/migration error — server will start anyway");
   }
 
   app.listen(port, (err) => {

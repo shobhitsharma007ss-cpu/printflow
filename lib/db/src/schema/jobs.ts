@@ -20,9 +20,11 @@ export const jobsTable = pgTable("jobs", {
   materialGsm: integer("material_gsm"),
   qtySheets: integer("qty_sheets").notNull(),
   plannedSheets: integer("planned_sheets"),
-  status: text("status").notNull().default("pending"), // pending/in-progress/completed/on-hold
+  status: text("status").notNull().default("pending"),
   templateId: integer("template_id").references(() => jobTemplatesTable.id),
   scheduledDate: text("scheduled_date"),
+  coatingType: text("coating_type"),
+  finishRequirements: text("finish_requirements").array().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
