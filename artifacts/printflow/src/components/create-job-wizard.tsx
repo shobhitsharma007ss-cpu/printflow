@@ -50,6 +50,7 @@ interface JobForm {
   scheduledDate: string;
   materialId: string;
   qtySheets: string;
+  wastagePercent: string;
   coatingType: string;
   finishRequirements: string[];
   printMachineId: string;
@@ -74,6 +75,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     scheduledDate: today,
     materialId: "",
     qtySheets: "",
+    wastagePercent: "4",
     coatingType: "none",
     finishRequirements: [],
     printMachineId: "",
@@ -243,7 +245,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
   };
 
   const qtyNum = parseInt(form.qtySheets) || 0;
-  const plannedSheets = Math.ceil(qtyNum * 1.04);
+  const wastageMultiplier = 1 + (parseFloat(form.wastagePercent) || 4) / 100;
+  const plannedSheets = Math.ceil(qtyNum * wastageMultiplier);
   const stockAvailable = selectedMaterial ? parseFloat(String(selectedMaterial.currentQty)) : 0;
   const stockInsufficient = selectedMaterial && qtyNum > 0 && qtyNum > stockAvailable;
 
@@ -314,6 +317,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       scheduledDate: today,
       materialId: "",
       qtySheets: "",
+      wastagePercent: "4",
       coatingType: "none",
       finishRequirements: [],
       printMachineId: "",
@@ -559,16 +563,30 @@ function Step2Material({
         </button>
       </div>
 
-      <div className="space-y-1.5">
-        <Label>Quantity (Sheets) <span className="text-destructive">*</span></Label>
-        <Input
-          type="number"
-          required
-          min="1"
-          value={form.qtySheets}
-          onChange={(e) => setForm({ ...form, qtySheets: e.target.value })}
-          placeholder="e.g. 5000"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label>Quantity (Sheets) <span className="text-destructive">*</span></Label>
+          <Input
+            type="number"
+            required
+            min="1"
+            value={form.qtySheets}
+            onChange={(e) => setForm({ ...form, qtySheets: e.target.value })}
+            placeholder="e.g. 5000"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Wastage %</Label>
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={form.wastagePercent}
+            onChange={(e) => setForm({ ...form, wastagePercent: e.target.value || "4" })}
+            placeholder="4"
+          />
+        </div>
       </div>
 
       {stockInsufficient && (
@@ -582,7 +600,7 @@ function Step2Material({
 
       {qtyNum > 0 && (
         <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-400">
-          Planned sheets (with 4% setup wastage): <strong>{plannedSheets.toLocaleString()}</strong>
+          Planned sheets (with {form.wastagePercent}% wastage): <strong>{plannedSheets.toLocaleString()}</strong>
         </div>
       )}
     </div>

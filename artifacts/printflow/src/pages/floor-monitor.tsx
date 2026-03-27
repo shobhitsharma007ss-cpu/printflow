@@ -44,7 +44,7 @@ export default function FloorMonitor() {
     return null;
   };
 
-  const handleAdvanceStep = (routingId: number, newStatus: string) => {
+  const handleAdvanceStep = (routingId: number, newStatus: "pending" | "in-progress" | "completed") => {
     updateRouting.mutate({ id: routingId, data: { status: newStatus } });
   };
 
@@ -67,10 +67,23 @@ export default function FloorMonitor() {
   };
 
   const groupedMachines = machines.reduce((acc, machine) => {
-    if (!acc[machine.machineType]) acc[machine.machineType] = [];
-    acc[machine.machineType].push(machine);
+    if (machine.machineName === "Wohlenberg Cutter") {
+      if (!acc["Pre-Press"]) acc["Pre-Press"] = [];
+      acc["Pre-Press"].push(machine);
+    } else {
+      if (!acc[machine.machineType]) acc[machine.machineType] = [];
+      acc[machine.machineType].push(machine);
+    }
     return acc;
   }, {} as Record<string, Machine[]>);
+
+  const getNextPendingJob = (machineId: number): JobWithDetails | null => {
+    for (const job of activeJobs) {
+      const hasUpcomingStep = job.routing?.some((r) => r.machineId === machineId && r.status === "pending");
+      if (hasUpcomingStep) return job;
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -94,10 +107,16 @@ export default function FloorMonitor() {
         </div>
       </div>
 
-      {Object.entries(groupedMachines).map(([type, typeMachines]) => (
+      {Object.entries(groupedMachines)
+        .sort(([a], [b]) => {
+          if (a === "Pre-Press") return -1;
+          if (b === "Pre-Press") return 1;
+          return 0;
+        })
+        .map(([type, typeMachines]) => (
         <div key={type} className="space-y-4">
           <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground px-2 border-b border-border pb-2">
-            {type} Area
+            {type === "Pre-Press" ? "Pre-Press" : `${type} Area`}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {typeMachines.map((machine) => {
@@ -105,16 +124,21 @@ export default function FloorMonitor() {
               const pendingInfo = getMachinePendingStep(machine.id);
               const machineJobs = getMachineJobs(machine.id);
               const isExpanded = expandedMachine === machine.id;
+              const nextJob = getNextPendingJob(machine.id);
 
               return (
-                <Card 
-                  key={machine.id} 
-                  className={cn(
-                    "overflow-hidden border-t-4 hover:shadow-xl transition-all duration-300",
-                    isExpanded && "ring-2 ring-primary/30"
-                  )}
-                  style={{ borderTopColor: getMachineColorCode(machine.status) }}
-                >
+                <div key={machine.id} className={cn(
+                  "relative",
+                  machine.status === "running" && "before:absolute before:inset-0 before:rounded-xl before:bg-emerald-500/20 before:blur-md before:animate-pulse"
+                )}>
+                  <Card 
+                    className={cn(
+                      "overflow-hidden border-t-4 hover:shadow-xl transition-all duration-300 relative z-10",
+                      isExpanded && "ring-2 ring-primary/30",
+                      machine.status === "running" && "ring-2 ring-emerald-500/30"
+                    )}
+                    style={{ borderTopColor: getMachineColorCode(machine.status) }}
+                  >
                   <div className="p-5 relative">
                     <div className="flex justify-between items-start mb-3">
                       <div>
@@ -133,6 +157,13 @@ export default function FloorMonitor() {
                       <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
                       <span className="text-base font-bold text-primary break-words block">
                         {machine.currentJobName || "--- IDLE ---"}
+                      </span>
+                    </div>
+
+                    <div className="bg-muted/50 rounded-lg p-3 mb-3">
+                      <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Up Next</span>
+                      <span className="text-sm font-semibold text-foreground break-words block">
+                        {nextJob ? nextJob.jobName : "Queue empty"}
                       </span>
                     </div>
 
@@ -221,7 +252,8 @@ export default function FloorMonitor() {
                       </div>
                     </div>
                   </div>
-                </Card>
+                  </Card>
+                </div>
               );
             })}
           </div>
