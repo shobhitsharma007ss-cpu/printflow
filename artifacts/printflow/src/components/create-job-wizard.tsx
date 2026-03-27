@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useMaterials } from "@/hooks/use-inventory";
 import { useJobTemplates } from "@/hooks/use-templates";
 import { useMachines } from "@/hooks/use-machines";
@@ -75,7 +75,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     scheduledDate: today,
     materialId: "",
     qtySheets: "",
-    wastagePercent: "4",
+    wastagePercent: "",
     coatingType: "none",
     finishRequirements: [],
     printMachineId: "",
@@ -337,7 +337,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       scheduledDate: today,
       materialId: "",
       qtySheets: "",
-      wastagePercent: "4",
+      wastagePercent: "",
       coatingType: "none",
       finishRequirements: [],
       printMachineId: "",
@@ -603,8 +603,8 @@ function Step2Material({
             max="100"
             step="0.1"
             value={form.wastagePercent}
-            onChange={(e) => setForm({ ...form, wastagePercent: e.target.value || "4" })}
-            placeholder="4"
+            onChange={(e) => setForm({ ...form, wastagePercent: e.target.value })}
+            placeholder="4 (default)"
           />
         </div>
       </div>
@@ -620,7 +620,7 @@ function Step2Material({
 
       {qtyNum > 0 && (
         <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-400">
-          Planned sheets (with {form.wastagePercent}% wastage): <strong>{plannedSheets.toLocaleString()}</strong>
+          Planned sheets (with {form.wastagePercent || "4"}% wastage): <strong>{plannedSheets.toLocaleString()}</strong>
         </div>
       )}
     </div>
@@ -747,20 +747,74 @@ function Step3Coating({
 }
 
 function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Dispatch<React.SetStateAction<JobForm>>; qtyNum: number }) {
+  const { data: materials } = useMaterials();
+  const defaultEstimate = (qtyNum * 0.002).toFixed(2);
+
+  const wantedItems = useMemo(() => {
+    const coating = form.coatingType;
+    const finishes = form.finishRequirements;
+    return [
+      { subType: "cyan-ink",        nameMatch: "cyan",      label: "Cyan Ink",         always: true },
+      { subType: "magenta-ink",     nameMatch: "magenta",   label: "Magenta Ink",       always: true },
+      { subType: "yellow-ink",      nameMatch: "yellow",    label: "Yellow Ink",        always: true },
+      { subType: "black-ink",       nameMatch: "black",     label: "Black Ink (K)",     always: true },
+      { subType: "uv-ink",          nameMatch: "uv ink",    label: "UV Ink",            always: false, when: coating === "uv" || coating === "texture" || coating === "drip-off" },
+      { subType: "led-uv-ink",      nameMatch: "led",       label: "LED UV Ink",        always: false, when: coating === "led-uv" },
+      { subType: "varnish",         nameMatch: "varnish",   label: "Varnish",           always: false, when: coating === "varnish" },
+      { subType: "aqueous-coating", nameMatch: "aqueous",   label: "Aqueous Coating",   always: false, when: coating === "aqueous" },
+      { subType: "gum",             nameMatch: "gum",       label: "Gum / Adhesive",    always: false, when: finishes.includes("folder-gluing") },
+    ].filter((item) => item.always || item.when);
+  }, [form.coatingType, form.finishRequirements]);
+
+  const computedInks = useMemo((): InkEntry[] => {
+    if (!materials) return [];
+    const consumables = materials.filter((m) => m.materialType === "consumable");
+    return wantedItems
+      .map((item) => {
+        const mat =
+          consumables.find((m) => m.subType === item.subType) ||
+          consumables.find((m) => m.materialName.toLowerCase().includes(item.nameMatch));
+        if (!mat) return null;
+        const existing = form.inks.find((i) => i.materialId === mat.id);
+        return {
+          materialId: mat.id,
+          name: mat.materialName,
+          unit: mat.unit,
+          planned: existing?.planned ?? defaultEstimate,
+          available: parseFloat(String(mat.currentQty)),
+        };
+      })
+      .filter(Boolean) as InkEntry[];
+  }, [materials, wantedItems, defaultEstimate]);
+
+  useEffect(() => {
+    if (!materials || computedInks.length === 0) return;
+    setForm((prev) => {
+      const prevById = new Map(prev.inks.map((i) => [i.materialId, i.planned]));
+      const synced = computedInks.map((ci) => ({
+        ...ci,
+        planned: prevById.get(ci.materialId) ?? ci.planned,
+      }));
+      return { ...prev, inks: synced };
+    });
+  }, [wantedItems, materials]);
+
   const updateInk = (idx: number, value: string) => {
     const newInks = [...form.inks];
     newInks[idx] = { ...newInks[idx], planned: value };
     setForm((prev) => ({ ...prev, inks: newInks }));
   };
 
+  const displayInks = form.inks.length > 0 ? form.inks : computedInks;
+
   return (
     <div className="space-y-4">
       <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground">
         <Info size={12} className="inline mr-1" />
-        Default estimate: {qtyNum.toLocaleString()} sheets x 0.002 kg = {(qtyNum * 0.002).toFixed(2)} kg per ink
+        Default estimate: {qtyNum.toLocaleString()} sheets × 0.002 kg = {(qtyNum * 0.002).toFixed(2)} kg per ink
       </div>
       <div className="space-y-3">
-        {form.inks.map((ink, idx) => {
+        {displayInks.map((ink, idx) => {
           const insufficient = parseFloat(ink.planned) > ink.available;
           return (
             <div key={ink.materialId} className="flex items-center gap-3">
@@ -794,9 +848,9 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
           );
         })}
       </div>
-      {form.inks.length === 0 && (
+      {displayInks.length === 0 && (
         <div className="text-center py-8 text-muted-foreground text-sm">
-          No ink or consumable estimates needed for this configuration.
+          {materials ? "No matching consumables found in inventory." : "Loading inventory…"}
         </div>
       )}
     </div>
