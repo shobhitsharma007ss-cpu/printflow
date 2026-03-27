@@ -140,37 +140,57 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     const defaultEstimate = qty * 0.002;
     const coating = form.coatingType;
 
-    const inkMap: { subType: string; name: string }[] = [
-      { subType: "cyan-ink", name: "Cyan Ink" },
-      { subType: "magenta-ink", name: "Magenta Ink" },
-      { subType: "yellow-ink", name: "Yellow Ink" },
-      { subType: "black-ink", name: "Black Ink (K)" },
-    ];
+    const consumables = materials.filter((m) => m.materialType === "consumable");
+    const isInkLike = (mat: Material) => {
+      const name = mat.materialName.toLowerCase();
+      const subType = (mat.subType || "").toLowerCase();
+      return (
+        subType.includes("ink") ||
+        name.includes("ink") ||
+        name.includes("varnish") ||
+        name.includes("coating") ||
+        name.includes("gum") ||
+        name.includes("fountain") ||
+        name.includes("wash") ||
+        name.includes("powder") ||
+        name.includes("lubricant") ||
+        name.includes("blanket") ||
+        name.includes("spray")
+      );
+    };
+
+    const availableInks = consumables.filter(isInkLike);
+    const selectedSubTypes = new Set<string>();
+
+    selectedSubTypes.add("cyan-ink");
+    selectedSubTypes.add("magenta-ink");
+    selectedSubTypes.add("yellow-ink");
+    selectedSubTypes.add("black-ink");
 
     if (coating === "uv" || coating === "texture" || coating === "drip-off") {
-      inkMap.push({ subType: "uv-ink", name: "UV Ink" });
+      selectedSubTypes.add("uv-ink");
     }
     if (coating === "led-uv") {
-      inkMap.push({ subType: "led-uv-ink", name: "LED UV Ink" });
+      selectedSubTypes.add("led-uv-ink");
     }
     if (coating === "varnish") {
-      inkMap.push({ subType: "varnish", name: "Varnish" });
+      selectedSubTypes.add("varnish");
     }
     if (coating === "aqueous") {
-      inkMap.push({ subType: "aqueous-coating", name: "Aqueous Coating" });
+      selectedSubTypes.add("aqueous-coating");
     }
     if (form.finishRequirements.includes("folder-gluing")) {
-      inkMap.push({ subType: "gum", name: "Gum/Adhesive" });
+      selectedSubTypes.add("gum");
     }
 
     const newInks: InkEntry[] = [];
-    for (const ink of inkMap) {
-      const mat = materials.find((m) => m.subType === ink.subType);
+    for (const subType of Array.from(selectedSubTypes)) {
+      const mat = availableInks.find((m) => m.subType === subType);
       if (mat) {
         const existing = form.inks.find((i) => i.materialId === mat.id);
         newInks.push({
           materialId: mat.id,
-          name: ink.name,
+          name: mat.materialName,
           unit: mat.unit,
           planned: existing?.planned || defaultEstimate.toFixed(2),
           available: parseFloat(String(mat.currentQty)),

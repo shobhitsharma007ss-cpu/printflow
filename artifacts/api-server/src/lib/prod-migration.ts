@@ -160,6 +160,41 @@ export async function runProdMigration(): Promise<void> {
       await tx.insert(materialVendorsTable).values({ materialId: newGB350.id, vendorId: biltId });
     }
 
+    const consumablesToAdd = [
+      { name: "Cyan Ink", subType: "cyan-ink", unit: "kg", qty: 12, reorder: 4 },
+      { name: "Magenta Ink", subType: "magenta-ink", unit: "kg", qty: 10, reorder: 4 },
+      { name: "Yellow Ink", subType: "yellow-ink", unit: "kg", qty: 8, reorder: 4 },
+      { name: "Black Ink (K)", subType: "black-ink", unit: "kg", qty: 15, reorder: 4 },
+      { name: "UV Ink", subType: "uv-ink", unit: "kg", qty: 15, reorder: 5 },
+      { name: "LED UV Ink", subType: "led-uv-ink", unit: "kg", qty: 10, reorder: 5 },
+      { name: "Varnish", subType: "varnish", unit: "litre", qty: 20, reorder: 8 },
+      { name: "Aqueous Coating", subType: "aqueous-coating", unit: "litre", qty: 25, reorder: 10 },
+      { name: "Gum/Adhesive", subType: "gum", unit: "kg", qty: 30, reorder: 10 },
+      { name: "Lubricant Oil", subType: "lubricant", unit: "litre", qty: 10, reorder: 3 },
+      { name: "Blanket Wash", subType: "blanket-wash", unit: "litre", qty: 15, reorder: 5 },
+      { name: "Fountain Solution", subType: "fountain-solution", unit: "litre", qty: 20, reorder: 8 },
+      { name: "Spray Powder", subType: "spray-powder", unit: "kg", qty: 8, reorder: 3 },
+      { name: "Storage Gum (Plate Gum)", subType: "plate-gum", unit: "litre", qty: 5, reorder: 2 },
+    ];
+
+    for (const c of consumablesToAdd) {
+      const existing = await tx
+        .select()
+        .from(materialsTable)
+        .where(eq(materialsTable.materialName, c.name))
+        .limit(1);
+      if (existing.length === 0) {
+        await tx.insert(materialsTable).values({
+          materialName: c.name,
+          materialType: "consumable",
+          subType: c.subType,
+          unit: c.unit,
+          currentQty: String(c.qty),
+          minReorderQty: String(c.reorder),
+        });
+      }
+    }
+
     const komoriLA = await tx.select().from(machinesTable).where(eq(machinesTable.machineName, "Komori LA37")).limit(1);
     const komoriGL = await tx.select().from(machinesTable).where(eq(machinesTable.machineName, "Komori GL37")).limit(1);
     const wohlenberg = await tx.select().from(machinesTable).where(eq(machinesTable.machineName, "Wohlenberg Cutter")).limit(1);

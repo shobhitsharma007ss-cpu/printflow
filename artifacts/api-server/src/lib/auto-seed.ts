@@ -56,6 +56,10 @@ export async function autoSeedIfEmpty(): Promise<void> {
       { materialName: "Aqueous Coating", materialType: "consumable", subType: "aqueous-coating", unit: "litre", currentQty: "25", minReorderQty: "10" },
       { materialName: "Gum/Adhesive", materialType: "consumable", subType: "gum", unit: "kg", currentQty: "30", minReorderQty: "10" },
       { materialName: "Lubricant Oil", materialType: "consumable", subType: "lubricant", unit: "litre", currentQty: "10", minReorderQty: "3" },
+      { materialName: "Blanket Wash", materialType: "consumable", subType: "blanket-wash", unit: "litre", currentQty: "15", minReorderQty: "5" },
+      { materialName: "Fountain Solution", materialType: "consumable", subType: "fountain-solution", unit: "litre", currentQty: "20", minReorderQty: "8" },
+      { materialName: "Spray Powder", materialType: "consumable", subType: "spray-powder", unit: "kg", currentQty: "8", minReorderQty: "3" },
+      { materialName: "Storage Gum (Plate Gum)", materialType: "consumable", subType: "plate-gum", unit: "litre", currentQty: "5", minReorderQty: "2" },
     ]).returning();
 
     await db.insert(materialVendorsTable).values([
