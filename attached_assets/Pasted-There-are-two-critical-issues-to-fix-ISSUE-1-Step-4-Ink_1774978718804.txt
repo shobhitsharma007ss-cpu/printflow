@@ -1,0 +1,51 @@
+There are two critical issues to fix:
+
+ISSUE 1 — Step 4 (Ink & Consumables) in Create Job Wizard 
+still only shows Gum/Adhesive. CMYK inks not showing.
+
+Root cause: The subType matching is failing. Fix it by changing 
+the matching logic in Step4Inks component.
+
+Instead of matching by subType only, use this fallback logic:
+1. First try: match by subType === item.subType
+2. Second try: match by materialName containing item.nameMatch (case insensitive)
+3. Third try: match by materialName containing any of these keywords:
+   - For Cyan: "cyan"
+   - For Magenta: "magenta" 
+   - For Yellow: "yellow"
+   - For Black: "black" OR "noir" OR " k " OR "bk"
+   - For UV Ink: "uv"
+   - For LED UV: "led"
+   - For Varnish: "varnish" OR "warnish"
+   - For Aqueous: "aqueous"
+   - For Gum: "gum" OR "adhesive"
+
+Also add a debug line temporarily: console.log("consumables found:", 
+consumables.map(m => ({name: m.materialName, subType: m.subType})))
+so we can see what's in the database.
+
+ISSUE 2 — Vendors for consumables not tracked.
+
+Add vendor tracking to consumables in inventory:
+- In the Add Stock wizard, when CONSUMABLE category is selected,
+  also show vendor selection (same vendor dropdown used for boards/paper)
+- Add vendor_id column to materials table if not already there
+- Show vendor name on each consumable drum in inventory
+- In the ink/consumable selection in job wizard Step 4, 
+  show vendor name next to each consumable:
+  "Cyan Ink — Sun Chemicals (12 kg in stock)"
+
+ISSUE 3 — Seed consumables with vendors:
+Update existing consumables in the database to link them to vendors:
+- Cyan Ink → vendor: Khanna Paper (use existing vendor or create 
+  "Sun Chemicals" as a new vendor)
+- Magenta Ink → same vendor
+- Yellow Ink → same vendor  
+- Black Ink → same vendor
+- UV Ink → create vendor "Siegwerk" if not exists
+- Varnish → create vendor "Siegwerk"
+- Gum/Adhesive → create vendor "Henkel"
+- Blanket Wash → create vendor "Chemplast"
+- Fountain Solution → create vendor "Chemplast"
+
+After all fixes, republish the app.
