@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useMachines } from "@/hooks/use-machines";
 import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/hooks/use-jobs";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, isAnimatedStatus, cn } from "@/lib/utils";
-import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X } from "lucide-react";
+import { Factory, AlertCircle, Maximize2, Minimize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X } from "lucide-react";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 export default function FloorMonitor() {
@@ -14,6 +14,28 @@ export default function FloorMonitor() {
   const [expandedMachine, setExpandedMachine] = useState<number | null>(null);
   const [issueModal, setIssueModal] = useState<{ routingId: number; stepNumber: number; jobCode: string } | null>(null);
   const [issueText, setIssueText] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [clockTime, setClockTime] = useState(() => {
+    const now = new Date();
+    return now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setClockTime(now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }));
+    };
+    const interval = setInterval(tick, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   const isLoading = machinesLoading || jobsLoading;
 
@@ -96,6 +118,7 @@ export default function FloorMonitor() {
           <p className="text-muted-foreground mt-1 font-medium">Real-time status of all factory equipment</p>
         </div>
         <div className="flex items-center gap-4">
+          <span className="text-3xl font-black text-primary tabular-nums">{clockTime}</span>
           <div className="hidden sm:flex items-center gap-4 text-sm">
             <span className="flex items-center gap-1.5">
               <span className="relative flex h-3 w-3">
@@ -107,8 +130,12 @@ export default function FloorMonitor() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-gray-400" /> Idle</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500" /> Maintenance</span>
           </div>
-          <button className="p-3 bg-muted rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-            <Maximize2 size={20} />
+          <button
+            onClick={handleFullscreen}
+            className="p-3 bg-muted rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
           </button>
         </div>
       </div>
@@ -151,24 +178,24 @@ export default function FloorMonitor() {
                     <div className="p-5 relative">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
-                          <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
+                          <h3 className="text-2xl font-black tracking-tight">{machine.machineName}</h3>
+                          <p className="text-xs text-muted-foreground">{machine.machineCode}</p>
                         </div>
-                        <div className="relative flex h-5 w-5">
+                        <div className="relative flex h-6 w-6">
                           {machine.status === "running" && (
                             <>
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" style={{ animationDelay: '0.3s' }}></span>
                             </>
                           )}
-                          <span className={`relative inline-flex rounded-full h-5 w-5 ${getStatusDotColor(machine.status)}`}></span>
+                          <span className={`relative inline-flex rounded-full h-6 w-6 ${getStatusDotColor(machine.status)}`}></span>
                         </div>
                       </div>
 
                       <div className="bg-muted rounded-lg p-3 mb-3">
                         <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
-                        <span className="text-base font-bold text-primary break-words block">
-                          {machine.currentJobName || "--- IDLE ---"}
+                        <span className="text-xl font-black text-primary break-words block">
+                          {machine.currentJobName || "— IDLE —"}
                         </span>
                       </div>
 
@@ -204,39 +231,39 @@ export default function FloorMonitor() {
 
                       <div className="bg-muted/50 rounded-lg p-3 mb-3">
                         <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Up Next</span>
-                        <span className="text-sm font-semibold text-foreground break-words block">
+                        <span className="text-base font-bold text-foreground break-words block">
                           {nextJob ? nextJob.jobName : "Queue empty"}
                         </span>
                       </div>
 
                       {activeInfo && (
                         <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
-                              <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
-                            </div>
+                          <div className="mb-3">
+                            <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
+                            <span className="text-sm font-semibold text-foreground">{activeInfo.job.jobCode}</span>
+                          </div>
+                          <button
+                            onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
+                            disabled={updateRouting.isPending}
+                            className="w-full flex items-center justify-center gap-2 min-h-[48px] bg-emerald-500 text-white text-base font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                          >
+                            <CheckCircle size={18} />
+                            Mark Complete
+                          </button>
+                          <div className="mt-2">
+                            {activeInfo.step.notes && (
+                              <p className="text-[10px] text-amber-600 bg-amber-500/10 rounded px-2 py-1 mb-2 line-clamp-2">
+                                ⚠ {activeInfo.step.notes}
+                              </p>
+                            )}
                             <button
-                              onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
-                              disabled={updateRouting.isPending}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                              onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
+                              className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
                             >
-                              <CheckCircle size={12} />
-                              Complete
+                              <AlertTriangle size={10} />
+                              Report Issue
                             </button>
                           </div>
-                          {activeInfo.step.notes && (
-                            <p className="text-[10px] text-amber-600 bg-amber-500/10 rounded px-2 py-1 mb-2 line-clamp-2">
-                              ⚠ {activeInfo.step.notes}
-                            </p>
-                          )}
-                          <button
-                            onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
-                            className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
-                          >
-                            <AlertTriangle size={10} />
-                            Report Issue
-                          </button>
                         </div>
                       )}
 
@@ -284,9 +311,9 @@ export default function FloorMonitor() {
                       <div className="flex justify-between items-end border-t border-border pt-3">
                         <div>
                           <span className="text-xs text-muted-foreground block mb-0.5">Operator</span>
-                          <span className="font-bold text-sm">{machine.operatorName}</span>
+                          <span className="text-base font-bold">{machine.operatorName}</span>
                         </div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(machine.status)}`}>
+                        <div className={`px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider border ${getStatusColor(machine.status)}`}>
                           {machine.status}
                         </div>
                       </div>
@@ -361,7 +388,7 @@ export default function FloorMonitor() {
                             )}>
                               {step.status === "completed" ? "✓" : step.stepNumber}
                             </span>
-                            <span className="hidden sm:inline truncate max-w-[80px]">{step.machineName}</span>
+                            <span className="hidden sm:inline text-sm">{step.machineName}</span>
                             {step.notes && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
                           </div>
                           {idx < job.routing.length - 1 && (
