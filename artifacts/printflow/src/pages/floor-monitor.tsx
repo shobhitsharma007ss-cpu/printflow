@@ -23,7 +23,7 @@ export default function FloorMonitor() {
   const activeJobs: JobWithDetails[] = jobs?.filter((j) => j.status === "in-progress" || j.status === "pending") ?? [];
 
   const getMachineJobs = (machineId: number) => {
-    return activeJobs.filter((j) => 
+    return activeJobs.filter((j) =>
       j.routing?.some((r) => r.machineId === machineId && r.status !== "completed")
     );
   };
@@ -97,7 +97,13 @@ export default function FloorMonitor() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-4 text-sm">
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500" /> Running</span>
+            <span className="flex items-center gap-1.5">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              Running
+            </span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-gray-400" /> Idle</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500" /> Maintenance</span>
           </div>
@@ -127,131 +133,164 @@ export default function FloorMonitor() {
               const nextJob = getNextPendingJob(machine.id);
 
               return (
-                <div key={machine.id} className={cn(
-                  "relative",
-                  machine.status === "running" && "before:absolute before:inset-0 before:rounded-xl before:bg-emerald-500/20 before:blur-md before:animate-pulse"
-                )}>
-                  <Card 
+                <div key={machine.id} className="relative">
+                  {machine.status === "running" && (
+                    <>
+                      <div className="absolute -inset-1 rounded-xl bg-emerald-500/20 blur-lg animate-pulse pointer-events-none" />
+                      <div className="absolute -inset-0.5 rounded-xl bg-emerald-500/10 animate-pulse pointer-events-none" style={{ animationDelay: '0.5s' }} />
+                    </>
+                  )}
+                  <Card
                     className={cn(
                       "overflow-hidden border-t-4 hover:shadow-xl transition-all duration-300 relative z-10",
                       isExpanded && "ring-2 ring-primary/30",
-                      machine.status === "running" && "ring-2 ring-emerald-500/30"
+                      machine.status === "running" && "ring-2 ring-emerald-500/50 shadow-emerald-500/20 shadow-lg"
                     )}
                     style={{ borderTopColor: getMachineColorCode(machine.status) }}
                   >
-                  <div className="p-5 relative">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
-                        <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
+                    <div className="p-5 relative">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
+                          <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
+                        </div>
+                        <div className="relative flex h-5 w-5">
+                          {machine.status === "running" && (
+                            <>
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" style={{ animationDelay: '0.3s' }}></span>
+                            </>
+                          )}
+                          <span className={`relative inline-flex rounded-full h-5 w-5 ${getStatusDotColor(machine.status)}`}></span>
+                        </div>
                       </div>
-                      <div className="relative flex h-5 w-5">
-                        {isAnimatedStatus(machine.status) && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75"></span>
-                        )}
-                        <span className={`relative inline-flex rounded-full h-5 w-5 ${getStatusDotColor(machine.status)}`}></span>
+
+                      <div className="bg-muted rounded-lg p-3 mb-3">
+                        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
+                        <span className="text-base font-bold text-primary break-words block">
+                          {machine.currentJobName || "--- IDLE ---"}
+                        </span>
                       </div>
-                    </div>
 
-                    <div className="bg-muted rounded-lg p-3 mb-3">
-                      <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
-                      <span className="text-base font-bold text-primary break-words block">
-                        {machine.currentJobName || "--- IDLE ---"}
-                      </span>
-                    </div>
-
-                    <div className="bg-muted/50 rounded-lg p-3 mb-3">
-                      <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Up Next</span>
-                      <span className="text-sm font-semibold text-foreground break-words block">
-                        {nextJob ? nextJob.jobName : "Queue empty"}
-                      </span>
-                    </div>
-
-                    {/* In-progress step: Complete + Report Issue buttons */}
-                    {activeInfo && (
-                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
-                            <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
+                      {/* Job Progress Bar — shows when machine is running */}
+                      {activeInfo && activeInfo.job.routing && activeInfo.job.routing.length > 0 && (() => {
+                        const total = activeInfo.job.routing.length;
+                        const completed = activeInfo.job.routing.filter(r => r.status === "completed").length;
+                        const inProgress = activeInfo.job.routing.filter(r => r.status === "in-progress").length;
+                        const pct = Math.round(((completed + inProgress * 0.5) / total) * 100);
+                        return (
+                          <div className="mb-3 bg-muted/50 rounded-lg p-3">
+                            <div className="flex justify-between text-[10px] font-bold mb-1.5">
+                              <span className="text-muted-foreground uppercase tracking-wider">Job Progress</span>
+                              <span className="text-emerald-600 font-black">{pct}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="h-2.5 rounded-full transition-all duration-700 relative overflow-hidden"
+                                style={{
+                                  width: `${pct}%`,
+                                  background: 'linear-gradient(90deg, #22c55e, #16a34a)'
+                                }}
+                              >
+                                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                              {completed} of {total} steps complete
+                            </div>
                           </div>
+                        );
+                      })()}
+
+                      <div className="bg-muted/50 rounded-lg p-3 mb-3">
+                        <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Up Next</span>
+                        <span className="text-sm font-semibold text-foreground break-words block">
+                          {nextJob ? nextJob.jobName : "Queue empty"}
+                        </span>
+                      </div>
+
+                      {activeInfo && (
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 mb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 block">Step {activeInfo.step.stepNumber} — In Progress</span>
+                              <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
+                            </div>
+                            <button
+                              onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
+                              disabled={updateRouting.isPending}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                            >
+                              <CheckCircle size={12} />
+                              Complete
+                            </button>
+                          </div>
+                          {activeInfo.step.notes && (
+                            <p className="text-[10px] text-amber-600 bg-amber-500/10 rounded px-2 py-1 mb-2 line-clamp-2">
+                              ⚠ {activeInfo.step.notes}
+                            </p>
+                          )}
                           <button
-                            onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
-                            disabled={updateRouting.isPending}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                            onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
+                            className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
                           >
-                            <CheckCircle size={12} />
-                            Complete
+                            <AlertTriangle size={10} />
+                            Report Issue
                           </button>
                         </div>
-                        {activeInfo.step.notes && (
-                          <p className="text-[10px] text-amber-600 bg-amber-500/10 rounded px-2 py-1 mb-2 line-clamp-2">
-                            ⚠ {activeInfo.step.notes}
-                          </p>
-                        )}
+                      )}
+
+                      {!activeInfo && pendingInfo && machine.status !== "maintenance" && (
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 mb-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] uppercase tracking-wider font-bold text-blue-600 block">Step {pendingInfo.step.stepNumber} — Waiting</span>
+                              <span className="text-xs font-semibold text-foreground">{pendingInfo.job.jobCode} — {pendingInfo.job.jobName}</span>
+                            </div>
+                            <button
+                              onClick={() => handleAdvanceStep(pendingInfo.step.id, "in-progress")}
+                              disabled={updateRouting.isPending}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                            >
+                              <Play size={12} />
+                              Start
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {machineJobs.length > 1 && (
                         <button
-                          onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
-                          className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
+                          onClick={() => setExpandedMachine(isExpanded ? null : machine.id)}
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3"
                         >
-                          <AlertTriangle size={10} />
-                          Report Issue
+                          <Clock size={10} />
+                          {machineJobs.length - 1} more queued
+                          <ChevronRight size={10} className={cn("transition-transform", isExpanded && "rotate-90")} />
                         </button>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Pending step: Start button */}
-                    {!activeInfo && pendingInfo && machine.status !== "maintenance" && (
-                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 mb-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-[10px] uppercase tracking-wider font-bold text-blue-600 block">Step {pendingInfo.step.stepNumber} — Waiting</span>
-                            <span className="text-xs font-semibold text-foreground">{pendingInfo.job.jobCode} — {pendingInfo.job.jobName}</span>
-                          </div>
-                          <button
-                            onClick={() => handleAdvanceStep(pendingInfo.step.id, "in-progress")}
-                            disabled={updateRouting.isPending}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-                          >
-                            <Play size={12} />
-                            Start
-                          </button>
+                      {isExpanded && machineJobs.length > 1 && (
+                        <div className="space-y-1.5 mb-3">
+                          {machineJobs.slice(1).map((j) => (
+                            <div key={j.id} className="text-xs bg-muted/50 rounded px-2 py-1.5 flex items-center gap-1.5">
+                              <span className="font-mono font-bold">{j.jobCode}</span>
+                              <span className="text-muted-foreground truncate">{j.jobName}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-end border-t border-border pt-3">
+                        <div>
+                          <span className="text-xs text-muted-foreground block mb-0.5">Operator</span>
+                          <span className="font-bold text-sm">{machine.operatorName}</span>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(machine.status)}`}>
+                          {machine.status}
                         </div>
                       </div>
-                    )}
-
-                    {/* Queued jobs */}
-                    {machineJobs.length > 1 && (
-                      <button
-                        onClick={() => setExpandedMachine(isExpanded ? null : machine.id)}
-                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3"
-                      >
-                        <Clock size={10} />
-                        {machineJobs.length - 1} more queued
-                        <ChevronRight size={10} className={cn("transition-transform", isExpanded && "rotate-90")} />
-                      </button>
-                    )}
-
-                    {isExpanded && machineJobs.length > 1 && (
-                      <div className="space-y-1.5 mb-3">
-                        {machineJobs.slice(1).map((j) => (
-                          <div key={j.id} className="text-xs bg-muted/50 rounded px-2 py-1.5 flex items-center gap-1.5">
-                            <span className="font-mono font-bold">{j.jobCode}</span>
-                            <span className="text-muted-foreground truncate">{j.jobName}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-end border-t border-border pt-3">
-                      <div>
-                        <span className="text-xs text-muted-foreground block mb-0.5">Operator</span>
-                        <span className="font-bold text-sm">{machine.operatorName}</span>
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getStatusColor(machine.status)}`}>
-                        {machine.status}
-                      </div>
                     </div>
-                  </div>
                   </Card>
                 </div>
               );
@@ -260,59 +299,81 @@ export default function FloorMonitor() {
         </div>
       ))}
 
-      {/* Active Jobs Progress Section */}
       {activeJobs.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground px-2 border-b border-border pb-2">
             Active Job Progress
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {activeJobs.map((job) => (
-              <Card key={job.id} className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <span className="font-mono text-sm font-bold text-primary">{job.jobCode}</span>
-                    <h3 className="font-bold text-lg">{job.jobName}</h3>
-                    <p className="text-xs text-muted-foreground">{job.clientName}</p>
+            {activeJobs.map((job) => {
+              const total = job.routing?.length ?? 0;
+              const completed = job.routing?.filter(r => r.status === "completed").length ?? 0;
+              const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              return (
+                <Card key={job.id} className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <span className="font-mono text-sm font-bold text-primary">{job.jobCode}</span>
+                      <h3 className="font-bold text-lg">{job.jobName}</h3>
+                      <p className="text-xs text-muted-foreground">{job.clientName}</p>
+                    </div>
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-bold uppercase",
+                      job.status === "in-progress" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                    )}>
+                      {job.status}
+                    </span>
                   </div>
-                  <span className={cn(
-                    "px-2.5 py-1 rounded-full text-xs font-bold uppercase",
-                    job.status === "in-progress" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
-                  )}>
-                    {job.status}
-                  </span>
-                </div>
 
-                {job.routing && job.routing.length > 0 && (
-                  <div className="flex items-center gap-1 mt-4 flex-wrap">
-                    {job.routing.map((step, idx) => (
-                      <React.Fragment key={step.id}>
-                        <div className={cn(
-                          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                          step.status === "completed" ? "bg-emerald-100 text-emerald-700" :
-                          step.status === "in-progress" ? "bg-blue-100 text-blue-700 ring-2 ring-blue-300" :
-                          "bg-muted text-muted-foreground"
-                        )}>
-                          <span className={cn(
-                            "w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0",
-                            step.status === "completed" ? "bg-emerald-500 text-white" :
-                            step.status === "in-progress" ? "bg-blue-500 text-white" :
-                            "bg-muted-foreground/20 text-muted-foreground"
+                  {total > 0 && (
+                    <div className="mb-4">
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-muted-foreground font-medium">{completed} of {total} steps</span>
+                        <span className="font-bold text-emerald-600">{pct}% complete</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                        <div
+                          className="h-3 rounded-full transition-all duration-700"
+                          style={{
+                            width: `${pct}%`,
+                            background: pct === 100 ? '#22c55e' : 'linear-gradient(90deg, #3b82f6, #22c55e)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {job.routing && job.routing.length > 0 && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {job.routing.map((step, idx) => (
+                        <React.Fragment key={step.id}>
+                          <div className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                            step.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                            step.status === "in-progress" ? "bg-blue-100 text-blue-700 ring-2 ring-blue-300" :
+                            "bg-muted text-muted-foreground"
                           )}>
-                            {step.status === "completed" ? "✓" : step.stepNumber}
-                          </span>
-                          <span className="hidden sm:inline truncate max-w-[80px]">{step.machineName}</span>
-                          {step.notes && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
-                        </div>
-                        {idx < job.routing.length - 1 && (
-                          <ArrowRight size={12} className="text-muted-foreground shrink-0" />
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ))}
+                            <span className={cn(
+                              "w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0",
+                              step.status === "completed" ? "bg-emerald-500 text-white" :
+                              step.status === "in-progress" ? "bg-blue-500 text-white" :
+                              "bg-muted-foreground/20 text-muted-foreground"
+                            )}>
+                              {step.status === "completed" ? "✓" : step.stepNumber}
+                            </span>
+                            <span className="hidden sm:inline truncate max-w-[80px]">{step.machineName}</span>
+                            {step.notes && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
+                          </div>
+                          {idx < job.routing.length - 1 && (
+                            <ArrowRight size={12} className="text-muted-foreground shrink-0" />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}
@@ -325,7 +386,6 @@ export default function FloorMonitor() {
         </div>
       )}
 
-      {/* Report Issue Modal */}
       {issueModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
