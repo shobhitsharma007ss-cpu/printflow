@@ -42,7 +42,7 @@ const FINISH_OPTIONS = [
   { value: "embossing", label: "Embossing", icon: Zap },
 ];
 
-type InkEntry = { materialId: number; name: string; unit: string; planned: string; available: number };
+type InkEntry = { materialId: number; name: string; unit: string; planned: string; available: number; vendorName?: string };
 
 interface JobForm {
   clientName: string;
@@ -243,9 +243,6 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       if (recommendedMachine && !form.printMachineId) {
         setForm((prev) => ({ ...prev, printMachineId: String(recommendedMachine.machine.id) }));
       }
-    }
-    if (step === 3) {
-      setTimeout(() => buildInkEstimates(), 0);
     }
     if (step === 4) {
       setTimeout(() => buildRouting(), 0);
@@ -754,26 +751,28 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
     const coating = form.coatingType;
     const finishes = form.finishRequirements;
     return [
-      { subType: "cyan-ink",        nameMatch: "cyan",      label: "Cyan Ink",         always: true },
-      { subType: "magenta-ink",     nameMatch: "magenta",   label: "Magenta Ink",       always: true },
-      { subType: "yellow-ink",      nameMatch: "yellow",    label: "Yellow Ink",        always: true },
-      { subType: "black-ink",       nameMatch: "black",     label: "Black Ink (K)",     always: true },
-      { subType: "uv-ink",          nameMatch: "uv ink",    label: "UV Ink",            always: false, when: coating === "uv" || coating === "texture" || coating === "drip-off" },
-      { subType: "led-uv-ink",      nameMatch: "led",       label: "LED UV Ink",        always: false, when: coating === "led-uv" },
-      { subType: "varnish",         nameMatch: "varnish",   label: "Varnish",           always: false, when: coating === "varnish" },
-      { subType: "aqueous-coating", nameMatch: "aqueous",   label: "Aqueous Coating",   always: false, when: coating === "aqueous" },
-      { subType: "gum",             nameMatch: "gum",       label: "Gum / Adhesive",    always: false, when: finishes.includes("folder-gluing") },
+      { subType: "cyan-ink",        keywords: ["cyan"],                             label: "Cyan Ink",       always: true },
+      { subType: "magenta-ink",     keywords: ["magenta"],                          label: "Magenta Ink",    always: true },
+      { subType: "yellow-ink",      keywords: ["yellow"],                           label: "Yellow Ink",     always: true },
+      { subType: "black-ink",       keywords: ["black", "noir", " k ", "bk"],       label: "Black Ink (K)",  always: true },
+      { subType: "uv-ink",          keywords: ["uv ink", "uv-ink"],                 label: "UV Ink",         always: false, when: coating === "uv" || coating === "texture" || coating === "drip-off" },
+      { subType: "led-uv-ink",      keywords: ["led"],                              label: "LED UV Ink",     always: false, when: coating === "led-uv" },
+      { subType: "varnish",         keywords: ["varnish", "warnish"],               label: "Varnish",        always: false, when: coating === "varnish" },
+      { subType: "aqueous-coating", keywords: ["aqueous"],                          label: "Aqueous Coating",always: false, when: coating === "aqueous" },
+      { subType: "gum",             keywords: ["gum", "adhesive"],                  label: "Gum / Adhesive", always: false, when: finishes.includes("folder-gluing") },
     ].filter((item) => item.always || item.when);
   }, [form.coatingType, form.finishRequirements]);
 
   const computedInks = useMemo((): InkEntry[] => {
     if (!materials) return [];
     const consumables = materials.filter((m) => m.materialType === "consumable");
+    console.log("consumables found:", consumables.map(m => ({ name: m.materialName, subType: m.subType, vendorName: (m as any).vendorName })));
     return wantedItems
       .map((item) => {
+        const name = (m: { materialName: string }) => m.materialName.toLowerCase();
         const mat =
           consumables.find((m) => m.subType === item.subType) ||
-          consumables.find((m) => m.materialName.toLowerCase().includes(item.nameMatch));
+          consumables.find((m) => item.keywords.some(k => name(m).includes(k)));
         if (!mat) return null;
         const existing = form.inks.find((i) => i.materialId === mat.id);
         return {
@@ -782,6 +781,7 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
           unit: mat.unit,
           planned: existing?.planned ?? defaultEstimate,
           available: parseFloat(String(mat.currentQty)),
+          vendorName: (mat as any).vendorName ?? undefined,
         };
       })
       .filter(Boolean) as InkEntry[];
@@ -820,8 +820,12 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
             <div key={ink.materialId} className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <Label className="text-sm font-semibold">{ink.name}</Label>
-                  <span className={cn("text-[10px] font-medium",
+                  <div>
+                    <Label className="text-sm font-semibold">
+                      {ink.name}{ink.vendorName ? <span className="font-normal text-muted-foreground"> — {ink.vendorName}</span> : null}
+                    </Label>
+                  </div>
+                  <span className={cn("text-[10px] font-medium shrink-0 ml-2",
                     insufficient ? "text-rose-500" : "text-muted-foreground"
                   )}>
                     {ink.available} {ink.unit} in stock

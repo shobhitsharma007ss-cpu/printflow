@@ -12,12 +12,19 @@ import { AddStockWizard } from "@/components/add-stock-wizard";
 
 export default function Inventory() {
   const { data: stock, isLoading } = useStockSummary();
+  const { data: allMaterials } = useMaterials();
   const [activeTab, setActiveTab] = useState<"boards" | "consumables">("boards");
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
 
   if (isLoading) return <div className="flex justify-center p-12"><div className="animate-spin w-8 h-8 border-2 border-primary rounded-full border-t-transparent" /></div>;
+
+  const vendorMap = new Map<number, string>(
+    (allMaterials ?? [])
+      .filter(m => (m as any).vendorName)
+      .map(m => [m.id, (m as any).vendorName as string])
+  );
 
   const boards = stock?.filter(s => s.materialType === 'board' || s.materialType === 'paper') || [];
   const consumables = stock?.filter(s => s.materialType === 'consumable') || [];
@@ -96,6 +103,7 @@ export default function Inventory() {
                   <CylinderVisual
                     key={item.id}
                     item={item}
+                    vendorName={vendorMap.get(item.id)}
                     isSelected={selectedMaterialId === item.id}
                     onClick={() => setSelectedMaterialId(selectedMaterialId === item.id ? null : item.id)}
                   />
@@ -435,7 +443,7 @@ function StackVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isS
   );
 }
 
-function CylinderVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isSelected: boolean; onClick: () => void }) {
+function CylinderVisual({ item, vendorName, isSelected, onClick }: { item: StockSummaryRow; vendorName?: string; isSelected: boolean; onClick: () => void }) {
   const fillPct = Math.min(Math.max(item.stockPct, 5), 100);
   let colorClass = "from-emerald-400 to-emerald-600";
   if (item.stockPct < 30) colorClass = "from-rose-400 to-rose-600";
@@ -460,6 +468,9 @@ function CylinderVisual({ item, isSelected, onClick }: { item: StockSummaryRow; 
       </div>
       <div className="mt-4 text-center w-full">
         <h4 className="font-bold text-foreground text-sm truncate px-1" title={item.materialName}>{item.materialName}</h4>
+        {vendorName && (
+          <p className="text-[10px] text-muted-foreground truncate px-1 mt-0.5" title={vendorName}>{vendorName}</p>
+        )}
         <Badge className="mt-2 bg-background border-border text-foreground">
           {item.currentQty} {item.unit}
         </Badge>
