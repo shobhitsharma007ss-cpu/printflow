@@ -8,8 +8,7 @@ import {
   useGetMaterialVendors,
   useGetMaterialInwardHistory,
   getListMaterialsQueryKey,
-  getGetStockSummaryQueryKey,
-  getGetMaterialInwardHistoryQueryKey,
+  getGetStockSummaryQueryKey,useDeleteMaterial as useGeneratedDeleteMaterial,  getGetMaterialInwardHistoryQueryKey,
   getGetMaterialVendorsQueryKey,
 } from "@workspace/api-client-react";
 
@@ -75,5 +74,14 @@ export function useAddMaterialVendor() {
         queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey() });
       }
     }
+  });
+}
+export function useDeleteMaterial() {
+  const queryClient = useQueryClient();
+  return useGeneratedDeleteMaterial({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetStockSummaryQueryKey() });
+    },
   });
 }
