@@ -26,6 +26,10 @@ router.get("/materials", async (_req, res): Promise<void> => {
       unit: materialsTable.unit,
       currentQty: materialsTable.currentQty,
       minReorderQty: materialsTable.minReorderQty,
+      reservedQty: materialsTable.reservedQty,
+      ratePerUnit: materialsTable.ratePerUnit,
+      rateUpdatedAt: materialsTable.rateUpdatedAt,
+      wastagePercent: materialsTable.wastagePercent,
       dimensions: materialsTable.dimensions,
       grain: materialsTable.grain,
       createdAt: materialsTable.createdAt,
@@ -73,7 +77,18 @@ router.put("/materials/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [material] = await db.update(materialsTable).set(parsed.data).where(eq(materialsTable.id, params.data.id)).returning();
+
+  // Auto-update rateUpdatedAt when rate changes
+  const updateData: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.ratePerUnit !== undefined) {
+    updateData.rateUpdatedAt = new Date();
+  }
+
+  const [material] = await db
+    .update(materialsTable)
+    .set(updateData)
+    .where(eq(materialsTable.id, params.data.id))
+    .returning();
   if (!material) {
     res.status(404).json({ error: "Material not found" });
     return;
@@ -154,3 +169,10 @@ router.get("/materials/:id/inward-history", async (req, res): Promise<void> => {
 });
 
 export default router;
+```
+
+---
+
+**Commit message:**
+```
+feat: expose ratePerUnit, wastagePercent, reservedQty in materials API
