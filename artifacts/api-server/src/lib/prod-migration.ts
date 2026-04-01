@@ -253,10 +253,3 @@ export async function runProdMigration(): Promise<void> {
 
   logger.info("Production migration complete.");
 }
-```
-
----
-
-**Commit message:**
-```
-feat: migration 2 — add rate/wastage/reserved columns to materials table

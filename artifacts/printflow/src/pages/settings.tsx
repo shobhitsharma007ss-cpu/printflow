@@ -1092,15 +1092,3 @@ function LoadingSpinner() {
     </div>
   );
 }
-```
-
----
-
-**Commit message:**
-```
-feat: material rates UI — rate per unit, wastage %, reserved qty, low stock alerts
-```
-
-Then in Replit Shell run:
-```
-git pull

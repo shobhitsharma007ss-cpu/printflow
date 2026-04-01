@@ -29,10 +29,4 @@ export const materialVendorsTable = pgTable("material_vendors", {
 export const insertMaterialSchema = createInsertSchema(materialsTable).omit({ id: true, createdAt: true });
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 export type Material = typeof materialsTable.$inferSelect;
-```
 
----
-
-**Paste that into GitHub, commit with message:**
-```
-feat: add ratePerUnit, reservedQty, wastagePercent, rateUpdatedAt to materials schema

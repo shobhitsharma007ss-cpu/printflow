@@ -169,10 +169,3 @@ router.get("/materials/:id/inward-history", async (req, res): Promise<void> => {
 });
 
 export default router;
-```
-
----
-
-**Commit message:**
-```
-feat: expose ratePerUnit, wastagePercent, reservedQty in materials API
