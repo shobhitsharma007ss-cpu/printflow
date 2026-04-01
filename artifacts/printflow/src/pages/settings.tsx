@@ -1,10 +1,10 @@
-               import React, { useState } from "react";
+import React, { useState } from "react";
 import { useMachines, usePatchMachineStatus, useUpdateMachine } from "@/hooks/use-machines";
 import { useMaterials, useUpdateMaterial, useCreateMaterial, useDeleteMaterial } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendors";
 import { useJobTemplates } from "@/hooks/use-templates";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
-import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
 import type { Machine, Material, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
@@ -171,36 +171,46 @@ function MachinesSection() {
   );
 }
 
+// ─── Editable field type ───────────────────────────────────────────────────
+type EditingField = "reorder" | "rate" | "wastage" | null;
+type EditingState = { id: number; field: EditingField };
+
 function MaterialsSection() {
   const { data: materials, isLoading } = useMaterials();
   const updateMaterial = useUpdateMaterial();
   const deleteMaterial = useDeleteMaterial();
-  const [editing, setEditing] = useState<number | null>(null);
-  const [editReorder, setEditReorder] = useState('');
+  const [editing, setEditing] = useState<EditingState | null>(null);
+  const [editValue, setEditValue] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showConsumableForm, setShowConsumableForm] = useState(false);
 
-  const startEdit = (m: Material) => {
-    setEditing(m.id);
-    setEditReorder(String(m.minReorderQty));
+  const startEdit = (m: Material, field: EditingField) => {
+    setEditing({ id: m.id, field });
+    if (field === 'reorder') setEditValue(String(m.minReorderQty));
+    if (field === 'rate') setEditValue(m.ratePerUnit ? String(m.ratePerUnit) : '');
+    if (field === 'wastage') setEditValue(m.wastagePercent ? String(m.wastagePercent) : '5');
   };
 
   const save = (m: Material) => {
-    updateMaterial.mutate({
-      id: m.id,
-      data: {
-        materialName: m.materialName,
-        materialType: m.materialType,
-        subType: m.subType ?? '',
-        gsm: m.gsm ?? undefined,
-        unit: m.unit,
-        currentQty: parseFloat(String(m.currentQty)) || 0,
-        minReorderQty: parseFloat(editReorder) || 0,
-        dimensions: m.dimensions ?? undefined,
-        grain: m.grain ?? undefined,
-      }
-    }, {
+    if (!editing) return;
+    const updateData: Record<string, unknown> = {
+      materialName: m.materialName,
+      materialType: m.materialType,
+      subType: m.subType ?? '',
+      gsm: m.gsm ?? undefined,
+      unit: m.unit,
+      currentQty: parseFloat(String(m.currentQty)) || 0,
+      minReorderQty: parseFloat(String(m.minReorderQty)) || 0,
+      dimensions: m.dimensions ?? undefined,
+      grain: m.grain ?? undefined,
+    };
+
+    if (editing.field === 'reorder') updateData.minReorderQty = parseFloat(editValue) || 0;
+    if (editing.field === 'rate') updateData.ratePerUnit = parseFloat(editValue) || null;
+    if (editing.field === 'wastage') updateData.wastagePercent = parseFloat(editValue) || 5;
+
+    updateMaterial.mutate({ id: m.id, data: updateData as any }, {
       onSuccess: () => {
         setEditing(null);
         setSaved(m.id);
@@ -208,6 +218,9 @@ function MaterialsSection() {
       }
     });
   };
+
+  const isEditing = (m: Material, field: EditingField) =>
+    editing?.id === m.id && editing?.field === field;
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -217,8 +230,32 @@ function MaterialsSection() {
     consumable: materials?.filter(m => m.materialType === 'consumable') ?? [],
   };
 
+  // Stats for summary bar
+  const totalMaterials = materials?.length ?? 0;
+  const ratedMaterials = materials?.filter(m => m.ratePerUnit).length ?? 0;
+  const lowStock = materials?.filter(m =>
+    parseFloat(String(m.currentQty)) <= parseFloat(String(m.minReorderQty))
+  ).length ?? 0;
+
   return (
     <div className="space-y-6">
+
+      {/* Summary bar */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="p-4 text-center">
+          <p className="text-2xl font-black text-primary">{totalMaterials}</p>
+          <p className="text-xs text-muted-foreground font-medium mt-0.5">Total Materials</p>
+        </Card>
+        <Card className="p-4 text-center">
+          <p className="text-2xl font-black text-emerald-600">{ratedMaterials}</p>
+          <p className="text-xs text-muted-foreground font-medium mt-0.5">Rates Set</p>
+        </Card>
+        <Card className={cn("p-4 text-center", lowStock > 0 && "border-rose-200 bg-rose-50/50")}>
+          <p className={cn("text-2xl font-black", lowStock > 0 ? "text-rose-600" : "text-muted-foreground")}>{lowStock}</p>
+          <p className="text-xs text-muted-foreground font-medium mt-0.5">Low Stock</p>
+        </Card>
+      </div>
+
       <div className="flex justify-end gap-2">
         <Button onClick={() => setShowWizard(true)} className="flex items-center gap-2">
           <Plus size={16} />
@@ -235,60 +272,157 @@ function MaterialsSection() {
           <Card key={type} className="overflow-hidden">
             <div className="p-4 border-b border-border bg-muted/30 flex items-center gap-2">
               <Layers size={16} className="text-muted-foreground" />
-              <h2 className="font-bold capitalize">{type === 'board' ? 'Boards' : type === 'paper' ? 'Paper' : 'Consumables'}</h2>
+              <h2 className="font-bold capitalize">
+                {type === 'board' ? 'Boards' : type === 'paper' ? 'Paper' : 'Consumables'}
+              </h2>
               <span className="text-xs text-muted-foreground ml-auto">{items.length} materials</span>
             </div>
             <div className="divide-y divide-border">
-              {items.map(m => (
-                <div key={m.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="flex-1">
-                    <p className="font-semibold">{m.materialName}</p>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">{m.gsm} GSM</span>}
-                      {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{m.dimensions}&quot;</span>}
-                      {m.grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{m.grain} grain</span>}
-                      <span className="text-xs text-muted-foreground">{m.unit}</span>
-                      {saved === m.id && <span className="text-xs text-emerald-500 font-medium">Saved ✓</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground text-xs block">Current Qty</span>
-                      <span className="font-bold">{m.currentQty} {m.unit}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-xs block">Reorder Level</span>
-                      {editing === m.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            min="0"
-                            value={editReorder}
-                            onChange={e => setEditReorder(e.target.value)}
-                            className="h-7 w-24 text-sm"
-                          />
-                          <button onClick={() => save(m)} className="p-1 bg-emerald-500 text-white rounded transition-colors hover:bg-emerald-600"><Check size={12} /></button>
-                          <button onClick={() => setEditing(null)} className="p-1 bg-muted text-muted-foreground rounded hover:bg-muted/80"><X size={12} /></button>
+              {items.map(m => {
+                const availableQty = parseFloat(String(m.currentQty)) - parseFloat(String(m.reservedQty ?? 0));
+                const isLow = parseFloat(String(m.currentQty)) <= parseFloat(String(m.minReorderQty));
+                const rateStale = m.rateUpdatedAt
+                  ? (Date.now() - new Date(m.rateUpdatedAt).getTime()) > 30 * 24 * 60 * 60 * 1000
+                  : false;
+
+                return (
+                  <div key={m.id} className={cn(
+                    "p-4 flex flex-col gap-3",
+                    isLow && "bg-rose-50/30"
+                  )}>
+                    {/* Row 1 — Name + badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{m.materialName}</p>
+                          {isLow && (
+                            <span className="flex items-center gap-1 text-xs bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-medium">
+                              <AlertTriangle size={10} />
+                              Low Stock
+                            </span>
+                          )}
+                          {saved === m.id && <span className="text-xs text-emerald-500 font-medium">Saved ✓</span>}
                         </div>
-                      ) : (
-                        <button onClick={() => startEdit(m)} className="font-bold hover:text-primary transition-colors">
-                          {m.minReorderQty} {m.unit}
-                        </button>
-                      )}
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">{m.gsm} GSM</span>}
+                          {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{m.dimensions}&quot;</span>}
+                          {m.grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{m.grain} grain</span>}
+                          <span className="text-xs text-muted-foreground">{m.unit}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete "${m.materialName}"? This cannot be undone.`)) {
+                            deleteMaterial.mutate({ id: m.id });
+                          }
+                        }}
+                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors shrink-0"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete "${m.materialName}"? This cannot be undone.`)) {
-                          deleteMaterial.mutate({ id: m.id });
-                        }
-                      }}
-                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors shrink-0"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+
+                    {/* Row 2 — All editable fields */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+                      {/* Current Qty */}
+                      <div className="bg-muted/40 rounded-lg p-2.5">
+                        <span className="text-muted-foreground text-xs block mb-0.5">Current Stock</span>
+                        <span className="font-bold text-sm">{m.currentQty} {m.unit}</span>
+                        {parseFloat(String(m.reservedQty ?? 0)) > 0 && (
+                          <span className="text-xs text-amber-600 block mt-0.5">
+                            {availableQty} available
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Reorder Level */}
+                      <div className="bg-muted/40 rounded-lg p-2.5">
+                        <span className="text-muted-foreground text-xs block mb-0.5">Reorder Level</span>
+                        {isEditing(m, 'reorder') ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number" min="0"
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              className="h-6 w-20 text-xs px-1"
+                              autoFocus
+                            />
+                            <button onClick={() => save(m)} className="p-0.5 bg-emerald-500 text-white rounded"><Check size={11} /></button>
+                            <button onClick={() => setEditing(null)} className="p-0.5 bg-muted text-muted-foreground rounded"><X size={11} /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(m, 'reorder')} className="font-bold text-sm hover:text-primary transition-colors">
+                            {m.minReorderQty} {m.unit}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Rate Per Unit */}
+                      <div className="bg-muted/40 rounded-lg p-2.5">
+                        <span className="text-muted-foreground text-xs block mb-0.5 flex items-center gap-1">
+                          Rate / {m.unit}
+                          {rateStale && m.ratePerUnit && (
+                            <span title="Rate not updated in 30+ days">
+                              <AlertTriangle size={10} className="text-amber-500" />
+                            </span>
+                          )}
+                        </span>
+                        {isEditing(m, 'rate') ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">₹</span>
+                            <Input
+                              type="number" min="0" step="0.01"
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              className="h-6 w-20 text-xs px-1"
+                              autoFocus
+                            />
+                            <button onClick={() => save(m)} className="p-0.5 bg-emerald-500 text-white rounded"><Check size={11} /></button>
+                            <button onClick={() => setEditing(null)} className="p-0.5 bg-muted text-muted-foreground rounded"><X size={11} /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(m, 'rate')} className="font-bold text-sm hover:text-primary transition-colors flex items-center gap-0.5">
+                            {m.ratePerUnit
+                              ? <><IndianRupee size={12} />{parseFloat(String(m.ratePerUnit)).toLocaleString('en-IN')}</>
+                              : <span className="text-muted-foreground font-normal text-xs">Set rate</span>
+                            }
+                          </button>
+                        )}
+                        {m.ratePerUnit && m.rateUpdatedAt && (
+                          <span className="text-xs text-muted-foreground block mt-0.5">
+                            {new Date(m.rateUpdatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Wastage % */}
+                      <div className="bg-muted/40 rounded-lg p-2.5">
+                        <span className="text-muted-foreground text-xs block mb-0.5">Wastage %</span>
+                        {isEditing(m, 'wastage') ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number" min="0" max="50" step="0.5"
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              className="h-6 w-16 text-xs px-1"
+                              autoFocus
+                            />
+                            <span className="text-xs">%</span>
+                            <button onClick={() => save(m)} className="p-0.5 bg-emerald-500 text-white rounded"><Check size={11} /></button>
+                            <button onClick={() => setEditing(null)} className="p-0.5 bg-muted text-muted-foreground rounded"><X size={11} /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => startEdit(m, 'wastage')} className="font-bold text-sm hover:text-primary transition-colors">
+                            {m.wastagePercent ?? 5}%
+                          </button>
+                        )}
+                      </div>
+
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         )
@@ -340,6 +474,8 @@ type WizardState = {
   openingQty: string;
   unit: string;
   reorderLevel: string;
+  ratePerUnit: string;
+  wastagePercent: string;
 };
 
 const defaultWizard: WizardState = {
@@ -355,6 +491,8 @@ const defaultWizard: WizardState = {
   openingQty: '0',
   unit: 'sheets',
   reorderLevel: '100',
+  ratePerUnit: '',
+  wastagePercent: '5',
 };
 
 function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -399,22 +537,20 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         unit: form.unit as CreateMaterialRequestUnit,
         currentQty: parseFloat(form.openingQty) || 0,
         minReorderQty: parseFloat(form.reorderLevel) || 0,
+        ratePerUnit: form.ratePerUnit ? parseFloat(form.ratePerUnit) : undefined,
+        wastagePercent: parseFloat(form.wastagePercent) || 5,
         dimensions,
         grain: form.grain || undefined,
-      }
+      } as any
     }, {
       onSuccess: async (newMaterial) => {
         const matId = newMaterial.id;
-
         let vendorIdToLink: number | null = null;
 
         if (form.addingNewVendor && form.newVendorName) {
           await new Promise<void>((resolve) => {
             createVendor.mutate({ data: { vendorName: form.newVendorName, contactPerson: '', phone: '', city: '' } }, {
-              onSuccess: (v) => {
-                vendorIdToLink = v.id;
-                resolve();
-              },
+              onSuccess: (v) => { vendorIdToLink = v.id; resolve(); },
               onError: () => resolve(),
             });
           });
@@ -460,7 +596,6 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           ))}
         </div>
 
-        {/* Step content */}
         {step === 1 && (
           <div className="space-y-4">
             <div>
@@ -506,9 +641,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Input
-                  type="number"
-                  min={50}
-                  max={450}
+                  type="number" min={50} max={450}
                   value={form.gsm}
                   onChange={e => setForm(f => ({ ...f, gsm: e.target.value }))}
                   placeholder="e.g. 300"
@@ -517,10 +650,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                 <span className="text-muted-foreground font-medium">GSM</span>
               </div>
               <input
-                type="range"
-                min={50}
-                max={450}
-                step={5}
+                type="range" min={50} max={450} step={5}
                 value={form.gsm || 200}
                 onChange={e => setForm(f => ({ ...f, gsm: e.target.value }))}
                 className="w-full h-2 rounded-full accent-primary cursor-pointer"
@@ -560,49 +690,35 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             <div className="flex items-center gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Width (in)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  placeholder="e.g. 25"
-                  value={form.dimWidth}
+                <Input type="number" min={1} placeholder="e.g. 25" value={form.dimWidth}
                   onChange={e => setForm(f => ({ ...f, dimWidth: e.target.value }))}
-                  className="w-24 text-center font-bold text-lg"
-                />
+                  className="w-24 text-center font-bold text-lg" />
               </div>
               <span className="text-2xl font-bold text-muted-foreground mt-5">×</span>
               <div className="space-y-1">
                 <Label className="text-xs">Height (in)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  placeholder="e.g. 35"
-                  value={form.dimHeight}
+                <Input type="number" min={1} placeholder="e.g. 35" value={form.dimHeight}
                   onChange={e => setForm(f => ({ ...f, dimHeight: e.target.value }))}
-                  className="w-24 text-center font-bold text-lg"
-                />
+                  className="w-24 text-center font-bold text-lg" />
               </div>
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium mb-2">Common sizes</p>
               <div className="flex flex-wrap gap-2">
                 {DIM_PRESETS.map(d => (
-                  <button
-                    key={d}
-                    onClick={() => setDimPreset(d)}
+                  <button key={d} onClick={() => setDimPreset(d)}
                     className={cn(
                       "px-3 py-1.5 rounded-full text-sm font-semibold border transition-all",
                       `${form.dimWidth}x${form.dimHeight}` === d
                         ? "bg-primary text-white border-primary"
                         : "border-border hover:border-primary/50 text-foreground"
                     )}
-                  >
-                    {d}&quot;
-                  </button>
+                  >{d}&quot;</button>
                 ))}
               </div>
             </div>
             {form.dimWidth && form.dimHeight && (
-              <div className="bg-muted/50 rounded-lg p-3 text-sm text-center font-semibold text-foreground">
+              <div className="bg-muted/50 rounded-lg p-3 text-sm text-center font-semibold">
                 {form.dimWidth}&quot; × {form.dimHeight}&quot;
               </div>
             )}
@@ -617,9 +733,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             </div>
             <div className="grid grid-cols-2 gap-4">
               {(['long', 'short'] as const).map(g => (
-                <button
-                  key={g}
-                  onClick={() => setForm(f => ({ ...f, grain: g }))}
+                <button key={g} onClick={() => setForm(f => ({ ...f, grain: g }))}
                   className={cn(
                     "py-8 rounded-xl border-2 font-bold text-base uppercase tracking-wider transition-all",
                     form.grain === g
@@ -628,10 +742,7 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   )}
                 >
                   <div className="flex flex-col items-center gap-2">
-                    <div className={cn(
-                      "rounded",
-                      g === 'long' ? "w-6 h-12 bg-current opacity-30" : "w-12 h-6 bg-current opacity-30"
-                    )} />
+                    <div className={cn("rounded", g === 'long' ? "w-6 h-12 bg-current opacity-30" : "w-12 h-6 bg-current opacity-30")} />
                     {g} grain
                   </div>
                 </button>
@@ -648,38 +759,24 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             </div>
             {!form.addingNewVendor ? (
               <div className="space-y-3">
-                <Select
-                  value={form.vendorId}
-                  onChange={e => setForm(f => ({ ...f, vendorId: e.target.value }))}
-                >
+                <Select value={form.vendorId} onChange={e => setForm(f => ({ ...f, vendorId: e.target.value }))}>
                   <option value="">— No vendor / Skip —</option>
                   {vendors?.map(v => (
                     <option key={v.id} value={v.id}>{v.vendorName} {v.city ? `(${v.city})` : ''}</option>
                   ))}
                 </Select>
-                <button
-                  onClick={() => setForm(f => ({ ...f, addingNewVendor: true, vendorId: '' }))}
-                  className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
-                >
-                  <Plus size={14} />
-                  Add new vendor
+                <button onClick={() => setForm(f => ({ ...f, addingNewVendor: true, vendorId: '' }))}
+                  className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
+                  <Plus size={14} /> Add new vendor
                 </button>
               </div>
             ) : (
               <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/20">
                 <p className="text-sm font-bold">New Vendor</p>
-                <Input
-                  placeholder="Vendor name (required)"
-                  value={form.newVendorName}
-                  onChange={e => setForm(f => ({ ...f, newVendorName: e.target.value }))}
-                  autoFocus
-                />
-                <button
-                  onClick={() => setForm(f => ({ ...f, addingNewVendor: false, newVendorName: '' }))}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  ← Back to vendor list
-                </button>
+                <Input placeholder="Vendor name (required)" value={form.newVendorName}
+                  onChange={e => setForm(f => ({ ...f, newVendorName: e.target.value }))} autoFocus />
+                <button onClick={() => setForm(f => ({ ...f, addingNewVendor: false, newVendorName: '' }))}
+                  className="text-xs text-muted-foreground hover:text-foreground">← Back to vendor list</button>
               </div>
             )}
           </div>
@@ -688,26 +785,18 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         {step === 6 && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-bold text-lg">Opening Stock</h3>
-              <p className="text-sm text-muted-foreground">Set initial stock quantity and reorder level</p>
+              <h3 className="font-bold text-lg">Stock & Pricing</h3>
+              <p className="text-sm text-muted-foreground">Set opening stock, rate and wastage</p>
             </div>
-
-            {/* Summary card */}
             <div className="bg-muted/40 rounded-lg p-4 text-sm space-y-1">
-              <p className="font-bold text-foreground">{form.paperType === 'Other' ? form.paperTypeOther : form.paperType} {form.gsm}gsm</p>
+              <p className="font-bold">{form.paperType === 'Other' ? form.paperTypeOther : form.paperType} {form.gsm}gsm</p>
               <p className="text-muted-foreground">{form.dimWidth}″ × {form.dimHeight}″ · {form.grain} grain</p>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Opening Stock Qty</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={form.openingQty}
-                  onChange={e => setForm(f => ({ ...f, openingQty: e.target.value }))}
-                  placeholder="e.g. 500"
-                />
+                <Input type="number" min={0} value={form.openingQty}
+                  onChange={e => setForm(f => ({ ...f, openingQty: e.target.value }))} placeholder="e.g. 500" />
               </div>
               <div className="space-y-1.5">
                 <Label>Unit</Label>
@@ -719,46 +808,41 @@ function AddMaterialWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                 </Select>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Reorder Level</Label>
+                <Input type="number" min={0} value={form.reorderLevel}
+                  onChange={e => setForm(f => ({ ...f, reorderLevel: e.target.value }))} placeholder="e.g. 100" />
+                <p className="text-xs text-muted-foreground">Alert when stock falls below this</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Rate per {form.unit || 'unit'} (₹)</Label>
+                <Input type="number" min={0} step="0.01" value={form.ratePerUnit}
+                  onChange={e => setForm(f => ({ ...f, ratePerUnit: e.target.value }))} placeholder="e.g. 12.50" />
+                <p className="text-xs text-muted-foreground">Optional — for costing</p>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label>Reorder Level</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.reorderLevel}
-                onChange={e => setForm(f => ({ ...f, reorderLevel: e.target.value }))}
-                placeholder="e.g. 100"
-              />
-              <p className="text-xs text-muted-foreground">Alert when stock falls below this quantity</p>
+              <Label>Wastage % (default 5%)</Label>
+              <Input type="number" min={0} max={50} step="0.5" value={form.wastagePercent}
+                onChange={e => setForm(f => ({ ...f, wastagePercent: e.target.value }))} placeholder="e.g. 5" />
+              <p className="text-xs text-muted-foreground">Used in job costing calculations</p>
             </div>
           </div>
         )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
-          <Button
-            variant="ghost"
-            onClick={step === 1 ? handleClose : () => setStep(s => s - 1)}
-            className="flex items-center gap-1"
-          >
+          <Button variant="ghost" onClick={step === 1 ? handleClose : () => setStep(s => s - 1)} className="flex items-center gap-1">
             <ChevronLeft size={16} />
             {step === 1 ? 'Cancel' : 'Back'}
           </Button>
-
           {step < totalSteps ? (
-            <Button
-              onClick={() => setStep(s => s + 1)}
-              disabled={!canNext()}
-              className="flex items-center gap-1"
-            >
-              Next
-              <ChevronRight size={16} />
+            <Button onClick={() => setStep(s => s + 1)} disabled={!canNext()} className="flex items-center gap-1">
+              Next <ChevronRight size={16} />
             </Button>
           ) : (
-            <Button
-              onClick={handleSubmit}
-              disabled={!canNext() || createMaterial.isPending}
-              isLoading={createMaterial.isPending}
-            >
+            <Button onClick={handleSubmit} disabled={!canNext() || createMaterial.isPending} isLoading={createMaterial.isPending}>
               Create Material
             </Button>
           )}
@@ -776,10 +860,12 @@ function AddConsumableForm({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     unit: 'kg' as string,
     currentQty: '0',
     minReorderQty: '50',
+    ratePerUnit: '',
+    wastagePercent: '5',
   });
 
   const handleClose = () => {
-    setForm({ materialName: '', subType: '', unit: 'kg', currentQty: '0', minReorderQty: '50' });
+    setForm({ materialName: '', subType: '', unit: 'kg', currentQty: '0', minReorderQty: '50', ratePerUnit: '', wastagePercent: '5' });
     onClose();
   };
 
@@ -793,7 +879,9 @@ function AddConsumableForm({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         unit: form.unit as CreateMaterialRequestUnit,
         currentQty: parseFloat(form.currentQty) || 0,
         minReorderQty: parseFloat(form.minReorderQty) || 0,
-      }
+        ratePerUnit: form.ratePerUnit ? parseFloat(form.ratePerUnit) : undefined,
+        wastagePercent: parseFloat(form.wastagePercent) || 5,
+      } as any
     }, {
       onSuccess: () => handleClose(),
     });
@@ -804,20 +892,13 @@ function AddConsumableForm({ isOpen, onClose }: { isOpen: boolean; onClose: () =
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label>Material Name <span className="text-destructive">*</span></Label>
-          <Input
-            required
-            placeholder="e.g. Black Ink, PVA Glue, Varnish"
-            value={form.materialName}
-            onChange={e => setForm(f => ({ ...f, materialName: e.target.value }))}
-          />
+          <Input required placeholder="e.g. Black Ink, PVA Glue, Varnish"
+            value={form.materialName} onChange={e => setForm(f => ({ ...f, materialName: e.target.value }))} />
         </div>
         <div className="space-y-1.5">
           <Label>Sub-type</Label>
-          <Input
-            placeholder="e.g. offset-ink, adhesive, coating"
-            value={form.subType}
-            onChange={e => setForm(f => ({ ...f, subType: e.target.value }))}
-          />
+          <Input placeholder="e.g. offset-ink, adhesive, coating"
+            value={form.subType} onChange={e => setForm(f => ({ ...f, subType: e.target.value }))} />
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">
@@ -831,11 +912,25 @@ function AddConsumableForm({ isOpen, onClose }: { isOpen: boolean; onClose: () =
           </div>
           <div className="space-y-1.5">
             <Label>Opening Qty</Label>
-            <Input type="number" min={0} value={form.currentQty} onChange={e => setForm(f => ({ ...f, currentQty: e.target.value }))} />
+            <Input type="number" min={0} value={form.currentQty}
+              onChange={e => setForm(f => ({ ...f, currentQty: e.target.value }))} />
           </div>
           <div className="space-y-1.5">
             <Label>Reorder Level</Label>
-            <Input type="number" min={0} value={form.minReorderQty} onChange={e => setForm(f => ({ ...f, minReorderQty: e.target.value }))} />
+            <Input type="number" min={0} value={form.minReorderQty}
+              onChange={e => setForm(f => ({ ...f, minReorderQty: e.target.value }))} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Rate per {form.unit} (₹)</Label>
+            <Input type="number" min={0} step="0.01" placeholder="e.g. 850"
+              value={form.ratePerUnit} onChange={e => setForm(f => ({ ...f, ratePerUnit: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Wastage %</Label>
+            <Input type="number" min={0} max={50} step="0.5"
+              value={form.wastagePercent} onChange={e => setForm(f => ({ ...f, wastagePercent: e.target.value }))} />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2 border-t border-border">
@@ -863,7 +958,7 @@ function VendorsSection() {
       contactPerson: form.contactPerson || '',
       phone: form.phone || '',
       city: form.city || '',
-    } }, {
+    }}, {
       onSuccess: () => {
         setShowAdd(false);
         setForm({ vendorName: '', contactPerson: '', phone: '', city: '' });
@@ -882,11 +977,9 @@ function VendorsSection() {
             <p className="text-sm text-muted-foreground">{vendors?.length ?? 0} vendors registered</p>
           </div>
           <Button size="sm" onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-2">
-            <Plus size={16} />
-            Add Vendor
+            <Plus size={16} /> Add Vendor
           </Button>
         </div>
-
         {showAdd && (
           <form onSubmit={handleAdd} className="p-5 bg-muted/20 border-b border-border">
             <p className="text-sm font-bold mb-4">New Vendor</p>
@@ -914,7 +1007,6 @@ function VendorsSection() {
             </div>
           </form>
         )}
-
         <div className="divide-y divide-border">
           {vendors?.map(v => (
             <div key={v.id} className="p-4 flex items-center gap-4 hover:bg-muted/20 transition-colors">
@@ -928,11 +1020,7 @@ function VendorsSection() {
                 </p>
               </div>
               <button
-                onClick={() => {
-                  if (confirm(`Delete vendor "${v.vendorName}"?`)) {
-                    deleteVendor.mutate({ id: v.id });
-                  }
-                }}
+                onClick={() => { if (confirm(`Delete vendor "${v.vendorName}"?`)) deleteVendor.mutate({ id: v.id }); }}
                 className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
               >
                 <Trash2 size={16} />
@@ -947,9 +1035,7 @@ function VendorsSection() {
 
 function TemplatesSection() {
   const { data: templates, isLoading } = useJobTemplates();
-
   if (isLoading) return <LoadingSpinner />;
-
   return (
     <div className="space-y-4">
       {templates?.map(t => (
@@ -963,7 +1049,6 @@ function TemplatesSection() {
               {t.machineNames?.length ?? t.routingSteps?.length ?? 0} steps
             </span>
           </div>
-
           {t.machineNames && (
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {t.machineNames.map((name, idx) => (
@@ -972,9 +1057,7 @@ function TemplatesSection() {
                     <span className="w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
                     <span className="font-medium">{name}</span>
                   </div>
-                  {idx < t.machineNames.length - 1 && (
-                    <ArrowRight size={14} className="text-muted-foreground shrink-0" />
-                  )}
+                  {idx < t.machineNames.length - 1 && <ArrowRight size={14} className="text-muted-foreground shrink-0" />}
                 </React.Fragment>
               ))}
             </div>
@@ -1009,3 +1092,15 @@ function LoadingSpinner() {
     </div>
   );
 }
+```
+
+---
+
+**Commit message:**
+```
+feat: material rates UI — rate per unit, wastage %, reserved qty, low stock alerts
+```
+
+Then in Replit Shell run:
+```
+git pull
