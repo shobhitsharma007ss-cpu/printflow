@@ -1,4 +1,4 @@
-               import React, { useState } from "react";
+import React, { useState } from "react";
 import { useMachines, usePatchMachineStatus, useUpdateMachine } from "@/hooks/use-machines";
 import { useMaterials, useUpdateMaterial, useCreateMaterial, useDeleteMaterial } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendors";

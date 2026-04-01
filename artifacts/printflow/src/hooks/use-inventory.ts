@@ -8,7 +8,9 @@ import {
   useGetMaterialVendors,
   useGetMaterialInwardHistory,
   getListMaterialsQueryKey,
-  getGetStockSummaryQueryKey,useDeleteMaterial as useGeneratedDeleteMaterial,  getGetMaterialInwardHistoryQueryKey,
+  getGetStockSummaryQueryKey,
+  useDeleteMaterial as useGeneratedDeleteMaterial,
+  getGetMaterialInwardHistoryQueryKey,
   getGetMaterialVendorsQueryKey,
 } from "@workspace/api-client-react";
 
