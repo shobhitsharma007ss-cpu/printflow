@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+               import React, { useState } from "react";
 import { useMachines, usePatchMachineStatus, useUpdateMachine } from "@/hooks/use-machines";
-import { useMaterials, useUpdateMaterial, useCreateMaterial } from "@/hooks/use-inventory";
+import { useMaterials, useUpdateMaterial, useCreateMaterial, useDeleteMaterial } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendors";
 import { useJobTemplates } from "@/hooks/use-templates";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
@@ -174,6 +174,7 @@ function MachinesSection() {
 function MaterialsSection() {
   const { data: materials, isLoading } = useMaterials();
   const updateMaterial = useUpdateMaterial();
+  const deleteMaterial = useDeleteMaterial();
   const [editing, setEditing] = useState<number | null>(null);
   const [editReorder, setEditReorder] = useState('');
   const [saved, setSaved] = useState<number | null>(null);
@@ -275,6 +276,16 @@ function MaterialsSection() {
                         </button>
                       )}
                     </div>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete "${m.materialName}"? This cannot be undone.`)) {
+                          deleteMaterial.mutate({ id: m.id });
+                        }
+                      }}
+                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors shrink-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
               ))}
