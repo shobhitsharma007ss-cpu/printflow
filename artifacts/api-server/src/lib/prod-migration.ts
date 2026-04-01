@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   db,
   vendorsTable,
@@ -10,6 +10,21 @@ import {
 import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
+  // ─── MIGRATION 2: Add rate/wastage/reserved columns ───────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE materials
+        ADD COLUMN IF NOT EXISTS rate_per_unit     NUMERIC(10,2),
+        ADD COLUMN IF NOT EXISTS rate_updated_at   TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS wastage_percent   NUMERIC(5,2)  NOT NULL DEFAULT 5,
+        ADD COLUMN IF NOT EXISTS reserved_qty      NUMERIC(10,2) NOT NULL DEFAULT 0;
+    `);
+    logger.info("Migration 2: rate/wastage/reserved columns ensured.");
+  } catch (err) {
+    logger.error("Migration 2 column add failed:", err);
+  }
+
+  // ─── MIGRATION 1 guard (original) ─────────────────────────────────────
   const [testMachine] = await db
     .select({ capabilities: machinesTable.capabilities })
     .from(machinesTable)
@@ -17,7 +32,7 @@ export async function runProdMigration(): Promise<void> {
     .limit(1);
 
   if (testMachine && testMachine.capabilities.includes("print")) {
-    logger.info("Production migration already applied — skipping.");
+    logger.info("Production migration 1 already applied — skipping.");
     return;
   }
 
@@ -236,5 +251,12 @@ export async function runProdMigration(): Promise<void> {
     }
   });
 
-  logger.info("Production migration complete: machines updated, CMYK split, vendor splits, templates updated.");
+  logger.info("Production migration complete.");
 }
+```
+
+---
+
+**Commit message:**
+```
+feat: migration 2 — add rate/wastage/reserved columns to materials table
