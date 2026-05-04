@@ -120,7 +120,7 @@ async function buildJobWithDetails(jobId: number) {
     const etaSeconds = (r.estimatedMinutes ?? 0) * 60;
     const mins = r.estimatedMinutes ?? 0;
     const etaFormatted = mins === 0 ? null
-      : mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ""}`
+      : mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m`
       : `${mins}m`;
     return { ...r, etaSeconds, etaFormatted };
   });
@@ -237,6 +237,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
     const templateEstimate = templateStepEstimates[i];
     const estimatedMinutes = (templateEstimate && templateEstimate > 0)
       ? templateEstimate
+      : machine?.capabilities?.includes("pre-press-cutting") ? 30
       : machine?.machineType === "printing" ? 120
       : machine?.machineType === "cutting" ? 60
       : machine?.machineType === "coating" ? 90
