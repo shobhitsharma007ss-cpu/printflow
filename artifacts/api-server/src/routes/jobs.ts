@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable } from "@workspace/db";
+import { jobInterruptionsTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -20,25 +21,47 @@ import {
   CreateWastageLogBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
+import { z } from "zod/v4";
 
 const router: IRouter = Router();
 
 type DeductionInfo = { materialId: number; materialName: string; qty: number; unit: string };
 
-/**
- * Deduct planned materials for a job when it transitions pending → in-progress.
- * Covers both job_materials rows and the primary materialId+qtySheets on the job.
- * Returns deduction details for the UI toast and fires low-stock notifications.
- */
+// ─── Machine speeds (sheets per hour) ────────────────────────────────────────
+const MACHINE_SPEEDS: Record<string, number> = {
+  "Komori LA37": 12000,
+  "Komori GL37": 13000,
+  "Planeta Super Variant": 5000,
+  "Bobst Die Cutter 1": 8000,
+  "Bobst Die Cutter 2": 8000,
+  "Bobst Folder Gluer": 15000,
+  "DGM Folder Gluer": 12000,
+  "Hyong Jung Folder Gluer": 10000,
+  "Single Coater": 6000,
+  "Wohlenberg Cutter": 999999, // near instant
+};
+
+// ─── ETA Calculator ───────────────────────────────────────────────────────────
+function calcEtaSeconds(sheets: number, machineName: string, makereadyMins = 30): number {
+  const sph = MACHINE_SPEEDS[machineName] ?? 8000;
+  const pressSeconds = (sheets / sph) * 3600;
+  const makereadySeconds = makereadyMins * 60;
+  return Math.round(pressSeconds + makereadySeconds);
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
   const deductions: DeductionInfo[] = [];
 
-  // 1. Deduct job_materials (explicitly linked consumables / substrates)
   const jobMats = await db
-    .select({
-      materialId: jobMaterialsTable.materialId,
-      plannedQty: jobMaterialsTable.plannedQty,
-    })
+    .select({ materialId: jobMaterialsTable.materialId, plannedQty: jobMaterialsTable.plannedQty })
     .from(jobMaterialsTable)
     .where(eq(jobMaterialsTable.jobId, jobId));
 
@@ -53,7 +76,6 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
     deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: plannedQty, unit: mat.unit });
     deductedMaterialIds.add(mat.id);
-
     if (newQty <= parseFloat(String(mat.minReorderQty))) {
       await createNotification({
         type: "low-stock",
@@ -64,17 +86,14 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     }
   }
 
-  // 2. Deduct primary material on the job (materialId + qtySheets) if not already covered above
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (job?.materialId && job.qtySheets > 0 && !deductedMaterialIds.has(job.materialId)) {
     const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId));
     if (mat) {
       const currentQty = parseFloat(String(mat.currentQty));
-      const deductQty = job.qtySheets;
-      const newQty = Math.max(0, currentQty - deductQty);
+      const newQty = Math.max(0, currentQty - job.qtySheets);
       await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
-      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: deductQty, unit: mat.unit });
-
+      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: job.qtySheets, unit: mat.unit });
       if (newQty <= parseFloat(String(mat.minReorderQty))) {
         await createNotification({
           type: "low-stock",
@@ -105,12 +124,44 @@ async function buildJobWithDetails(jobId: number) {
       status: jobRoutingTable.status,
       startedAt: jobRoutingTable.startedAt,
       completedAt: jobRoutingTable.completedAt,
+      pausedAt: jobRoutingTable.pausedAt,
+      totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
       notes: jobRoutingTable.notes,
+      speedPerHour: machinesTable.speedPerHour,
     })
     .from(jobRoutingTable)
     .leftJoin(machinesTable, eq(jobRoutingTable.machineId, machinesTable.id))
     .where(eq(jobRoutingTable.jobId, jobId))
     .orderBy(jobRoutingTable.stepNumber);
+
+  // Attach ETA to each routing step
+  const routingWithEta = routing.map(step => {
+    const sheets = job.qtySheets ?? 0;
+    const machineName = step.machineName ?? "";
+    const etaSeconds = calcEtaSeconds(sheets, machineName);
+    const etaFormatted = formatEta(etaSeconds);
+
+    let elapsedSeconds = 0;
+    let remainingSeconds = etaSeconds;
+
+    if (step.startedAt) {
+      const startTime = new Date(step.startedAt).getTime();
+      const now = Date.now();
+      const totalElapsed = Math.floor((now - startTime) / 1000);
+      const pausedSecs = step.totalPausedSeconds ?? 0;
+      elapsedSeconds = Math.max(0, totalElapsed - pausedSecs);
+      remainingSeconds = Math.max(0, etaSeconds - elapsedSeconds);
+    }
+
+    return {
+      ...step,
+      etaSeconds,
+      etaFormatted,
+      elapsedSeconds,
+      remainingSeconds,
+      remainingFormatted: formatEta(remainingSeconds),
+    };
+  });
 
   const materials = await db
     .select({
@@ -155,7 +206,7 @@ async function buildJobWithDetails(jobId: number) {
     materialName: material?.materialName ?? null,
     materialDimensions: material?.dimensions ?? null,
     materialGrain: material?.grain ?? null,
-    routing,
+    routing: routingWithEta,
     materials,
     wastageLogs,
   };
@@ -174,24 +225,21 @@ async function getNextJobCode(): Promise<string> {
   return `PF-${String(max + 1).padStart(3, "0")}`;
 }
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
 router.get("/jobs", async (req, res): Promise<void> => {
   const queryParams = ListJobsQueryParams.safeParse(req.query);
   const jobs = await db.select().from(jobsTable).orderBy(jobsTable.createdAt);
-
   const filtered = queryParams.success && queryParams.data.status
     ? jobs.filter(j => j.status === queryParams.data.status)
     : jobs;
-
   const result = await Promise.all(filtered.map(j => buildJobWithDetails(j.id)));
   res.json(result.filter(Boolean));
 });
 
 router.post("/jobs", async (req, res): Promise<void> => {
   const parsed = CreateJobBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const jobCode = await getNextJobCode();
   const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, ...jobData } = parsed.data;
@@ -205,7 +253,6 @@ router.post("/jobs", async (req, res): Promise<void> => {
     status: "pending",
   }).returning();
 
-  // Determine routing steps
   let routingMachineIds: number[] = [];
   if (templateId) {
     const [template] = await db.select().from(jobTemplatesTable).where(eq(jobTemplatesTable.id, templateId));
@@ -226,7 +273,6 @@ router.post("/jobs", async (req, res): Promise<void> => {
     });
   }
 
-  // Record job materials (deduction happens when job transitions to in-progress)
   if (jobMats && jobMats.length > 0) {
     for (const mat of jobMats) {
       await db.insert(jobMaterialsTable).values({
@@ -246,29 +292,18 @@ router.post("/jobs", async (req, res): Promise<void> => {
 
 router.get("/jobs/:id", async (req, res): Promise<void> => {
   const params = GetJobParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const result = await buildJobWithDetails(params.data.id);
-  if (!result) {
-    res.status(404).json({ error: "Job not found" });
-    return;
-  }
+  if (!result) { res.status(404).json({ error: "Job not found" }); return; }
   res.json(result);
 });
 
 router.put("/jobs/:id", async (req, res): Promise<void> => {
   const params = UpdateJobParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateJobBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
   const updates: Record<string, unknown> = {};
   if (parsed.data.jobName !== undefined) updates.jobName = parsed.data.jobName;
   if (parsed.data.clientName !== undefined) updates.clientName = parsed.data.clientName;
@@ -280,35 +315,22 @@ router.put("/jobs/:id", async (req, res): Promise<void> => {
   if (parsed.data.scheduledDate !== undefined) updates.scheduledDate = parsed.data.scheduledDate;
 
   const [job] = await db.update(jobsTable).set(updates).where(eq(jobsTable.id, params.data.id)).returning();
-  if (!job) {
-    res.status(404).json({ error: "Job not found" });
-    return;
-  }
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
   const result = await buildJobWithDetails(job.id);
   res.json(result);
 });
 
 router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
   const params = UpdateJobStatusParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateJobStatusBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [currentJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, params.data.id));
-  if (!currentJob) {
-    res.status(404).json({ error: "Job not found" });
-    return;
-  }
+  if (!currentJob) { res.status(404).json({ error: "Job not found" }); return; }
 
   const [job] = await db.update(jobsTable).set({ status: parsed.data.status }).where(eq(jobsTable.id, params.data.id)).returning();
 
-  // Update machine status based on job status
   if (parsed.data.status === "in-progress") {
     const routing = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, job.id));
     for (const step of routing) {
@@ -321,7 +343,6 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     }
   }
 
-  // Auto-deduct materials when job transitions pending → in-progress
   let deductions: DeductionInfo[] = [];
   if (parsed.data.status === "in-progress" && currentJob.status === "pending") {
     deductions = await deductJobMaterials(job.id);
@@ -333,15 +354,9 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
 
 router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   const params = UpdateJobRoutingStatusParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateJobRoutingStatusBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const updates: Record<string, unknown> = { status: parsed.data.status };
   if (parsed.data.notes) updates.notes = parsed.data.notes;
@@ -354,20 +369,17 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
     .where(eq(jobRoutingTable.id, params.data.id))
     .returning();
 
-  if (!routing) {
-    res.status(404).json({ error: "Routing step not found" });
-    return;
-  }
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
 
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
 
   let deductions: DeductionInfo[] = [];
+
   if (parsed.data.status === "in-progress") {
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
     if (job && job.status === "pending") {
       await db.update(jobsTable).set({ status: "in-progress" }).where(eq(jobsTable.id, job.id));
-      // Deduct materials now that job is starting (pending → in-progress)
       deductions = await deductJobMaterials(job.id);
     }
     await createNotification({
@@ -386,24 +398,6 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
 
     if (allDone && job) {
       await db.update(jobsTable).set({ status: "completed" }).where(eq(jobsTable.id, job.id));
-
-      const jobMats = await db.select().from(jobMaterialsTable).where(eq(jobMaterialsTable.jobId, job.id));
-      for (const jm of jobMats) {
-        const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, jm.materialId));
-        if (mat) {
-          const currentQty = parseFloat(String(mat.currentQty));
-          const minQty = parseFloat(String(mat.minReorderQty));
-          if (currentQty <= minQty) {
-            await createNotification({
-              type: "low-stock",
-              title: "Low Stock Alert",
-              message: `${mat.materialName} is at ${currentQty} ${mat.unit} (reorder level: ${minQty})`,
-              relatedId: mat.id,
-            });
-          }
-        }
-      }
-
       await createNotification({
         type: "job-completed",
         title: "Job Completed",
@@ -417,7 +411,6 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
         message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} completed on ${machine?.machineName ?? 'Unknown'}`,
         relatedId: routing.jobId,
       });
-
       const nextStep = allSteps.find(s => s.stepNumber === routing.stepNumber + 1);
       if (nextStep && nextStep.status === "pending") {
         await db.update(jobRoutingTable).set({ status: "in-progress", startedAt: new Date().toISOString() }).where(eq(jobRoutingTable.id, nextStep.id));
@@ -435,17 +428,136 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   });
 });
 
+// ─── PAUSE endpoint ───────────────────────────────────────────────────────────
+const PauseBody = z.object({
+  reason: z.string(), // blanket-wash/plate-change/ink-change/paper-jam/breakdown/break/other
+  notes: z.string().optional(),
+});
+
+router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const parsed = PauseBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "reason is required" }); return; }
+
+  const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (routing.status !== "in-progress") { res.status(400).json({ error: "Can only pause an in-progress step" }); return; }
+
+  const now = new Date().toISOString();
+
+  // Update routing to paused
+  const [updated] = await db
+    .update(jobRoutingTable)
+    .set({ status: "paused", pausedAt: now })
+    .where(eq(jobRoutingTable.id, id))
+    .returning();
+
+  // Set machine to idle while paused
+  await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
+
+  // Log the interruption
+  await db.insert(jobInterruptionsTable).values({
+    jobRoutingId: routing.id,
+    jobId: routing.jobId,
+    machineId: routing.machineId,
+    reason: parsed.data.reason,
+    notes: parsed.data.notes ?? null,
+  });
+
+  const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
+
+  await createNotification({
+    type: "step-started",
+    title: "Machine Paused",
+    message: `${machine?.machineName ?? 'Machine'} paused — ${parsed.data.reason.replace(/-/g, ' ')}`,
+    relatedId: routing.jobId,
+  });
+
+  res.json({ ...updated, machineName: machine?.machineName ?? null });
+});
+
+// ─── RESUME endpoint ──────────────────────────────────────────────────────────
+router.patch("/job-routing/:id/resume", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (routing.status !== "paused") { res.status(400).json({ error: "Can only resume a paused step" }); return; }
+
+  const now = new Date();
+  const pausedAt = routing.pausedAt ? new Date(routing.pausedAt) : now;
+  const pauseDurationSeconds = Math.floor((now.getTime() - pausedAt.getTime()) / 1000);
+  const newTotalPaused = (routing.totalPausedSeconds ?? 0) + pauseDurationSeconds;
+
+  // Close the open interruption record
+  const openInterruptions = await db
+    .select()
+    .from(jobInterruptionsTable)
+    .where(and(
+      eq(jobInterruptionsTable.jobRoutingId, routing.id),
+      eq(jobInterruptionsTable.jobId, routing.jobId)
+    ));
+
+  const openInterruption = openInterruptions.find(i => !i.endedAt);
+  if (openInterruption) {
+    await db
+      .update(jobInterruptionsTable)
+      .set({ endedAt: now, durationSeconds: pauseDurationSeconds })
+      .where(eq(jobInterruptionsTable.id, openInterruption.id));
+  }
+
+  // Resume routing step
+  const [updated] = await db
+    .update(jobRoutingTable)
+    .set({
+      status: "in-progress",
+      pausedAt: null,
+      totalPausedSeconds: newTotalPaused,
+    })
+    .where(eq(jobRoutingTable.id, id))
+    .returning();
+
+  // Set machine back to running
+  await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
+
+  const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
+
+  await createNotification({
+    type: "step-started",
+    title: "Machine Resumed",
+    message: `${machine?.machineName ?? 'Machine'} resumed after ${Math.round(pauseDurationSeconds / 60)}m pause`,
+    relatedId: routing.jobId,
+  });
+
+  res.json({
+    ...updated,
+    machineName: machine?.machineName ?? null,
+    pauseDurationSeconds,
+  });
+});
+
+// ─── GET interruptions for a routing step ────────────────────────────────────
+router.get("/job-routing/:id/interruptions", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const rows = await db
+    .select()
+    .from(jobInterruptionsTable)
+    .where(eq(jobInterruptionsTable.jobRoutingId, id))
+    .orderBy(jobInterruptionsTable.startedAt);
+
+  res.json(rows);
+});
+
 router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
   const params = UpdateJobRoutingNotesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateJobRoutingNotesBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [routing] = await db
     .update(jobRoutingTable)
@@ -453,11 +565,7 @@ router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
     .where(eq(jobRoutingTable.id, params.data.id))
     .returning();
 
-  if (!routing) {
-    res.status(404).json({ error: "Routing step not found" });
-    return;
-  }
-
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
 
   res.json({
@@ -470,10 +578,7 @@ router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
 
 router.get("/jobs/:id/materials", async (req, res): Promise<void> => {
   const params = GetJobMaterialsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const rows = await db
     .select({
       id: jobMaterialsTable.id,
@@ -493,15 +598,9 @@ router.get("/jobs/:id/materials", async (req, res): Promise<void> => {
 
 router.post("/jobs/:id/materials", async (req, res): Promise<void> => {
   const params = AddJobMaterialParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = AddJobMaterialBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [row] = await db.insert(jobMaterialsTable).values({
     jobId: params.data.id,
     materialId: parsed.data.materialId,
@@ -513,7 +612,6 @@ router.post("/jobs/:id/materials", async (req, res): Promise<void> => {
   res.status(201).json(row);
 });
 
-// Wastage log routes also live here
 router.get("/wastage-log", async (req, res): Promise<void> => {
   const queryParams = ListWastageLogsQueryParams.safeParse(req.query);
   const rows = await db
@@ -539,26 +637,16 @@ router.get("/wastage-log", async (req, res): Promise<void> => {
   const filtered = queryParams.success && queryParams.data.jobId
     ? rows.filter(r => r.jobId === queryParams.data.jobId)
     : rows;
-
   res.json(filtered);
 });
 
 router.post("/wastage-log", async (req, res): Promise<void> => {
   const parsed = CreateWastageLogBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const [job] = await db.select({ status: jobsTable.status }).from(jobsTable).where(eq(jobsTable.id, parsed.data.jobId)).limit(1);
-  if (!job) {
-    res.status(404).json({ error: "Job not found" });
-    return;
-  }
-  if (job.status !== "completed") {
-    res.status(409).json({ error: "Wastage can only be logged for completed jobs" });
-    return;
-  }
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  if (job.status !== "completed") { res.status(409).json({ error: "Wastage can only be logged for completed jobs" }); return; }
 
   const wastageQty = Math.max(0, parsed.data.actualQty - parsed.data.plannedQty);
   const wastagePct = parsed.data.plannedQty > 0 ? (wastageQty / parsed.data.plannedQty) * 100 : 0;
