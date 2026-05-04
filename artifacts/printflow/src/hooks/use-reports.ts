@@ -1,7 +1,8 @@
 import { 
   useGetWastageReport,
   useGetStockSummary,
-  useGetJobCostReport
+  useGetJobCostReport,
+  useGetMachineDowntime,
 } from "@workspace/api-client-react";
 
 export function useWastageReport() {
@@ -14,4 +15,8 @@ export function useStockSummary() {
 
 export function useJobCostReport(jobId: number) {
   return useGetJobCostReport(jobId, { query: { enabled: !!jobId } });
+}
+
+export function useMachineDowntime() {
+  return useGetMachineDowntime();
 }

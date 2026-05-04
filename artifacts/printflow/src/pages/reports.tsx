@@ -1,20 +1,84 @@
-import React from "react";
-import { useWastageReport, useStockSummary } from "@/hooks/use-reports";
+import React, { useState } from "react";
+import { useWastageReport, useStockSummary, useMachineDowntime } from "@/hooks/use-reports";
 import { Card } from "@/components/ui-elements";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { FileBarChart2, Trash2 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, Legend,
+} from "recharts";
+import { FileBarChart2, Trash2, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import type { MachineDowntimeRow } from "@workspace/api-client-react";
+
+const REASON_LABELS: Record<string, string> = {
+  "blanket-wash": "Blanket Wash",
+  "plate-change": "Plate Change",
+  "ink-change": "Ink Change",
+  "paper-jam": "Paper Jam",
+  "breakdown": "Breakdown",
+  "break": "Break",
+  "other": "Other",
+};
+
+const REASON_COLORS: Record<string, string> = {
+  "blanket-wash": "#3b82f6",
+  "plate-change": "#8b5cf6",
+  "ink-change": "#06b6d4",
+  "paper-jam": "#f59e0b",
+  "breakdown": "#ef4444",
+  "break": "#22c55e",
+  "other": "#94a3b8",
+};
+
+const PIE_COLORS = ["#3b82f6", "#8b5cf6", "#06b6d4", "#f59e0b", "#ef4444", "#22c55e", "#94a3b8"];
+
+function formatMachineName(name: string): string {
+  if (name.length > 14) {
+    const parts = name.split(" ");
+    return parts.length > 1 ? `${parts[0]} ${parts[1]}` : name.slice(0, 14);
+  }
+  return name;
+}
+
+function buildReasonSummary(rows: MachineDowntimeRow[]) {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    for (const rb of row.reasonBreakdown) {
+      totals.set(rb.reason, (totals.get(rb.reason) ?? 0) + rb.count);
+    }
+  }
+  return Array.from(totals.entries())
+    .map(([reason, count]) => ({
+      name: REASON_LABELS[reason] ?? reason,
+      value: count,
+      reason,
+    }))
+    .sort((a, b) => b.value - a.value);
+}
 
 export default function Reports() {
   const { data: wastageData, isLoading: loadingWastage } = useWastageReport();
   const { data: stockData, isLoading: loadingStock } = useStockSummary();
+  const { data: downtimeData, isLoading: loadingDowntime } = useMachineDowntime();
+  const [downtimeOpen, setDowntimeOpen] = useState(true);
 
-  // Each entry is now aggregated per job (grouped by jobId on backend)
   const formattedWastage = wastageData?.map(w => ({
     name: w.jobCode ?? `Job ${w.jobId}`,
     label: `${w.jobCode} — ${w.jobName}`,
     wastage: w.wastagePct,
     client: w.clientName,
   })) || [];
+
+  const hasAnyDowntime = downtimeData?.some(d => d.totalPausedMinutes > 0) ?? false;
+
+  const machinesWithDowntime = downtimeData?.filter(d => d.totalPausedMinutes > 0) ?? [];
+
+  const chartDowntime = (downtimeData ?? []).map(d => ({
+    name: formatMachineName(d.machineName),
+    fullName: d.machineName,
+    minutes: d.totalPausedMinutes,
+    machineType: d.machineType,
+  }));
+
+  const reasonSummary = buildReasonSummary(downtimeData ?? []);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -81,7 +145,6 @@ export default function Reports() {
             )}
           </div>
 
-          {/* Legend */}
           {formattedWastage.length > 0 && (
             <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-primary inline-block" /> &lt;5% (Normal)</span>
@@ -134,6 +197,210 @@ export default function Reports() {
           </div>
         </Card>
 
+      </div>
+
+      {/* Machine Downtime Section */}
+      <div className="border border-border rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setDowntimeOpen(o => !o)}
+          className="w-full flex items-center justify-between px-6 py-4 bg-card hover:bg-muted/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Clock className="text-violet-500" size={22} />
+            <div className="text-left">
+              <h2 className="text-xl font-bold">Machine Downtime</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Total pause time and reason breakdown per machine
+              </p>
+            </div>
+            {!loadingDowntime && hasAnyDowntime && (
+              <span className="ml-2 text-xs bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 font-bold px-2.5 py-0.5 rounded-full">
+                {machinesWithDowntime.length} machine{machinesWithDowntime.length !== 1 ? "s" : ""} affected
+              </span>
+            )}
+          </div>
+          {downtimeOpen ? <ChevronUp size={18} className="text-muted-foreground" /> : <ChevronDown size={18} className="text-muted-foreground" />}
+        </button>
+
+        {downtimeOpen && (
+          <div className="p-6 border-t border-border bg-background">
+            {loadingDowntime ? (
+              <div className="flex h-48 items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : !hasAnyDowntime ? (
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+                <Clock size={40} className="opacity-20" />
+                <p className="text-sm font-medium">No downtime data yet</p>
+                <p className="text-xs">Paused machine steps will appear here once jobs are in progress.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                {/* Bar chart: downtime per machine */}
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">
+                    Total Paused Time per Machine
+                  </h3>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chartDowntime}
+                        layout="vertical"
+                        margin={{ top: 4, right: 40, left: 0, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                        <XAxis
+                          type="number"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                          unit=" min"
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={90}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))', fontWeight: 600 }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: 'hsl(var(--muted))' }}
+                          contentStyle={{
+                            borderRadius: '8px',
+                            border: '1px solid hsl(var(--border))',
+                            backgroundColor: 'hsl(var(--card))',
+                          }}
+                          formatter={(value: number, _name: string, props: { payload?: { fullName?: string } }) => [
+                            `${value} min`,
+                            props.payload?.fullName ?? "Downtime",
+                          ]}
+                          labelFormatter={() => ""}
+                        />
+                        <Bar dataKey="minutes" radius={[0, 6, 6, 0]} maxBarSize={28}>
+                          {chartDowntime.map((entry, index) => (
+                            <Cell
+                              key={`bar-${index}`}
+                              fill={entry.minutes > 60 ? '#ef4444' : entry.minutes > 20 ? '#f59e0b' : '#8b5cf6'}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-violet-500 inline-block" /> &lt;20 min</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> 20–60 min</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-rose-500 inline-block" /> &gt;60 min</span>
+                  </div>
+                </div>
+
+                {/* Pie chart: reason breakdown */}
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-4">
+                    Pause Reason Breakdown (All Machines)
+                  </h3>
+                  {reasonSummary.length === 0 ? (
+                    <div className="flex h-[300px] items-center justify-center text-muted-foreground text-sm">
+                      No reason data available.
+                    </div>
+                  ) : (
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={reasonSummary}
+                            cx="50%"
+                            cy="45%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={3}
+                            dataKey="value"
+                            nameKey="name"
+                          >
+                            {reasonSummary.map((entry, index) => (
+                              <Cell
+                                key={`pie-${index}`}
+                                fill={REASON_COLORS[entry.reason] ?? PIE_COLORS[index % PIE_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: '8px',
+                              border: '1px solid hsl(var(--border))',
+                              backgroundColor: 'hsl(var(--card))',
+                            }}
+                            formatter={(value: number, name: string) => [`${value} occurrence${value !== 1 ? "s" : ""}`, name]}
+                          />
+                          <Legend
+                            iconType="circle"
+                            iconSize={10}
+                            formatter={(value) => <span style={{ fontSize: 12 }}>{value}</span>}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                {/* Per-machine detail table */}
+                <div className="lg:col-span-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
+                    Per-Machine Breakdown
+                  </h3>
+                  <div className="overflow-x-auto rounded-xl border border-border">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-muted-foreground uppercase bg-muted/50">
+                        <tr>
+                          <th className="px-4 py-3 font-bold">Machine</th>
+                          <th className="px-4 py-3 font-bold">Type</th>
+                          <th className="px-4 py-3 font-bold text-right">Total Downtime</th>
+                          <th className="px-4 py-3 font-bold">Top Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {machinesWithDowntime.map((m) => {
+                          const topReason = m.reasonBreakdown[0];
+                          return (
+                            <tr key={m.machineId} className="hover:bg-muted/30">
+                              <td className="px-4 py-3 font-semibold">{m.machineName}</td>
+                              <td className="px-4 py-3 capitalize text-muted-foreground text-xs font-medium">{m.machineType}</td>
+                              <td className="px-4 py-3 text-right font-mono font-bold">
+                                <span className={
+                                  m.totalPausedMinutes > 60 ? "text-rose-600 dark:text-rose-400"
+                                  : m.totalPausedMinutes > 20 ? "text-amber-600 dark:text-amber-400"
+                                  : "text-violet-600 dark:text-violet-400"
+                                }>
+                                  {m.totalPausedMinutes} min
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {topReason ? (
+                                  <span
+                                    className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                                    style={{ backgroundColor: REASON_COLORS[topReason.reason] ?? "#94a3b8" }}
+                                  >
+                                    {REASON_LABELS[topReason.reason] ?? topReason.reason} ×{topReason.count}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

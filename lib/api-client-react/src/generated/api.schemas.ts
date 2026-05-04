@@ -422,6 +422,19 @@ export interface JobCostReport {
   materials: JobCostReportMaterialsItem[];
 }
 
+export type MachineDowntimeReasonItem = {
+  reason: string;
+  count: number;
+};
+
+export interface MachineDowntimeRow {
+  machineId: number;
+  machineName: string;
+  machineType: string;
+  totalPausedMinutes: number;
+  reasonBreakdown: MachineDowntimeReasonItem[];
+}
+
 export interface LowStockAlert {
   id: number;
   materialName: string;

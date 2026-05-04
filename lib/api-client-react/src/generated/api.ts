@@ -3473,6 +3473,75 @@ export type MarkAllNotificationsReadMutationResult = NonNullable<
 export type MarkAllNotificationsReadMutationError = ErrorType<unknown>;
 
 /**
+ * @summary Get machine downtime report
+ */
+export const getGetMachineDowntimeUrl = () => {
+  return `/api/reports/machine-downtime`;
+};
+
+export const getMachineDowntime = async (
+  options?: RequestInit,
+): Promise<MachineDowntimeRow[]> => {
+  return customFetch<MachineDowntimeRow[]>(getGetMachineDowntimeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMachineDowntimeQueryKey = () => {
+  return [`/api/reports/machine-downtime`] as const;
+};
+
+export const getGetMachineDowntimeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMachineDowntime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMachineDowntime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetMachineDowntimeQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMachineDowntime>>> = ({
+    signal,
+  }) => getMachineDowntime({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMachineDowntime>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMachineDowntimeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMachineDowntime>>
+>;
+export type GetMachineDowntimeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get machine downtime report
+ */
+export function useGetMachineDowntime<
+  TData = Awaited<ReturnType<typeof getMachineDowntime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMachineDowntime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMachineDowntimeQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Mark all notifications as read
  */
 export const useMarkAllNotificationsRead = <

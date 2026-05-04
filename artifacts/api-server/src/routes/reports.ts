@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, wastageLogTable, jobsTable, materialsTable, jobMaterialsTable } from "@workspace/db";
+import { eq, gt } from "drizzle-orm";
+import { db, wastageLogTable, jobsTable, materialsTable, jobMaterialsTable, jobRoutingTable, machinesTable } from "@workspace/db";
 import { GetJobCostReportParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -167,6 +167,49 @@ router.get("/reports/job-cost/:jobId", async (req, res): Promise<void> => {
     totalCost,
     materials,
   });
+});
+
+router.get("/reports/machine-downtime", async (_req, res): Promise<void> => {
+  // Fetch all routing rows with any machines (even 0 paused seconds)
+  const allMachines = await db.select().from(machinesTable).orderBy(machinesTable.id);
+
+  const pausedRows = await db
+    .select({
+      machineId: jobRoutingTable.machineId,
+      totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
+      pauseReason: jobRoutingTable.pauseReason,
+    })
+    .from(jobRoutingTable)
+    .where(gt(jobRoutingTable.totalPausedSeconds, 0));
+
+  // Aggregate per machine
+  const aggMap = new Map<number, { totalPausedSeconds: number; reasonCounts: Map<string, number> }>();
+
+  for (const row of pausedRows) {
+    const entry = aggMap.get(row.machineId) ?? { totalPausedSeconds: 0, reasonCounts: new Map() };
+    entry.totalPausedSeconds += row.totalPausedSeconds ?? 0;
+    if (row.pauseReason) {
+      entry.reasonCounts.set(row.pauseReason, (entry.reasonCounts.get(row.pauseReason) ?? 0) + 1);
+    }
+    aggMap.set(row.machineId, entry);
+  }
+
+  const result = allMachines.map(m => {
+    const agg = aggMap.get(m.id);
+    return {
+      machineId: m.id,
+      machineName: m.machineName,
+      machineType: m.machineType,
+      totalPausedMinutes: agg ? parseFloat((agg.totalPausedSeconds / 60).toFixed(1)) : 0,
+      reasonBreakdown: agg
+        ? Array.from(agg.reasonCounts.entries())
+            .map(([reason, count]) => ({ reason, count }))
+            .sort((a, b) => b.count - a.count)
+        : [],
+    };
+  }).sort((a, b) => b.totalPausedMinutes - a.totalPausedMinutes);
+
+  res.json(result);
 });
 
 export default router;
