@@ -395,4 +395,307 @@ export default function FloorMonitor() {
                           >
                             <Clock size={10} />
                             {machineJobs.length - 1} more queued
-                            <ChevronRight size={10} className={cn("transition-transform", isExpande
+                            <ChevronRight size={10} className={cn("transition-transform", isExpanded && "rotate-90")} />
+                          </button>
+                        )}
+                        {isExpanded && machineJobs.length > 1 && (
+                          <div className="space-y-1.5 mb-3">
+                            {machineJobs.slice(1).map((j) => (
+                              <div key={j.id} className="text-xs bg-muted/50 rounded px-2 py-1.5 flex items-center gap-1.5">
+                                <span className="font-mono font-bold">{j.jobCode}</span>
+                                <span className="text-muted-foreground truncate">{j.jobName}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Operator + Status */}
+                        <div className="flex justify-between items-end border-t border-border pt-3">
+                          <div>
+                            <span className="text-xs text-muted-foreground block mb-0.5">Operator</span>
+                            <span className="font-bold text-sm">{machine.operatorName}</span>
+                          </div>
+                          <div className={cn(
+                            "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border",
+                            isPaused ? "bg-amber-50 text-amber-700 border-amber-200" : getStatusColor(machine.status)
+                          )}>
+                            {isPaused ? "Paused" : machine.status}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+      {/* Active Jobs Progress */}
+      {activeJobs.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground px-2 border-b border-border pb-2">
+            Active Job Progress
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {activeJobs.map((job) => {
+              const total = job.routing?.length ?? 0;
+              const completed = job.routing?.filter(r => r.status === "completed").length ?? 0;
+              const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+              return (
+                <Card key={job.id} className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <span className="font-mono text-sm font-bold text-primary">{job.jobCode}</span>
+                      <h3 className="font-bold text-lg">{job.jobName}</h3>
+                      <p className="text-xs text-muted-foreground">{job.clientName}</p>
+                    </div>
+                    <span className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-bold uppercase",
+                      job.status === "in-progress" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                    )}>
+                      {job.status}
+                    </span>
+                  </div>
+
+                  {total > 0 && (
+                    <div className="mb-4">
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-muted-foreground font-medium">{completed} of {total} steps</span>
+                        <span className="font-bold text-emerald-600">{pct}% complete</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                        <div
+                          className="h-3 rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, background: pct === 100 ? '#22c55e' : 'linear-gradient(90deg, #3b82f6, #22c55e)' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {job.routing && (
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {job.routing.map((step, idx) => (
+                        <React.Fragment key={step.id}>
+                          <div className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                            step.status === "completed" ? "bg-emerald-100 text-emerald-700" :
+                            step.status === "in-progress" ? "bg-blue-100 text-blue-700 ring-2 ring-blue-300" :
+                            step.status === "paused" ? "bg-amber-100 text-amber-700 ring-2 ring-amber-300" :
+                            "bg-muted text-muted-foreground"
+                          )}>
+                            <span className={cn(
+                              "w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0",
+                              step.status === "completed" ? "bg-emerald-500 text-white" :
+                              step.status === "in-progress" ? "bg-blue-500 text-white" :
+                              step.status === "paused" ? "bg-amber-500 text-white" :
+                              "bg-muted-foreground/20 text-muted-foreground"
+                            )}>
+                              {step.status === "completed" ? "✓" : step.status === "paused" ? "⏸" : step.stepNumber}
+                            </span>
+                            <span className="hidden sm:inline truncate max-w-[80px]">{step.machineName}</span>
+                            {step.notes && <AlertTriangle size={10} className="text-amber-500 shrink-0" />}
+                          </div>
+                          {idx < job.routing.length - 1 && <ArrowRight size={12} className="text-muted-foreground shrink-0" />}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {(!machines || machines.length === 0) && (
+        <div className="text-center py-20 bg-card rounded-xl border border-border">
+          <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-xl font-bold">No Machines Found</h3>
+          <p className="text-muted-foreground">Add machines to monitor them here.</p>
+        </div>
+      )}
+
+      {/* Issue Modal */}
+      {issueModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} className="text-amber-500" />
+                <h2 className="font-bold text-lg">Report Issue</h2>
+              </div>
+              <button onClick={() => setIssueModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Step {issueModal.stepNumber} — </span>
+                <span className="font-bold">{issueModal.jobCode}</span>
+              </div>
+              <textarea
+                value={issueText}
+                onChange={(e) => setIssueText(e.target.value)}
+                placeholder="e.g. Ink density inconsistent, colour shift detected..."
+                rows={4}
+                className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
+            </div>
+            <div className="flex gap-3 p-5 pt-0">
+              <button onClick={() => setIssueModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">Cancel</button>
+              <button
+                onClick={handleSubmitIssue}
+                disabled={!issueText.trim() || updateNotes.isPending}
+                className="flex-1 px-4 py-2.5 text-sm font-bold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <AlertTriangle size={14} />
+                {updateNotes.isPending ? "Saving..." : "Submit Issue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pause Modal */}
+      {pauseModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Pause size={18} className="text-amber-500" />
+                <h2 className="font-bold text-lg">Pause Machine</h2>
+              </div>
+              <button onClick={() => setPauseModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><X size={16} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
+                <span className="font-bold">{pauseModal.machineName}</span>
+                <span className="text-muted-foreground"> — {pauseModal.jobCode}</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold mb-2">Why is the machine stopping?</p>
+                <div className="space-y-2">
+                  {PAUSE_REASONS.map(r => (
+                    <button
+                      key={r.value}
+                      onClick={() => setPauseReason(r.value)}
+                      className={cn(
+                        "w-full p-3 rounded-lg border-2 text-left transition-all flex items-center justify-between",
+                        pauseReason === r.value
+                          ? "border-amber-500 bg-amber-50 text-amber-800"
+                          : "border-border hover:border-amber-300"
+                      )}
+                    >
+                      <span className="text-sm font-semibold">{r.label}</span>
+                      {r.avg && <span className="text-xs text-muted-foreground">~{r.avg}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold block mb-1.5">Notes (optional)</label>
+                <textarea
+                  value={pauseNotes}
+                  onChange={(e) => setPauseNotes(e.target.value)}
+                  placeholder="Any additional details..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 pt-0">
+              <button onClick={() => setPauseModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">Cancel</button>
+              <button
+                onClick={handlePause}
+                disabled={!pauseReason || pauseRouting.isPending}
+                className="flex-1 px-4 py-2.5 text-sm font-bold bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Pause size={14} />
+                {pauseRouting.isPending ? "Pausing..." : "Pause Machine"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Machine Timer Component ──────────────────────────────────────────────────
+function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithDetails; isPaused: boolean }) {
+  const elapsed = useLiveTimer(
+    step.startedAt ?? null,
+    step.totalPausedSeconds ?? 0,
+    isPaused
+  );
+
+  const etaSeconds = (step as any).etaSeconds ?? 0;
+  const remaining = Math.max(0, etaSeconds - elapsed);
+  const pct = etaSeconds > 0 ? Math.min(100, Math.round((elapsed / etaSeconds) * 100)) : 0;
+  const isOvertime = elapsed > etaSeconds && etaSeconds > 0;
+
+  if (!step.startedAt) return null;
+
+  return (
+    <div className={cn(
+      "rounded-lg p-3 mb-3 border",
+      isPaused ? "bg-amber-50/50 border-amber-200" :
+      isOvertime ? "bg-rose-50/50 border-rose-200" :
+      "bg-blue-50/50 border-blue-200"
+    )}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <Timer size={12} className={isPaused ? "text-amber-600" : isOvertime ? "text-rose-600" : "text-blue-600"} />
+          <span className={cn("text-[10px] uppercase tracking-wider font-bold", isPaused ? "text-amber-600" : isOvertime ? "text-rose-600" : "text-blue-600")}>
+            {isPaused ? "Paused" : isOvertime ? "Overtime" : "Running"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Zap size={10} className="text-muted-foreground" />
+          <span className="text-[10px] text-muted-foreground font-medium">
+            ETA: {(step as any).etaFormatted ?? "—"}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <span className="text-[10px] text-muted-foreground block">Elapsed</span>
+          <span className={cn("text-sm font-black", isPaused ? "text-amber-600" : "text-foreground")}>
+            {formatSeconds(elapsed)}
+          </span>
+        </div>
+        <div>
+          <span className="text-[10px] text-muted-foreground block">Remaining</span>
+          <span className={cn("text-sm font-black", isOvertime ? "text-rose-600" : "text-foreground")}>
+            {isOvertime ? `+${formatSeconds(elapsed - etaSeconds)}` : formatSeconds(remaining)}
+          </span>
+        </div>
+      </div>
+
+      {etaSeconds > 0 && (
+        <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
+          <div
+            className={cn("h-1.5 rounded-full transition-all duration-1000", isPaused ? "bg-amber-400" : isOvertime ? "bg-rose-500" : "bg-blue-500")}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+      )}
+
+      {isPaused && step.pausedAt && (
+        <p className="text-[10px] text-amber-600 mt-1.5 font-medium">
+          Paused at {new Date(step.pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function getMachineColorCode(status: string) {
+  switch (status.toLowerCase()) {
+    case 'running': return '#22c55e';
+    case 'idle': return '#9ca3af';
+    case 'maintenance': return '#ef4444';
+    default: return '#9ca3af';
+  }
+}
