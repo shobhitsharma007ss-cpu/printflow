@@ -422,8 +422,8 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
           actualQty: String(actualQtyVal),
           wastageQty: String(wastageQty.toFixed(2)),
           wastagePct: String(wastagePct.toFixed(2)),
-          reason: "other",
-          notes: "Auto-logged from step completion",
+          reason: "Step completion auto-log",
+          notes: null,
         });
       }
     }
