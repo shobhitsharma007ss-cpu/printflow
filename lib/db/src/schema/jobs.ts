@@ -34,9 +34,12 @@ export const jobRoutingTable = pgTable("job_routing", {
   stepNumber: integer("step_number").notNull(),
   machineId: integer("machine_id").notNull().references(() => machinesTable.id),
   operatorName: text("operator_name"),
-  status: text("status").notNull().default("pending"), // pending/in-progress/completed
+  status: text("status").notNull().default("pending"), // pending/in-progress/paused/completed
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
+  pausedAt: text("paused_at"),
+  totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
+  pauseReason: text("pause_reason"),
   notes: text("notes"),
 });
 

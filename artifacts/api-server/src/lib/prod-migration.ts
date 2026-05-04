@@ -11,6 +11,19 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 5: Add pause columns to job_routing ───────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing
+        ADD COLUMN IF NOT EXISTS paused_at            TEXT,
+        ADD COLUMN IF NOT EXISTS total_paused_seconds INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS pause_reason         TEXT;
+    `);
+    logger.info("Migration 5: pause columns ensured on job_routing.");
+  } catch (err) {
+    logger.error("Migration 5 pause columns failed:", err);
+  }
+
   // ─── MIGRATION 2: Add rate/wastage/reserved columns to materials ──────
   try {
     await db.execute(sql`

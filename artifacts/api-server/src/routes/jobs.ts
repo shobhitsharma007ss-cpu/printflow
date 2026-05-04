@@ -435,6 +435,71 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   });
 });
 
+router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid routing id" }); return; }
+  const { reason, notes } = req.body as { reason?: string; notes?: string };
+  if (!reason) { res.status(400).json({ error: "reason is required" }); return; }
+
+  const [existing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (existing.status !== "in-progress") { res.status(409).json({ error: "Can only pause an in-progress step" }); return; }
+
+  const [routing] = await db.update(jobRoutingTable).set({
+    status: "paused",
+    pausedAt: new Date().toISOString(),
+    pauseReason: reason,
+    notes: notes ?? existing.notes,
+  }).where(eq(jobRoutingTable.id, id)).returning();
+
+  const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
+
+  await createNotification({
+    type: "step-started",
+    title: "Machine Paused",
+    message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} paused on ${machine?.machineName ?? 'Unknown'} (${reason})`,
+    relatedId: routing.jobId,
+  });
+
+  res.json({ ...routing, machineName: machine?.machineName ?? null, machineType: machine?.machineType ?? null });
+});
+
+router.patch("/job-routing/:id/resume", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid routing id" }); return; }
+
+  const [existing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (existing.status !== "paused") { res.status(409).json({ error: "Can only resume a paused step" }); return; }
+
+  // Calculate how long it was paused and add to the running total
+  let additionalPausedSeconds = 0;
+  if (existing.pausedAt) {
+    const pausedMs = Date.now() - new Date(existing.pausedAt).getTime();
+    additionalPausedSeconds = Math.floor(pausedMs / 1000);
+  }
+  const newTotalPausedSeconds = (existing.totalPausedSeconds ?? 0) + additionalPausedSeconds;
+
+  const [routing] = await db.update(jobRoutingTable).set({
+    status: "in-progress",
+    pausedAt: null,
+    totalPausedSeconds: newTotalPausedSeconds,
+  }).where(eq(jobRoutingTable.id, id)).returning();
+
+  const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
+
+  await createNotification({
+    type: "step-started",
+    title: "Machine Resumed",
+    message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} resumed on ${machine?.machineName ?? 'Unknown'}`,
+    relatedId: routing.jobId,
+  });
+
+  res.json({ ...routing, machineName: machine?.machineName ?? null, machineType: machine?.machineType ?? null });
+});
+
 router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
   const params = UpdateJobRoutingNotesParams.safeParse(req.params);
   if (!params.success) {

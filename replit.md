@@ -43,7 +43,7 @@ artifacts-monorepo/
 - `machines` — machine fleet with capabilities/status
 - `job_templates` — reusable routing templates
 - `jobs` — production jobs with auto PF-XXX codes
-- `job_routing` — per-job machine routing steps (with auto-advance + auto-deduction)
+- `job_routing` — per-job machine routing steps (status: pending/in-progress/paused/completed; pausedAt, totalPausedSeconds, pauseReason for pause tracking)
 - `job_materials` — material allocation per job
 - `wastage_log` — wastage recording and tracking
 - `notifications` — in-app notifications (type, title, message, isRead, relatedId)
@@ -51,7 +51,7 @@ artifacts-monorepo/
 ## Frontend Pages
 
 1. **Dashboard** (`/`) — KPI cards, live machine status row, recent jobs, auto-refreshes every 60s
-2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots, step advancement buttons (Start/Complete), active job progress visualization with routing step pipeline
+2. **Floor Monitor** (`/floor-monitor`) — Real-time machine grid grouped by type with status dots; live clock (HH:MM AM/PM) and fullscreen toggle; Pause/Resume machine steps with reason selection (blanket wash, plate change, ink change, paper jam, breakdown, break, other); live elapsed/remaining timer per step with overtime detection; amber glow + amber border on paused machine cards; routing step pipeline chips with paused state (⏸ amber)
 3. **Inventory** (`/inventory`) — Visual stacks (boards/paper) + cylinder gauges (consumables), click for detail side panel with vendor list and inward history (includes brand). Two action buttons: "Record Inward Stock" (modal for logging stock arrivals) and "Add New Material" (multi-step wizard: category → paper type → GSM → dimensions → grain → vendor → stock details → review)
 4. **Jobs** (`/jobs`) — Job table with status/search filters; clickable rows open detail slide-over panel with routing progress, materials, wastage logs, and quick status actions; Log Wastage modal; 6-step Create Job Wizard (Basics → Board/Paper selection cards → Finish/Coating with auto-recommended machine → Ink/Consumables auto-estimate → Routing with reorderable steps → Review & Confirm); supports coatingType and finishRequirements fields
 5. **Reports** (`/reports`) — Wastage chart grouped per job (PF-XXX x-axis), color-coded bars (normal/watch/critical), stock reorder watchlist
@@ -66,6 +66,8 @@ artifacts-monorepo/
 - `/api/job-templates` — CRUD
 - `/api/jobs` — CRUD + PATCH status (auto-creates routing from template)
 - `/api/job-routing/:id/status` — Update routing step status
+- `/api/job-routing/:id/pause` — Pause an in-progress step (records pausedAt, pauseReason)
+- `/api/job-routing/:id/resume` — Resume a paused step (accumulates totalPausedSeconds)
 - `/api/wastage-log` — CRUD
 - `/api/dashboard/metrics` — Aggregate dashboard data
 - `/api/reports/wastage` — Wastage report
