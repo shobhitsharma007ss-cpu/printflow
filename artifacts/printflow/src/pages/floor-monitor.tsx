@@ -191,8 +191,8 @@ export default function FloorMonitor() {
   const handleSaveAndComplete = () => {
     if (!completeModal) return;
     const qty = parseInt(actualQtyInput, 10);
-    const validQty = !isNaN(qty) && qty >= 0 ? qty : undefined;
-    handleAdvanceStep(completeModal.routingId, "completed", validQty);
+    if (isNaN(qty) || qty < 0 || actualQtyInput.trim() === "") return;
+    handleAdvanceStep(completeModal.routingId, "completed", qty);
     setCompleteModal(null);
     setActualQtyInput("");
   };
@@ -689,7 +689,7 @@ export default function FloorMonitor() {
             <div className="flex flex-col gap-2 p-5 pt-0">
               <button
                 onClick={handleSaveAndComplete}
-                disabled={updateRouting.isPending}
+                disabled={updateRouting.isPending || actualQtyInput.trim() === "" || isNaN(parseInt(actualQtyInput, 10)) || parseInt(actualQtyInput, 10) < 0}
                 className="w-full px-4 py-2.5 text-sm font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <CheckCircle size={14} />
