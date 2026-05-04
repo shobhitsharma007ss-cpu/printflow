@@ -6,6 +6,7 @@ import {
   materialVendorsTable,
   machinesTable,
   jobTemplatesTable,
+  jobRoutingTable,
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -109,12 +110,12 @@ export async function runProdMigration(): Promise<void> {
         ADD COLUMN IF NOT EXISTS wastage_percent   NUMERIC(5,2)  NOT NULL DEFAULT 5,
         ADD COLUMN IF NOT EXISTS reserved_qty      NUMERIC(10,2) NOT NULL DEFAULT 0;
     `);
-    logger.info("Migration 2: rate/wastage/reserved columns ensured on materials.");
+    logger.info("Migration 2: materials rate/wastage/reserved columns ensured.");
   } catch (err) {
-    logger.error("Migration 2 materials columns failed:", err);
+    logger.error("Migration 2 failed:", err);
   }
 
-  // ─── MIGRATION 3: Add rate + createdAt to stock_inward, vendorId optional ──
+  // ─── MIGRATION 3: Add rate + createdAt to stock_inward ───────────────
   try {
     await db.execute(sql`
       ALTER TABLE stock_inward
@@ -126,14 +127,13 @@ export async function runProdMigration(): Promise<void> {
         ALTER COLUMN vendor_id DROP NOT NULL,
         ALTER COLUMN batch_ref SET DEFAULT '';
     `);
-    logger.info("Migration 3: stock_inward rate/createdAt columns ensured.");
+    logger.info("Migration 3: stock_inward columns ensured.");
   } catch (err) {
-    logger.error("Migration 3 stock_inward columns failed:", err);
+    logger.error("Migration 3 failed:", err);
   }
 
   // ─── MIGRATION 4: Clean up ghost/duplicate materials ─────────────────
   try {
-    // Delete the old CMYK Ink Set (was split into 4 individual inks)
     const oldCmyk = await db
       .select()
       .from(materialsTable)
@@ -143,11 +143,9 @@ export async function runProdMigration(): Promise<void> {
       const ids = oldCmyk.map(m => m.id);
       await db.delete(materialVendorsTable).where(inArray(materialVendorsTable.materialId, ids));
       await db.delete(materialsTable).where(inArray(materialsTable.id, ids));
-      logger.info(`Migration 4: Deleted ${ids.length} old CMYK Ink Set ghost record(s).`);
+      logger.info(`Migration 4: Deleted ${ids.length} old CMYK ghost record(s).`);
     }
 
-    // Deduplicate: if same materialName exists more than once, keep the one
-    // with highest currentQty and delete the rest
     const dupeCheck = await db.execute(sql`
       SELECT material_name, COUNT(*) as cnt
       FROM materials
@@ -161,8 +159,6 @@ export async function runProdMigration(): Promise<void> {
         .from(materialsTable)
         .where(eq(materialsTable.materialName, row.material_name))
         .orderBy(materialsTable.currentQty);
-
-      // Keep last (highest qty), delete the rest
       const toDelete = dupes.slice(0, -1).map(d => d.id);
       if (toDelete.length > 0) {
         await db.delete(materialVendorsTable).where(inArray(materialVendorsTable.materialId, toDelete));
@@ -170,10 +166,41 @@ export async function runProdMigration(): Promise<void> {
         logger.info(`Migration 4: Removed ${toDelete.length} duplicate(s) of "${row.material_name}".`);
       }
     }
-
-    logger.info("Migration 4: Ghost/duplicate material cleanup complete.");
+    logger.info("Migration 4: Ghost/duplicate cleanup complete.");
   } catch (err) {
-    logger.error("Migration 4 cleanup failed:", err);
+    logger.error("Migration 4 failed:", err);
+  }
+
+  // ─── MIGRATION 5: Add pause tracking to job_routing ──────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing
+        ADD COLUMN IF NOT EXISTS paused_at             TEXT,
+        ADD COLUMN IF NOT EXISTS total_paused_seconds  INTEGER NOT NULL DEFAULT 0;
+    `);
+    logger.info("Migration 5: job_routing pause columns ensured.");
+  } catch (err) {
+    logger.error("Migration 5 failed:", err);
+  }
+
+  // ─── MIGRATION 6: Create job_interruptions table ─────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS job_interruptions (
+        id                SERIAL PRIMARY KEY,
+        job_routing_id    INTEGER NOT NULL REFERENCES job_routing(id),
+        job_id            INTEGER NOT NULL REFERENCES jobs(id),
+        machine_id        INTEGER NOT NULL REFERENCES machines(id),
+        reason            TEXT NOT NULL,
+        started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at          TIMESTAMPTZ,
+        duration_seconds  INTEGER,
+        notes             TEXT
+      );
+    `);
+    logger.info("Migration 6: job_interruptions table ensured.");
+  } catch (err) {
+    logger.error("Migration 6 failed:", err);
   }
 
   // ─── MIGRATION 1 guard (original) ─────────────────────────────────────
@@ -189,11 +216,11 @@ export async function runProdMigration(): Promise<void> {
   }
 
   if (!testMachine) {
-    logger.info("No Komori LA37 found — skipping prod migration (auto-seed handles fresh DBs).");
+    logger.info("No Komori LA37 found — skipping prod migration.");
     return;
   }
 
-  logger.info("Running production migration 1 inside transaction...");
+  logger.info("Running production migration 1...");
 
   await db.transaction(async (tx) => {
     await tx.update(machinesTable).set({
@@ -208,7 +235,7 @@ export async function runProdMigration(): Promise<void> {
 
     await tx.update(machinesTable).set({
       capabilities: ["uv-standalone", "varnish-standalone"],
-      notes: "Standalone coating only. Used as standby or for already-printed sheets.",
+      notes: "Standalone coating only.",
     }).where(eq(machinesTable.machineName, "Single Coater"));
 
     await tx.update(machinesTable).set({
@@ -224,7 +251,6 @@ export async function runProdMigration(): Promise<void> {
     await tx.update(machinesTable).set({ capabilities: ["pre-press-cutting"], notes: "Pre-press cutter" }).where(eq(machinesTable.machineName, "Wohlenberg Cutter"));
 
     const oldCmyk = await tx.select().from(materialsTable).where(eq(materialsTable.materialName, "CMYK Ink Set")).limit(1);
-
     if (oldCmyk.length > 0) {
       const [saini] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "Saini Traders")).limit(1);
       let vendorId: number;
@@ -247,30 +273,6 @@ export async function runProdMigration(): Promise<void> {
       for (const ink of newInks) {
         await tx.insert(materialVendorsTable).values({ materialId: ink.id, vendorId });
       }
-    }
-
-    const existingGB285 = await tx.select().from(materialsTable).where(eq(materialsTable.materialName, "Grey Back Duplex 285gsm"));
-    if (existingGB285.length === 1) {
-      const [khanna] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "Khanna Paper")).limit(1);
-      const [emami] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "Emami Paper")).limit(1);
-      const khannaId = khanna ? khanna.id : (await tx.insert(vendorsTable).values({ vendorName: "Khanna Paper", contactPerson: "Rajesh Khanna", phone: "9876543210", city: "Delhi" }).returning())[0].id;
-      const emamiId = emami ? emami.id : (await tx.insert(vendorsTable).values({ vendorName: "Emami Paper", contactPerson: "Arun Emami", phone: "9876543211", city: "Kolkata" }).returning())[0].id;
-      await tx.update(materialsTable).set({ currentQty: "300" }).where(eq(materialsTable.id, existingGB285[0].id));
-      await tx.insert(materialVendorsTable).values({ materialId: existingGB285[0].id, vendorId: khannaId }).onConflictDoNothing();
-      const [newGB285] = await tx.insert(materialsTable).values({ materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "200", minReorderQty: "100" }).returning();
-      await tx.insert(materialVendorsTable).values({ materialId: newGB285.id, vendorId: emamiId });
-    }
-
-    const existingGB350 = await tx.select().from(materialsTable).where(eq(materialsTable.materialName, "Grey Back Duplex 350gsm"));
-    if (existingGB350.length === 1) {
-      const [khanna] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "Khanna Paper")).limit(1);
-      const [bilt] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "BILT")).limit(1);
-      const khannaId = khanna ? khanna.id : (await tx.insert(vendorsTable).values({ vendorName: "Khanna Paper", contactPerson: "Rajesh Khanna", phone: "9876543210", city: "Delhi" }).returning())[0].id;
-      const biltId = bilt ? bilt.id : (await tx.insert(vendorsTable).values({ vendorName: "BILT", contactPerson: "Suresh BILT", phone: "9876543212", city: "Mumbai" }).returning())[0].id;
-      await tx.update(materialsTable).set({ currentQty: "200" }).where(eq(materialsTable.id, existingGB350[0].id));
-      await tx.insert(materialVendorsTable).values({ materialId: existingGB350[0].id, vendorId: khannaId }).onConflictDoNothing();
-      const [newGB350] = await tx.insert(materialsTable).values({ materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "100", minReorderQty: "50" }).returning();
-      await tx.insert(materialVendorsTable).values({ materialId: newGB350.id, vendorId: biltId });
     }
 
     const consumablesToAdd = [

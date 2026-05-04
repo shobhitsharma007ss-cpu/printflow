@@ -1,21 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useMachines } from "@/hooks/use-machines";
 import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/hooks/use-jobs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, cn } from "@/lib/utils";
-import { Factory, AlertCircle, Maximize2, Minimize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, Timer, Zap } from "lucide-react";
+import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap } from "lucide-react";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 // ─── Pause reasons ────────────────────────────────────────────────────────────
 const PAUSE_REASONS = [
-  { value: "blanket-wash",  label: "🧹 Blanket Wash",          avg: "15-20 mins" },
-  { value: "plate-change",  label: "🔄 Plate Change",           avg: "25-35 mins" },
-  { value: "ink-change",    label: "🎨 Ink Change",             avg: "10-15 mins" },
-  { value: "paper-jam",     label: "📄 Paper Jam / Feed Issue", avg: "5-15 mins"  },
-  { value: "breakdown",     label: "🔧 Machine Breakdown",      avg: "varies"     },
-  { value: "break",         label: "☕ Operator Break",          avg: "15-30 mins" },
-  { value: "other",         label: "⚙️ Other",                  avg: ""           },
+  { value: "blanket-wash", label: "🧹 Blanket Wash", avg: "15-20 mins" },
+  { value: "plate-change", label: "🔄 Plate Change", avg: "25-35 mins" },
+  { value: "ink-change", label: "🎨 Ink Change", avg: "10-15 mins" },
+  { value: "paper-jam", label: "📄 Paper Jam / Feed Issue", avg: "5-15 mins" },
+  { value: "breakdown", label: "🔧 Machine Breakdown", avg: "varies" },
+  { value: "break", label: "☕ Operator Break", avg: "15-30 mins" },
+  { value: "other", label: "⚙️ Other", avg: "" },
 ];
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -23,11 +24,7 @@ function usePauseRouting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason, notes }: { id: number; reason: string; notes?: string }) =>
-      fetch(`/api/job-routing/${id}/pause`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason, notes }),
-      }).then(r => { if (!r.ok) throw new Error("Pause failed"); return r.json(); }),
+      apiClient.patch(`/job-routing/${id}/pause`, { reason, notes }).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["machines"] });
@@ -39,11 +36,7 @@ function useResumeRouting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: { id: number }) =>
-      fetch(`/api/job-routing/${id}/resume`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      }).then(r => { if (!r.ok) throw new Error("Resume failed"); return r.json(); }),
+      apiClient.patch(`/job-routing/${id}/resume`, {}).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["machines"] });
@@ -54,17 +47,20 @@ function useResumeRouting() {
 // ─── Live timer hook ──────────────────────────────────────────────────────────
 function useLiveTimer(startedAt: string | null, totalPausedSeconds: number, isPaused: boolean) {
   const [elapsed, setElapsed] = useState(0);
+
   useEffect(() => {
     if (!startedAt || isPaused) return;
     const update = () => {
       const start = new Date(startedAt).getTime();
-      const total = Math.floor((Date.now() - start) / 1000);
+      const now = Date.now();
+      const total = Math.floor((now - start) / 1000);
       setElapsed(Math.max(0, total - (totalPausedSeconds ?? 0)));
     };
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [startedAt, totalPausedSeconds, isPaused]);
+
   return elapsed;
 }
 
@@ -78,33 +74,6 @@ function formatSeconds(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-// ─── Pause duration hook (counts up while paused) ─────────────────────────────
-function usePauseDuration(pausedAt: string | null): number {
-  const [duration, setDuration] = useState(0);
-  useEffect(() => {
-    if (!pausedAt) { setDuration(0); return; }
-    const update = () => setDuration(Math.floor((Date.now() - new Date(pausedAt).getTime()) / 1000));
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, [pausedAt]);
-  return duration;
-}
-
-// ─── Inline pause badge (reason + live duration) ──────────────────────────────
-function PauseBadge({ pauseReason, pausedAt }: { pauseReason: string | null; pausedAt: string | null }) {
-  const duration = usePauseDuration(pausedAt);
-  const label = PAUSE_REASONS.find(r => r.value === pauseReason)?.label ?? pauseReason ?? "Paused";
-  return (
-    <div className="mt-2 space-y-1">
-      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{label}</p>
-      <p className="text-xs font-mono tabular-nums text-amber-600 dark:text-amber-500">
-        Paused {formatSeconds(duration)}
-      </p>
-    </div>
-  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -122,30 +91,6 @@ export default function FloorMonitor() {
   const [pauseModal, setPauseModal] = useState<{ routingId: number; machineName: string; jobCode: string } | null>(null);
   const [pauseReason, setPauseReason] = useState("");
   const [pauseNotes, setPauseNotes] = useState("");
-  const [completeModal, setCompleteModal] = useState<{ routingId: number; plannedQty: number; jobCode: string } | null>(null);
-  const [actualQtyInput, setActualQtyInput] = useState("");
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [clockTime, setClockTime] = useState(() => {
-    const now = new Date();
-    return now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  });
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      setClockTime(now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }));
-    };
-    const interval = setInterval(tick, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
 
   const isLoading = machinesLoading || jobsLoading;
   if (isLoading) return <div className="flex justify-center p-12"><div className="animate-spin w-8 h-8 border-2 border-primary rounded-full border-t-transparent" /></div>;
@@ -179,29 +124,8 @@ export default function FloorMonitor() {
     return null;
   };
 
-  const handleAdvanceStep = (routingId: number, newStatus: "pending" | "in-progress" | "completed", actualQty?: number) => {
-    updateRouting.mutate({ id: routingId, data: { status: newStatus, ...(actualQty !== undefined ? { actualQty } : {}) } });
-  };
-
-  const handleOpenCompleteModal = (step: { id: number }, job: JobWithDetails) => {
-    setActualQtyInput(String(job.qtySheets));
-    setCompleteModal({ routingId: step.id, plannedQty: job.qtySheets, jobCode: job.jobCode });
-  };
-
-  const handleSaveAndComplete = () => {
-    if (!completeModal) return;
-    const qty = parseInt(actualQtyInput, 10);
-    if (isNaN(qty) || qty < 0 || actualQtyInput.trim() === "") return;
-    handleAdvanceStep(completeModal.routingId, "completed", qty);
-    setCompleteModal(null);
-    setActualQtyInput("");
-  };
-
-  const handleSkipAndComplete = () => {
-    if (!completeModal) return;
-    handleAdvanceStep(completeModal.routingId, "completed");
-    setCompleteModal(null);
-    setActualQtyInput("");
+  const handleAdvanceStep = (routingId: number, newStatus: "pending" | "in-progress" | "completed") => {
+    updateRouting.mutate({ id: routingId, data: { status: newStatus } });
   };
 
   const handleOpenIssue = (step: JobRouting, job: JobWithDetails) => {
@@ -248,7 +172,6 @@ export default function FloorMonitor() {
           <p className="text-muted-foreground mt-1 font-medium">Real-time status of all factory equipment</p>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-3xl font-black text-primary tabular-nums">{clockTime}</span>
           <div className="hidden sm:flex items-center gap-4 text-sm">
             <span className="flex items-center gap-1.5">
               <span className="relative flex h-3 w-3">
@@ -261,12 +184,8 @@ export default function FloorMonitor() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-gray-400" /> Idle</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500" /> Maintenance</span>
           </div>
-          <button
-            onClick={handleFullscreen}
-            className="p-3 bg-muted rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          >
-            {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+          <button className="p-3 bg-muted rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <Maximize2 size={20} />
           </button>
         </div>
       </div>
@@ -309,13 +228,12 @@ export default function FloorMonitor() {
                       style={{ borderTopColor: isPaused ? '#f59e0b' : getMachineColorCode(machine.status) }}
                     >
                       <div className="p-5 relative">
-                        {/* Machine header — NAME big, CODE small */}
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <h3 className="text-2xl font-black tracking-tight">{machine.machineName}</h3>
-                            <p className="text-xs text-muted-foreground font-medium">{machine.machineCode}</p>
+                            <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
+                            <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
                           </div>
-                          <div className="relative flex h-6 w-6">
+                          <div className="relative flex h-5 w-5">
                             {machine.status === "running" && !isPaused && (
                               <>
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -325,21 +243,25 @@ export default function FloorMonitor() {
                             {isPaused && (
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                             )}
-                            <span className={`relative inline-flex rounded-full h-6 w-6 ${isPaused ? 'bg-amber-400' : getStatusDotColor(machine.status)}`}></span>
+                            <span className={`relative inline-flex rounded-full h-5 w-5 ${isPaused ? 'bg-amber-400' : getStatusDotColor(machine.status)}`}></span>
                           </div>
                         </div>
 
                         {/* Current Job */}
                         <div className="bg-muted rounded-lg p-3 mb-3">
                           <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
-                          <span className="text-xl font-black text-primary break-words block">
-                            {machine.currentJobName || "— IDLE —"}
+                          <span className="text-base font-bold text-primary break-words block">
+                            {machine.currentJobName || "--- IDLE ---"}
                           </span>
                         </div>
 
-                        {/* Live Timer */}
+                        {/* Live Timer + ETA */}
                         {activeInfo && (
-                          <MachineTimer step={activeInfo.step} job={activeInfo.job} isPaused={isPaused} />
+                          <MachineTimer
+                            step={activeInfo.step}
+                            job={activeInfo.job}
+                            isPaused={isPaused}
+                          />
                         )}
 
                         {/* Job Progress Bar */}
@@ -370,7 +292,7 @@ export default function FloorMonitor() {
                         {/* Up Next */}
                         <div className="bg-muted/50 rounded-lg p-3 mb-3">
                           <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Up Next</span>
-                          <span className="text-base font-bold text-foreground break-words block">
+                          <span className="text-sm font-semibold text-foreground break-words block">
                             {nextJob ? nextJob.jobName : "Queue empty"}
                           </span>
                         </div>
@@ -379,9 +301,11 @@ export default function FloorMonitor() {
                         {activeInfo && (
                           <div className={cn(
                             "border rounded-lg p-3 mb-3",
-                            isPaused ? "bg-amber-500/5 border-amber-500/30" : "bg-emerald-500/5 border-emerald-500/20"
+                            isPaused
+                              ? "bg-amber-500/5 border-amber-500/30"
+                              : "bg-emerald-500/5 border-emerald-500/20"
                           )}>
-                            <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center justify-between mb-2">
                               <div>
                                 <span className={cn(
                                   "text-[10px] uppercase tracking-wider font-bold block",
@@ -390,32 +314,39 @@ export default function FloorMonitor() {
                                   Step {activeInfo.step.stepNumber} — {isPaused ? "⏸ Paused" : "In Progress"}
                                 </span>
                                 <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
-                                {isPaused && (
-                                  <PauseBadge
-                                    pauseReason={activeInfo.step.pauseReason ?? null}
-                                    pausedAt={activeInfo.step.pausedAt ?? null}
-                                  />
+                              </div>
+
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-1.5">
+                                {isPaused ? (
+                                  <button
+                                    onClick={() => handleResume(activeInfo.step.id)}
+                                    disabled={resumeRouting.isPending}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+                                  >
+                                    <Play size={12} />
+                                    Resume
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => setPauseModal({ routingId: activeInfo.step.id, machineName: machine.machineName, jobCode: activeInfo.job.jobCode })}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-xs font-bold rounded-lg hover:bg-amber-500/20 transition-colors"
+                                    >
+                                      <Pause size={12} />
+                                      Pause
+                                    </button>
+                                    <button
+                                      onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
+                                      disabled={updateRouting.isPending}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                                    >
+                                      <CheckCircle size={12} />
+                                      Done
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                              {/* Pause / Resume button */}
-                              {isPaused ? (
-                                <button
-                                  onClick={() => handleResume(activeInfo.step.id)}
-                                  disabled={resumeRouting.isPending}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
-                                >
-                                  <Play size={12} />
-                                  Resume
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setPauseModal({ routingId: activeInfo.step.id, machineName: machine.machineName, jobCode: activeInfo.job.jobCode })}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/30 text-xs font-bold rounded-lg hover:bg-amber-500/20 transition-colors"
-                                >
-                                  <Pause size={12} />
-                                  Pause
-                                </button>
-                              )}
                             </div>
 
                             {activeInfo.step.notes && (
@@ -424,25 +355,14 @@ export default function FloorMonitor() {
                               </p>
                             )}
 
-                            {/* Full-width Mark Complete */}
                             {!isPaused && (
-                              <>
-                                <button
-                                  onClick={() => handleOpenCompleteModal(activeInfo.step, activeInfo.job)}
-                                  disabled={updateRouting.isPending}
-                                  className="w-full flex items-center justify-center gap-2 min-h-[48px] bg-emerald-500 text-white text-base font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 mb-2"
-                                >
-                                  <CheckCircle size={18} />
-                                  Mark Complete
-                                </button>
-                                <button
-                                  onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
-                                  className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
-                                >
-                                  <AlertTriangle size={10} />
-                                  Report Issue
-                                </button>
-                              </>
+                              <button
+                                onClick={() => handleOpenIssue(activeInfo.step, activeInfo.job)}
+                                className="flex items-center gap-1 text-[10px] text-amber-600 hover:text-amber-700 font-semibold transition-colors"
+                              >
+                                <AlertTriangle size={10} />
+                                Report Issue
+                              </button>
                             )}
                           </div>
                         )}
@@ -493,11 +413,11 @@ export default function FloorMonitor() {
                         <div className="flex justify-between items-end border-t border-border pt-3">
                           <div>
                             <span className="text-xs text-muted-foreground block mb-0.5">Operator</span>
-                            <span className="text-base font-bold">{machine.operatorName}</span>
+                            <span className="font-bold text-sm">{machine.operatorName}</span>
                           </div>
                           <div className={cn(
-                            "px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wider border",
-                            isPaused ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800" : getStatusColor(machine.status)
+                            "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border",
+                            isPaused ? "bg-amber-50 text-amber-700 border-amber-200" : getStatusColor(machine.status)
                           )}>
                             {isPaused ? "Paused" : machine.status}
                           </div>
@@ -511,7 +431,7 @@ export default function FloorMonitor() {
           </div>
         ))}
 
-      {/* Active Job Progress */}
+      {/* Active Jobs Progress */}
       {activeJobs.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-xl font-bold uppercase tracking-widest text-muted-foreground px-2 border-b border-border pb-2">
@@ -537,6 +457,7 @@ export default function FloorMonitor() {
                       {job.status}
                     </span>
                   </div>
+
                   {total > 0 && (
                     <div className="mb-4">
                       <div className="flex justify-between text-xs mb-1.5">
@@ -551,7 +472,8 @@ export default function FloorMonitor() {
                       </div>
                     </div>
                   )}
-                  {job.routing && job.routing.length > 0 && (
+
+                  {job.routing && (
                     <div className="flex items-center gap-1 flex-wrap">
                       {job.routing.map((step, idx) => (
                         <React.Fragment key={step.id}>
@@ -604,30 +526,23 @@ export default function FloorMonitor() {
                 <AlertTriangle size={18} className="text-amber-500" />
                 <h2 className="font-bold text-lg">Report Issue</h2>
               </div>
-              <button onClick={() => setIssueModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <X size={16} />
-              </button>
+              <button onClick={() => setIssueModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
                 <span className="text-muted-foreground">Step {issueModal.stepNumber} — </span>
                 <span className="font-bold">{issueModal.jobCode}</span>
               </div>
-              <div>
-                <label className="text-sm font-semibold text-foreground block mb-1.5">Describe the issue</label>
-                <textarea
-                  value={issueText}
-                  onChange={(e) => setIssueText(e.target.value)}
-                  placeholder="e.g. Ink density inconsistent, roller pressure off, colour shift detected..."
-                  rows={4}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                />
-              </div>
+              <textarea
+                value={issueText}
+                onChange={(e) => setIssueText(e.target.value)}
+                placeholder="e.g. Ink density inconsistent, colour shift detected..."
+                rows={4}
+                className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              />
             </div>
             <div className="flex gap-3 p-5 pt-0">
-              <button onClick={() => setIssueModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">
-                Cancel
-              </button>
+              <button onClick={() => setIssueModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">Cancel</button>
               <button
                 onClick={handleSubmitIssue}
                 disabled={!issueText.trim() || updateNotes.isPending}
@@ -635,72 +550,6 @@ export default function FloorMonitor() {
               >
                 <AlertTriangle size={14} />
                 {updateNotes.isPending ? "Saving..." : "Submit Issue"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mark Complete Modal */}
-      {completeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div className="flex items-center gap-2">
-                <CheckCircle size={18} className="text-emerald-500" />
-                <h2 className="font-bold text-lg">Mark Step Complete</h2>
-              </div>
-              <button onClick={() => setCompleteModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
-                <span className="font-bold">{completeModal.jobCode}</span>
-                <span className="text-muted-foreground"> — step completed</span>
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-foreground block mb-1.5">
-                  Actual sheets run
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={0}
-                    value={actualQtyInput}
-                    onChange={(e) => setActualQtyInput(e.target.value)}
-                    className="flex-1 px-3 py-2.5 bg-muted/50 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all"
-                    placeholder={String(completeModal.plannedQty)}
-                  />
-                  <span className="text-xs text-muted-foreground shrink-0">sheets</span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  Planned: <span className="font-semibold tabular-nums">{completeModal.plannedQty.toLocaleString()}</span> sheets
-                  {(() => {
-                    const qty = parseInt(actualQtyInput, 10);
-                    if (!isNaN(qty) && qty < completeModal.plannedQty) {
-                      return <span className="text-amber-600 font-semibold"> · {(completeModal.plannedQty - qty).toLocaleString()} wasted — will be logged</span>;
-                    }
-                    return null;
-                  })()}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 p-5 pt-0">
-              <button
-                onClick={handleSaveAndComplete}
-                disabled={updateRouting.isPending || actualQtyInput.trim() === "" || isNaN(parseInt(actualQtyInput, 10)) || parseInt(actualQtyInput, 10) < 0}
-                className="w-full px-4 py-2.5 text-sm font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <CheckCircle size={14} />
-                {updateRouting.isPending ? "Saving..." : "Save & Complete"}
-              </button>
-              <button
-                onClick={handleSkipAndComplete}
-                disabled={updateRouting.isPending}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-              >
-                Mark complete without counting
               </button>
             </div>
           </div>
@@ -716,9 +565,7 @@ export default function FloorMonitor() {
                 <Pause size={18} className="text-amber-500" />
                 <h2 className="font-bold text-lg">Pause Machine</h2>
               </div>
-              <button onClick={() => setPauseModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <X size={16} />
-              </button>
+              <button onClick={() => setPauseModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
@@ -735,7 +582,7 @@ export default function FloorMonitor() {
                       className={cn(
                         "w-full p-3 rounded-lg border-2 text-left transition-all flex items-center justify-between",
                         pauseReason === r.value
-                          ? "border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                          ? "border-amber-500 bg-amber-50 text-amber-800"
                           : "border-border hover:border-amber-300"
                       )}
                     >
@@ -757,9 +604,7 @@ export default function FloorMonitor() {
               </div>
             </div>
             <div className="flex gap-3 p-5 pt-0">
-              <button onClick={() => setPauseModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">
-                Cancel
-              </button>
+              <button onClick={() => setPauseModal(null)} className="flex-1 px-4 py-2.5 text-sm font-semibold bg-muted hover:bg-secondary rounded-lg transition-colors">Cancel</button>
               <button
                 onClick={handlePause}
                 disabled={!pauseReason || pauseRouting.isPending}
@@ -783,7 +628,8 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
     step.totalPausedSeconds ?? 0,
     isPaused
   );
-  const etaSeconds = step.etaSeconds ?? 0;
+
+  const etaSeconds = (step as any).etaSeconds ?? 0;
   const remaining = Math.max(0, etaSeconds - elapsed);
   const pct = etaSeconds > 0 ? Math.min(100, Math.round((elapsed / etaSeconds) * 100)) : 0;
   const isOvertime = elapsed > etaSeconds && etaSeconds > 0;
@@ -793,26 +639,25 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
   return (
     <div className={cn(
       "rounded-lg p-3 mb-3 border",
-      isPaused ? "bg-amber-50/50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" :
-      isOvertime ? "bg-rose-50/50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-800" :
-      "bg-blue-50/50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800"
+      isPaused ? "bg-amber-50/50 border-amber-200" :
+      isOvertime ? "bg-rose-50/50 border-rose-200" :
+      "bg-blue-50/50 border-blue-200"
     )}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <Timer size={12} className={isPaused ? "text-amber-600" : isOvertime ? "text-rose-600" : "text-blue-600"} />
-          <span className={cn("text-[10px] uppercase tracking-wider font-bold",
-            isPaused ? "text-amber-600" : isOvertime ? "text-rose-600" : "text-blue-600"
-          )}>
+          <span className={cn("text-[10px] uppercase tracking-wider font-bold", isPaused ? "text-amber-600" : isOvertime ? "text-rose-600" : "text-blue-600")}>
             {isPaused ? "Paused" : isOvertime ? "Overtime" : "Running"}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <Zap size={10} className="text-muted-foreground" />
           <span className="text-[10px] text-muted-foreground font-medium">
-            ETA: {step.etaFormatted ?? "—"}
+            ETA: {(step as any).etaFormatted ?? "—"}
           </span>
         </div>
       </div>
+
       <div className="grid grid-cols-2 gap-2 mb-2">
         <div>
           <span className="text-[10px] text-muted-foreground block">Elapsed</span>
@@ -827,19 +672,19 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
           </span>
         </div>
       </div>
+
       {etaSeconds > 0 && (
         <div className="w-full bg-white/60 rounded-full h-1.5 overflow-hidden">
           <div
-            className={cn("h-1.5 rounded-full transition-all duration-1000",
-              isPaused ? "bg-amber-400" : isOvertime ? "bg-rose-500" : "bg-blue-500"
-            )}
+            className={cn("h-1.5 rounded-full transition-all duration-1000", isPaused ? "bg-amber-400" : isOvertime ? "bg-rose-500" : "bg-blue-500")}
             style={{ width: `${Math.min(pct, 100)}%` }}
           />
         </div>
       )}
+
       {isPaused && step.pausedAt && (
-        <p className="text-[10px] text-amber-600 mt-1.5 font-medium tabular-nums">
-          ⏸ Since {new Date(step.pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        <p className="text-[10px] text-amber-600 mt-1.5 font-medium">
+          Paused at {new Date(step.pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
         </p>
       )}
     </div>
@@ -848,9 +693,9 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
 
 function getMachineColorCode(status: string) {
   switch (status.toLowerCase()) {
-    case 'running':     return '#22c55e';
-    case 'idle':        return '#9ca3af';
+    case 'running': return '#22c55e';
+    case 'idle': return '#9ca3af';
     case 'maintenance': return '#ef4444';
-    default:            return '#9ca3af';
+    default: return '#9ca3af';
   }
 }

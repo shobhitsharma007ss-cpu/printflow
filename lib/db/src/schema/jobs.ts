@@ -9,7 +9,6 @@ export const jobTemplatesTable = pgTable("job_templates", {
   templateName: text("template_name").notNull(),
   description: text("description"),
   routingSteps: integer("routing_steps").array().notNull().default([]),
-  stepEstimatesMinutes: integer("step_estimates_minutes").array().notNull().default([]),
 });
 
 export const jobsTable = pgTable("jobs", {
@@ -38,10 +37,21 @@ export const jobRoutingTable = pgTable("job_routing", {
   status: text("status").notNull().default("pending"), // pending/in-progress/paused/completed
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
-  pausedAt: text("paused_at"),
-  totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
-  pauseReason: text("pause_reason"),
-  estimatedMinutes: integer("estimated_minutes").notNull().default(0),
+  pausedAt: text("paused_at"),                        // NEW — when step was paused
+  totalPausedSeconds: integer("total_paused_seconds").notNull().default(0), // NEW — accumulated pause time
+  notes: text("notes"),
+});
+
+// NEW — tracks every pause reason (blanket wash, plate change etc.)
+export const jobInterruptionsTable = pgTable("job_interruptions", {
+  id: serial("id").primaryKey(),
+  jobRoutingId: integer("job_routing_id").notNull().references(() => jobRoutingTable.id),
+  jobId: integer("job_id").notNull().references(() => jobsTable.id),
+  machineId: integer("machine_id").notNull().references(() => machinesTable.id),
+  reason: text("reason").notNull(), // blanket-wash/plate-change/ink-change/paper-jam/breakdown/break/other
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  durationSeconds: integer("duration_seconds"), // filled when resumed
   notes: text("notes"),
 });
 
@@ -63,7 +73,7 @@ export const wastageLogTable = pgTable("wastage_log", {
   actualQty: numeric("actual_qty", { precision: 10, scale: 2 }).notNull(),
   wastageQty: numeric("wastage_qty", { precision: 10, scale: 2 }).notNull(),
   wastagePct: numeric("wastage_pct", { precision: 5, scale: 2 }).notNull(),
-  reason: text("reason").notNull(), // setup/mis-registration/client-correction/plate-change/other
+  reason: text("reason").notNull(),
   notes: text("notes"),
   loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -75,3 +85,4 @@ export type JobTemplate = typeof jobTemplatesTable.$inferSelect;
 export type JobRouting = typeof jobRoutingTable.$inferSelect;
 export type JobMaterial = typeof jobMaterialsTable.$inferSelect;
 export type WastageLog = typeof wastageLogTable.$inferSelect;
+export type JobInterruption = typeof jobInterruptionsTable.$inferSelect;
