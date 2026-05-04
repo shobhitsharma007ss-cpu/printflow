@@ -36,6 +36,7 @@ import type {
   ListJobsParams,
   ListWastageLogsParams,
   Machine,
+  MachineDowntimeRow,
   MarkAllNotificationsRead200,
   Material,
   Notification,
