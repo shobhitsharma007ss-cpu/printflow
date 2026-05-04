@@ -80,6 +80,33 @@ function formatSeconds(seconds: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+// ─── Pause duration hook (counts up while paused) ─────────────────────────────
+function usePauseDuration(pausedAt: string | null): number {
+  const [duration, setDuration] = useState(0);
+  useEffect(() => {
+    if (!pausedAt) { setDuration(0); return; }
+    const update = () => setDuration(Math.floor((Date.now() - new Date(pausedAt).getTime()) / 1000));
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [pausedAt]);
+  return duration;
+}
+
+// ─── Inline pause badge (reason + live duration) ──────────────────────────────
+function PauseBadge({ pauseReason, pausedAt }: { pauseReason: string | null; pausedAt: string | null }) {
+  const duration = usePauseDuration(pausedAt);
+  const label = PAUSE_REASONS.find(r => r.value === pauseReason)?.label ?? pauseReason ?? "Paused";
+  return (
+    <div className="mt-2 space-y-1">
+      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">{label}</p>
+      <p className="text-xs font-mono tabular-nums text-amber-600 dark:text-amber-500">
+        Paused {formatSeconds(duration)}
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FloorMonitor() {
   const { data: machines, isLoading: machinesLoading } = useMachines();
@@ -340,6 +367,12 @@ export default function FloorMonitor() {
                                   Step {activeInfo.step.stepNumber} — {isPaused ? "⏸ Paused" : "In Progress"}
                                 </span>
                                 <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
+                                {isPaused && (
+                                  <PauseBadge
+                                    pauseReason={(activeInfo.step as any).pauseReason ?? null}
+                                    pausedAt={(activeInfo.step as any).pausedAt ?? null}
+                                  />
+                                )}
                               </div>
                               {/* Pause / Resume button */}
                               {isPaused ? (
@@ -716,8 +749,8 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
         </div>
       )}
       {isPaused && (step as any).pausedAt && (
-        <p className="text-[10px] text-amber-600 mt-1.5 font-medium">
-          Paused at {new Date((step as any).pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+        <p className="text-[10px] text-amber-600 mt-1.5 font-medium tabular-nums">
+          ⏸ Since {new Date((step as any).pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
         </p>
       )}
     </div>

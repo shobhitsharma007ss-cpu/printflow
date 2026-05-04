@@ -93,7 +93,7 @@ async function buildJobWithDetails(jobId: number) {
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job) return null;
 
-  const routing = await db
+  const rawRouting = await db
     .select({
       id: jobRoutingTable.id,
       jobId: jobRoutingTable.jobId,
@@ -105,12 +105,25 @@ async function buildJobWithDetails(jobId: number) {
       status: jobRoutingTable.status,
       startedAt: jobRoutingTable.startedAt,
       completedAt: jobRoutingTable.completedAt,
+      pausedAt: jobRoutingTable.pausedAt,
+      totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
+      pauseReason: jobRoutingTable.pauseReason,
+      estimatedMinutes: jobRoutingTable.estimatedMinutes,
       notes: jobRoutingTable.notes,
     })
     .from(jobRoutingTable)
     .leftJoin(machinesTable, eq(jobRoutingTable.machineId, machinesTable.id))
     .where(eq(jobRoutingTable.jobId, jobId))
     .orderBy(jobRoutingTable.stepNumber);
+
+  const routing = rawRouting.map(r => {
+    const etaSeconds = (r.estimatedMinutes ?? 0) * 60;
+    const mins = r.estimatedMinutes ?? 0;
+    const etaFormatted = mins === 0 ? null
+      : mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 > 0 ? ` ${mins % 60}m` : ""}`
+      : `${mins}m`;
+    return { ...r, etaSeconds, etaFormatted };
+  });
 
   const materials = await db
     .select({
@@ -217,12 +230,18 @@ router.post("/jobs", async (req, res): Promise<void> => {
   for (let i = 0; i < routingMachineIds.length; i++) {
     const machineId = routingMachineIds[i];
     const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, machineId));
+    const estimatedMinutes = machine?.machineType === "printing" ? 120
+      : machine?.machineType === "cutting" ? 60
+      : machine?.machineType === "coating" ? 90
+      : machine?.machineType === "gluing" ? 90
+      : 30;
     await db.insert(jobRoutingTable).values({
       jobId: job.id,
       stepNumber: i + 1,
       machineId,
       operatorName: machine?.operatorName ?? null,
       status: "pending",
+      estimatedMinutes,
     });
   }
 

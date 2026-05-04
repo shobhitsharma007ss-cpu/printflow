@@ -168,15 +168,15 @@ export async function autoSeedIfEmpty(): Promise<void> {
     }).returning();
 
     await db.insert(jobRoutingTable).values([
-      { jobId: job1.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "completed", startedAt: "2026-03-20T08:00:00Z", completedAt: "2026-03-20T10:00:00Z" },
-      { jobId: job1.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "completed", startedAt: "2026-03-20T10:30:00Z", completedAt: "2026-03-20T14:00:00Z" },
-      { jobId: job1.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "completed", startedAt: "2026-03-20T16:30:00Z", completedAt: "2026-03-20T18:00:00Z" },
-      { jobId: job1.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "completed", startedAt: "2026-03-21T08:00:00Z", completedAt: "2026-03-21T11:00:00Z" },
-      { jobId: job2.id, stepNumber: 1, machineId: komoriGL37.id, operatorName: "Operator 2", status: "in-progress", startedAt: "2026-03-25T08:00:00Z" },
-      { jobId: job3.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "pending" },
-      { jobId: job3.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "pending" },
-      { jobId: job3.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "pending" },
-      { jobId: job3.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "pending" },
+      { jobId: job1.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "completed", startedAt: "2026-03-20T08:00:00Z", completedAt: "2026-03-20T10:00:00Z", estimatedMinutes: 30 },
+      { jobId: job1.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "completed", startedAt: "2026-03-20T10:30:00Z", completedAt: "2026-03-20T14:00:00Z", estimatedMinutes: 120 },
+      { jobId: job1.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "completed", startedAt: "2026-03-20T16:30:00Z", completedAt: "2026-03-20T18:00:00Z", estimatedMinutes: 60 },
+      { jobId: job1.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "completed", startedAt: "2026-03-21T08:00:00Z", completedAt: "2026-03-21T11:00:00Z", estimatedMinutes: 90 },
+      { jobId: job2.id, stepNumber: 1, machineId: komoriGL37.id, operatorName: "Operator 2", status: "in-progress", startedAt: "2026-03-25T08:00:00Z", estimatedMinutes: 120 },
+      { jobId: job3.id, stepNumber: 1, machineId: wohlenberg.id, operatorName: "Operator 10", status: "pending", estimatedMinutes: 30 },
+      { jobId: job3.id, stepNumber: 2, machineId: komoriLA37.id, operatorName: "Operator 1", status: "pending", estimatedMinutes: 120 },
+      { jobId: job3.id, stepNumber: 3, machineId: bobstDC1.id, operatorName: "Operator 4", status: "pending", estimatedMinutes: 60 },
+      { jobId: job3.id, stepNumber: 4, machineId: bobstGluer.id, operatorName: "Operator 6", status: "pending", estimatedMinutes: 90 },
     ]);
 
     await db.insert(jobMaterialsTable).values([

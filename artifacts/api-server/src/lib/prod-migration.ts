@@ -11,6 +11,31 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 6: Add estimated_minutes to job_routing ──────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing
+        ADD COLUMN IF NOT EXISTS estimated_minutes INTEGER NOT NULL DEFAULT 0;
+    `);
+    // Backfill existing rows based on machine type
+    await db.execute(sql`
+      UPDATE job_routing jr
+      SET estimated_minutes = CASE
+        WHEN m.machine_type = 'printing'  THEN 120
+        WHEN m.machine_type = 'cutting'   THEN 60
+        WHEN m.machine_type = 'coating'   THEN 90
+        WHEN m.machine_type = 'gluing'    THEN 90
+        ELSE 30
+      END
+      FROM machines m
+      WHERE jr.machine_id = m.id
+        AND jr.estimated_minutes = 0;
+    `);
+    logger.info("Migration 6: estimated_minutes column ensured on job_routing.");
+  } catch (err) {
+    logger.error("Migration 6 estimated_minutes failed:", err);
+  }
+
   // ─── MIGRATION 5: Add pause columns to job_routing ───────────────────
   try {
     await db.execute(sql`

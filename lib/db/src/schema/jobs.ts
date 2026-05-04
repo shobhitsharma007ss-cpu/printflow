@@ -40,6 +40,7 @@ export const jobRoutingTable = pgTable("job_routing", {
   pausedAt: text("paused_at"),
   totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
   pauseReason: text("pause_reason"),
+  estimatedMinutes: integer("estimated_minutes").notNull().default(0),
   notes: text("notes"),
 });
 
