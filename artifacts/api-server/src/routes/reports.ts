@@ -170,9 +170,10 @@ router.get("/reports/job-cost/:jobId", async (req, res): Promise<void> => {
 });
 
 router.get("/reports/machine-downtime", async (_req, res): Promise<void> => {
-  // Fetch all routing rows with any machines (even 0 paused seconds)
+  // Fetch all machines so chart always shows full fleet (even machines with 0 downtime)
   const allMachines = await db.select().from(machinesTable).orderBy(machinesTable.id);
 
+  // Only fetch routing rows that have actually been paused (total_paused_seconds > 0)
   const pausedRows = await db
     .select({
       machineId: jobRoutingTable.machineId,
