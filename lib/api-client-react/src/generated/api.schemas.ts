@@ -531,6 +531,7 @@ export const UpdateJobRoutingStatusBodyStatus = {
 export type UpdateJobRoutingStatusBody = {
   status: UpdateJobRoutingStatusBodyStatus;
   notes?: string;
+  actualQty?: number;
 };
 
 export type UpdateJobRoutingStatus200DeductionsItem = {

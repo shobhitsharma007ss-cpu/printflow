@@ -807,6 +807,7 @@ export const UpdateJobRoutingStatusParams = zod.object({
 export const UpdateJobRoutingStatusBody = zod.object({
   status: zod.enum(["pending", "in-progress", "completed"]),
   notes: zod.string().optional(),
+  actualQty: zod.number().optional(),
 });
 
 export const UpdateJobRoutingStatusResponse = zod

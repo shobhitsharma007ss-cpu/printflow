@@ -122,6 +122,8 @@ export default function FloorMonitor() {
   const [pauseModal, setPauseModal] = useState<{ routingId: number; machineName: string; jobCode: string } | null>(null);
   const [pauseReason, setPauseReason] = useState("");
   const [pauseNotes, setPauseNotes] = useState("");
+  const [completeModal, setCompleteModal] = useState<{ routingId: number; plannedQty: number; jobCode: string } | null>(null);
+  const [actualQtyInput, setActualQtyInput] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [clockTime, setClockTime] = useState(() => {
     const now = new Date();
@@ -177,8 +179,29 @@ export default function FloorMonitor() {
     return null;
   };
 
-  const handleAdvanceStep = (routingId: number, newStatus: "pending" | "in-progress" | "completed") => {
-    updateRouting.mutate({ id: routingId, data: { status: newStatus } });
+  const handleAdvanceStep = (routingId: number, newStatus: "pending" | "in-progress" | "completed", actualQty?: number) => {
+    updateRouting.mutate({ id: routingId, data: { status: newStatus, ...(actualQty !== undefined ? { actualQty } : {}) } });
+  };
+
+  const handleOpenCompleteModal = (step: { id: number }, job: JobWithDetails) => {
+    setActualQtyInput(String(job.qtySheets));
+    setCompleteModal({ routingId: step.id, plannedQty: job.qtySheets, jobCode: job.jobCode });
+  };
+
+  const handleSaveAndComplete = () => {
+    if (!completeModal) return;
+    const qty = parseInt(actualQtyInput, 10);
+    const validQty = !isNaN(qty) && qty >= 0 ? qty : undefined;
+    handleAdvanceStep(completeModal.routingId, "completed", validQty);
+    setCompleteModal(null);
+    setActualQtyInput("");
+  };
+
+  const handleSkipAndComplete = () => {
+    if (!completeModal) return;
+    handleAdvanceStep(completeModal.routingId, "completed");
+    setCompleteModal(null);
+    setActualQtyInput("");
   };
 
   const handleOpenIssue = (step: JobRouting, job: JobWithDetails) => {
@@ -405,7 +428,7 @@ export default function FloorMonitor() {
                             {!isPaused && (
                               <>
                                 <button
-                                  onClick={() => handleAdvanceStep(activeInfo.step.id, "completed")}
+                                  onClick={() => handleOpenCompleteModal(activeInfo.step, activeInfo.job)}
                                   disabled={updateRouting.isPending}
                                   className="w-full flex items-center justify-center gap-2 min-h-[48px] bg-emerald-500 text-white text-base font-bold rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 mb-2"
                                 >
@@ -612,6 +635,72 @@ export default function FloorMonitor() {
               >
                 <AlertTriangle size={14} />
                 {updateNotes.isPending ? "Saving..." : "Submit Issue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Complete Modal */}
+      {completeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm animate-fade-in">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-emerald-500" />
+                <h2 className="font-bold text-lg">Mark Step Complete</h2>
+              </div>
+              <button onClick={() => setCompleteModal(null)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm">
+                <span className="font-bold">{completeModal.jobCode}</span>
+                <span className="text-muted-foreground"> — step completed</span>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-foreground block mb-1.5">
+                  Actual sheets run
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={0}
+                    value={actualQtyInput}
+                    onChange={(e) => setActualQtyInput(e.target.value)}
+                    className="flex-1 px-3 py-2.5 bg-muted/50 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all"
+                    placeholder={String(completeModal.plannedQty)}
+                  />
+                  <span className="text-xs text-muted-foreground shrink-0">sheets</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Planned: <span className="font-semibold tabular-nums">{completeModal.plannedQty.toLocaleString()}</span> sheets
+                  {(() => {
+                    const qty = parseInt(actualQtyInput, 10);
+                    if (!isNaN(qty) && qty < completeModal.plannedQty) {
+                      return <span className="text-amber-600 font-semibold"> · {(completeModal.plannedQty - qty).toLocaleString()} wasted — will be logged</span>;
+                    }
+                    return null;
+                  })()}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 p-5 pt-0">
+              <button
+                onClick={handleSaveAndComplete}
+                disabled={updateRouting.isPending}
+                className="w-full px-4 py-2.5 text-sm font-bold bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <CheckCircle size={14} />
+                {updateRouting.isPending ? "Saving..." : "Save & Complete"}
+              </button>
+              <button
+                onClick={handleSkipAndComplete}
+                disabled={updateRouting.isPending}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              >
+                Mark complete without counting
               </button>
             </div>
           </div>

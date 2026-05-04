@@ -10,4 +10,5 @@ import type { UpdateJobRoutingStatusBodyStatus } from "./updateJobRoutingStatusB
 export type UpdateJobRoutingStatusBody = {
   status: UpdateJobRoutingStatusBodyStatus;
   notes?: string;
+  actualQty?: number;
 };

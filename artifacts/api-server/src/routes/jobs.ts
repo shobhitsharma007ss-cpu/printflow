@@ -408,6 +408,26 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   if (parsed.data.status === "completed") {
     await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
 
+    // Auto-log wastage if actualQty provided and job has a primary material
+    if (parsed.data.actualQty !== undefined && job?.materialId) {
+      const plannedQty = job.qtySheets;
+      const actualQtyVal = parsed.data.actualQty;
+      if (actualQtyVal < plannedQty) {
+        const wastageQty = plannedQty - actualQtyVal;
+        const wastagePct = plannedQty > 0 ? (wastageQty / plannedQty) * 100 : 0;
+        await db.insert(wastageLogTable).values({
+          jobId: job.id,
+          materialId: job.materialId,
+          plannedQty: String(plannedQty),
+          actualQty: String(actualQtyVal),
+          wastageQty: String(wastageQty.toFixed(2)),
+          wastagePct: String(wastagePct.toFixed(2)),
+          reason: "other",
+          notes: "Auto-logged from step completion",
+        });
+      }
+    }
+
     const allSteps = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, routing.jobId));
     const allDone = allSteps.every(s => s.id === routing.id ? true : s.status === "completed");
 
