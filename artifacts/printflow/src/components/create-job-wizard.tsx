@@ -766,7 +766,6 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
   const computedInks = useMemo((): InkEntry[] => {
     if (!materials) return [];
     const consumables = materials.filter((m) => m.materialType === "consumable");
-    console.log("consumables found:", consumables.map(m => ({ name: m.materialName, subType: m.subType, vendorName: (m as any).vendorName })));
     return wantedItems
       .map((item) => {
         const name = (m: { materialName: string }) => m.materialName.toLowerCase();
@@ -781,7 +780,7 @@ function Step4Inks({ form, setForm, qtyNum }: { form: JobForm; setForm: React.Di
           unit: mat.unit,
           planned: existing?.planned ?? defaultEstimate,
           available: parseFloat(String(mat.currentQty)),
-          vendorName: (mat as any).vendorName ?? undefined,
+          vendorName: mat.vendorName ?? undefined,
         };
       })
       .filter(Boolean) as InkEntry[];

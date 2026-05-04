@@ -11,5 +11,6 @@ export interface JobTemplate {
   templateName: string;
   description?: string | null;
   routingSteps: number[];
+  stepEstimatesMinutes: number[];
   machineNames: string[];
 }

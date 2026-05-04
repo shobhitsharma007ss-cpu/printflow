@@ -88,16 +88,16 @@ export async function autoSeedIfEmpty(): Promise<void> {
       bobstDC1, bobstDC2, bobstGluer, dgmGluer, hyongJungGluer,
       singleCoater, wohlenberg,
     ] = await db.insert(machinesTable).values([
-      { machineName: "Komori LA37", machineCode: "KOM-LA37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 12000, capabilities: ["print", "uv-single-pass", "texture", "drip-off"], status: "idle", operatorName: "Operator 1", notes: "Prints and applies UV coating, texture, drip-off in single pass. 12000 sheets/hour. Primary machine for UV/special finish jobs." },
-      { machineName: "Komori GL37", machineCode: "KOM-GL37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 13000, capabilities: ["print", "varnish-single-pass"], status: "running", operatorName: "Operator 2", notes: "Prints and applies varnish coating in a single pass. 13000 sheets/hour. Primary machine for varnish jobs." },
-      { machineName: "Planeta Super Variant", machineCode: "PLAN-SV", machineType: "printing", maxPaperWidth: "28in", maxPaperLength: "40in", speedPerHour: 5000, capabilities: ["print", "non-woven"], status: "idle", operatorName: "Operator 3", notes: "Legacy machine. 5000 sheets/hour. Only for non-woven fabric jobs and basic print. Not suitable for modern packaging jobs." },
-      { machineName: "Bobst Die Cutter 1", machineCode: "BOB-DC1", machineType: "cutting", capabilities: ["die-cutting"], status: "idle", operatorName: "Operator 4" },
-      { machineName: "Bobst Die Cutter 2", machineCode: "BOB-DC2", machineType: "cutting", capabilities: ["die-cutting"], status: "maintenance", operatorName: "Operator 5" },
-      { machineName: "Bobst Folder Gluer", machineCode: "BOB-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 6" },
-      { machineName: "DGM Folder Gluer", machineCode: "DGM-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 7" },
-      { machineName: "Hyong Jung Folder Gluer", machineCode: "HJ-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 8" },
-      { machineName: "Single Coater", machineCode: "COAT-01", machineType: "coating", capabilities: ["uv-standalone", "varnish-standalone"], status: "idle", operatorName: "Operator 9", notes: "Standalone coating only. Used as standby when Komoris are busy or for jobs that need coating on already-printed sheets." },
-      { machineName: "Wohlenberg Cutter", machineCode: "WOHL-01", machineType: "cutting", capabilities: ["pre-press-cutting"], status: "idle", operatorName: "Operator 10", notes: "Pre-press cutter" },
+      { machineName: "Komori LA37", machineCode: "KOM-LA37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 12000, capabilities: ["print", "uv-single-pass", "texture", "drip-off"], status: "idle", operatorName: "Operator 1", description: "Prints and applies UV coating, texture, or drip-off in a single pass. 12 000 sph. Best for UV/special finish jobs.", notes: "Primary machine for UV/special finish jobs." },
+      { machineName: "Komori GL37", machineCode: "KOM-GL37", machineType: "printing", maxPaperWidth: "25in", maxPaperLength: "37in", speedPerHour: 13000, capabilities: ["print", "varnish-single-pass"], status: "running", operatorName: "Operator 2", description: "Prints and applies varnish in a single pass. 13 000 sph. Primary machine for varnish jobs.", notes: "Primary machine for varnish jobs." },
+      { machineName: "Planeta Super Variant", machineCode: "PLAN-SV", machineType: "printing", maxPaperWidth: "28in", maxPaperLength: "40in", speedPerHour: 5000, capabilities: ["print", "non-woven"], status: "idle", operatorName: "Operator 3", description: "Legacy press. 5 000 sph. Non-woven fabric and basic print only.", notes: "Not suitable for modern packaging jobs." },
+      { machineName: "Bobst Die Cutter 1", machineCode: "BOB-DC1", machineType: "cutting", capabilities: ["die-cutting"], status: "idle", operatorName: "Operator 4", description: "High-speed die cutting for folding cartons and packaging." },
+      { machineName: "Bobst Die Cutter 2", machineCode: "BOB-DC2", machineType: "cutting", capabilities: ["die-cutting"], status: "maintenance", operatorName: "Operator 5", description: "Secondary die cutter — currently under maintenance." },
+      { machineName: "Bobst Folder Gluer", machineCode: "BOB-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 6", description: "High-speed folder gluer for carton boxes." },
+      { machineName: "DGM Folder Gluer", machineCode: "DGM-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 7", description: "Mid-speed folder gluer, used for smaller runs." },
+      { machineName: "Hyong Jung Folder Gluer", machineCode: "HJ-FG", machineType: "gluing", capabilities: ["folder-gluing"], status: "idle", operatorName: "Operator 8", description: "Compact folder gluer for short-run jobs." },
+      { machineName: "Single Coater", machineCode: "COAT-01", machineType: "coating", capabilities: ["uv-standalone", "varnish-standalone"], status: "idle", operatorName: "Operator 9", description: "Standalone coating unit. UV or varnish on already-printed sheets.", notes: "Used as standby when Komoris are busy." },
+      { machineName: "Wohlenberg Cutter", machineCode: "WOHL-01", machineType: "cutting", capabilities: ["pre-press-cutting"], status: "idle", operatorName: "Operator 10", description: "Pre-press guillotine cutter for sheet preparation." },
     ]).returning();
 
     const [fullFinishUv, fullFinishVarnish, printOnly, printStandaloneCoat, nonWoven] = await db.insert(jobTemplatesTable).values([
@@ -105,26 +105,31 @@ export async function autoSeedIfEmpty(): Promise<void> {
         templateName: "Full Finish Box (UV)",
         description: "Full finish with UV: Wohlenberg → Komori LA37 (print + UV single pass) → Bobst DC1 → Bobst Gluer",
         routingSteps: [wohlenberg.id, komoriLA37.id, bobstDC1.id, bobstGluer.id],
+        stepEstimatesMinutes: [30, 120, 60, 90],
       },
       {
         templateName: "Full Finish Box (Varnish)",
         description: "Full finish with Varnish: Wohlenberg → Komori GL37 (print + varnish single pass) → Bobst DC1 → Bobst Gluer",
         routingSteps: [wohlenberg.id, komoriGL37.id, bobstDC1.id, bobstGluer.id],
+        stepEstimatesMinutes: [30, 120, 60, 90],
       },
       {
         templateName: "Print Only",
         description: "Print only: Komori GL37 or LA37 (auto-assign based on availability)",
         routingSteps: [komoriGL37.id],
+        stepEstimatesMinutes: [120],
       },
       {
         templateName: "Print + Standalone Coat",
         description: "For already printed sheets: Single Coater → Bobst DC1",
         routingSteps: [singleCoater.id, bobstDC1.id],
+        stepEstimatesMinutes: [90, 60],
       },
       {
         templateName: "Non Woven",
         description: "Non-woven: Planeta → Bobst DC1",
         routingSteps: [planetaVariant.id, bobstDC1.id],
+        stepEstimatesMinutes: [120, 60],
       },
     ]).returning();
 

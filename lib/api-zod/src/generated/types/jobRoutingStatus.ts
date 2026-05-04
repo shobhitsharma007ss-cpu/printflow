@@ -12,5 +12,6 @@ export type JobRoutingStatus =
 export const JobRoutingStatus = {
   pending: "pending",
   "in-progress": "in-progress",
+  paused: "paused",
   completed: "completed",
 } as const;

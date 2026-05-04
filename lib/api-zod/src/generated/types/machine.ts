@@ -19,6 +19,7 @@ export interface Machine {
   capabilities: string[];
   status: MachineStatus;
   operatorName: string;
+  description?: string | null;
   notes?: string | null;
   currentJobName?: string | null;
 }

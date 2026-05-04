@@ -220,9 +220,13 @@ router.post("/jobs", async (req, res): Promise<void> => {
 
   // Determine routing steps
   let routingMachineIds: number[] = [];
+  let templateStepEstimates: number[] = [];
   if (templateId) {
     const [template] = await db.select().from(jobTemplatesTable).where(eq(jobTemplatesTable.id, templateId));
-    if (template) routingMachineIds = template.routingSteps;
+    if (template) {
+      routingMachineIds = template.routingSteps;
+      templateStepEstimates = template.stepEstimatesMinutes ?? [];
+    }
   } else if (customRouting && customRouting.length > 0) {
     routingMachineIds = customRouting;
   }
@@ -230,7 +234,10 @@ router.post("/jobs", async (req, res): Promise<void> => {
   for (let i = 0; i < routingMachineIds.length; i++) {
     const machineId = routingMachineIds[i];
     const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, machineId));
-    const estimatedMinutes = machine?.machineType === "printing" ? 120
+    const templateEstimate = templateStepEstimates[i];
+    const estimatedMinutes = (templateEstimate && templateEstimate > 0)
+      ? templateEstimate
+      : machine?.machineType === "printing" ? 120
       : machine?.machineType === "cutting" ? 60
       : machine?.machineType === "coating" ? 90
       : machine?.machineType === "gluing" ? 90

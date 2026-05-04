@@ -143,6 +143,7 @@ export interface Machine {
   capabilities: string[];
   status: MachineStatus;
   operatorName: string;
+  description?: string | null;
   notes?: string | null;
   currentJobName?: string | null;
 }
@@ -184,6 +185,7 @@ export interface JobTemplate {
   templateName: string;
   description?: string | null;
   routingSteps: number[];
+  stepEstimatesMinutes: number[];
   machineNames: string[];
 }
 
@@ -199,6 +201,7 @@ export type JobRoutingStatus =
 export const JobRoutingStatus = {
   pending: "pending",
   "in-progress": "in-progress",
+  paused: "paused",
   completed: "completed",
 } as const;
 
@@ -213,6 +216,12 @@ export interface JobRouting {
   status: JobRoutingStatus;
   startedAt?: string | null;
   completedAt?: string | null;
+  pausedAt?: string | null;
+  totalPausedSeconds?: number | null;
+  pauseReason?: string | null;
+  estimatedMinutes?: number | null;
+  etaSeconds?: number | null;
+  etaFormatted?: string | null;
   notes?: string | null;
 }
 

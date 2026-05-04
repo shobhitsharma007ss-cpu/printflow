@@ -369,8 +369,8 @@ export default function FloorMonitor() {
                                 <span className="text-xs font-semibold text-foreground">{activeInfo.job.jobCode}</span>
                                 {isPaused && (
                                   <PauseBadge
-                                    pauseReason={(activeInfo.step as any).pauseReason ?? null}
-                                    pausedAt={(activeInfo.step as any).pausedAt ?? null}
+                                    pauseReason={activeInfo.step.pauseReason ?? null}
+                                    pausedAt={activeInfo.step.pausedAt ?? null}
                                   />
                                 )}
                               </div>
@@ -691,10 +691,10 @@ export default function FloorMonitor() {
 function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithDetails; isPaused: boolean }) {
   const elapsed = useLiveTimer(
     step.startedAt ?? null,
-    (step as any).totalPausedSeconds ?? 0,
+    step.totalPausedSeconds ?? 0,
     isPaused
   );
-  const etaSeconds = (step as any).etaSeconds ?? 0;
+  const etaSeconds = step.etaSeconds ?? 0;
   const remaining = Math.max(0, etaSeconds - elapsed);
   const pct = etaSeconds > 0 ? Math.min(100, Math.round((elapsed / etaSeconds) * 100)) : 0;
   const isOvertime = elapsed > etaSeconds && etaSeconds > 0;
@@ -720,7 +720,7 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
         <div className="flex items-center gap-1">
           <Zap size={10} className="text-muted-foreground" />
           <span className="text-[10px] text-muted-foreground font-medium">
-            ETA: {(step as any).etaFormatted ?? "—"}
+            ETA: {step.etaFormatted ?? "—"}
           </span>
         </div>
       </div>
@@ -748,9 +748,9 @@ function MachineTimer({ step, job, isPaused }: { step: JobRouting; job: JobWithD
           />
         </div>
       )}
-      {isPaused && (step as any).pausedAt && (
+      {isPaused && step.pausedAt && (
         <p className="text-[10px] text-amber-600 mt-1.5 font-medium tabular-nums">
-          ⏸ Since {new Date((step as any).pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+          ⏸ Since {new Date(step.pausedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
         </p>
       )}
     </div>

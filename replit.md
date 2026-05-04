@@ -40,13 +40,24 @@ artifacts-monorepo/
 - `materials` — all materials (board/paper/consumable), with dimensions/grain fields
 - `material_vendors` — many-to-many linking materials to vendors
 - `stock_inward` — stock receipt tracking with brand field (nullable)
-- `machines` — machine fleet with capabilities/status
-- `job_templates` — reusable routing templates
+- `machines` — machine fleet with capabilities/status/description (description: human-readable machine role/capability summary)
+- `job_templates` — reusable routing templates with stepEstimatesMinutes[] (per-step time estimates in minutes) and machineNames[]
 - `jobs` — production jobs with auto PF-XXX codes
-- `job_routing` — per-job machine routing steps (status: pending/in-progress/paused/completed; pausedAt, totalPausedSeconds, pauseReason for pause tracking)
+- `job_routing` — per-job machine routing steps (status: pending/in-progress/paused/completed; pausedAt, totalPausedSeconds, pauseReason for pause tracking; estimatedMinutes, etaSeconds, etaFormatted for ETA display)
 - `job_materials` — material allocation per job
 - `wastage_log` — wastage recording and tracking
 - `notifications` — in-app notifications (type, title, message, isRead, relatedId)
+
+## Production Migrations (prod-migration.ts)
+
+Migrations run on server startup (before auto-seed), in numbered order newest-first:
+- **Migration 8**: Adds `description TEXT` to `machines`, backfills descriptions for all 10 seeded machines
+- **Migration 7**: Adds `step_estimates_minutes INTEGER[]` to `job_templates`, backfills all 5 seeded templates
+- **Migration 6**: Adds `estimated_minutes` to `job_routing`
+- **Migration 5**: Adds pause columns (pausedAt, totalPausedSeconds, pauseReason) to `job_routing`
+- **Migrations 1–4**: Older schema additions (rate/wastage/reserved on materials, stock_inward, ghost cleanup, initial data)
+
+**Critical**: Migrations must run BEFORE `autoSeedIfEmpty()` — ordering guaranteed in `index.ts`.
 
 ## Frontend Pages
 

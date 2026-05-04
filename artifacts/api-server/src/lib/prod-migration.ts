@@ -11,6 +11,57 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 8: Add description to machines ─────────────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE machines
+        ADD COLUMN IF NOT EXISTS description TEXT;
+    `);
+    // Backfill descriptions for known machines
+    await db.execute(sql`
+      UPDATE machines SET description = CASE
+        WHEN machine_name = 'Komori LA37'          THEN 'Prints and applies UV coating, texture, or drip-off in a single pass. 12 000 sph. Best for UV/special finish jobs.'
+        WHEN machine_name = 'Komori GL37'          THEN 'Prints and applies varnish in a single pass. 13 000 sph. Primary machine for varnish jobs.'
+        WHEN machine_name = 'Planeta Super Variant' THEN 'Legacy press. 5 000 sph. Non-woven fabric and basic print only.'
+        WHEN machine_name = 'Single Coater'        THEN 'Standalone coating unit. UV or varnish on already-printed sheets.'
+        WHEN machine_name = 'Bobst Die Cutter 1'   THEN 'High-speed die cutting for folding cartons and packaging.'
+        WHEN machine_name = 'Bobst Die Cutter 2'   THEN 'Secondary die cutter — currently under maintenance.'
+        WHEN machine_name = 'Bobst Folder Gluer'   THEN 'High-speed folder gluer for carton boxes.'
+        WHEN machine_name = 'DGM Folder Gluer'     THEN 'Mid-speed folder gluer, used for smaller runs.'
+        WHEN machine_name = 'Hyong Jung Folder Gluer' THEN 'Compact folder gluer for short-run jobs.'
+        WHEN machine_name = 'Wohlenberg Cutter'    THEN 'Pre-press guillotine cutter for sheet preparation.'
+        ELSE description
+      END
+      WHERE description IS NULL;
+    `);
+    logger.info("Migration 8: description column ensured on machines.");
+  } catch (err) {
+    logger.error("Migration 8 description on machines failed:", err);
+  }
+
+  // ─── MIGRATION 7: Add step_estimates_minutes to job_templates ────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_templates
+        ADD COLUMN IF NOT EXISTS step_estimates_minutes INTEGER[] NOT NULL DEFAULT '{}';
+    `);
+    // Backfill known templates by name
+    await db.execute(sql`
+      UPDATE job_templates SET step_estimates_minutes = CASE
+        WHEN template_name = 'Full Finish Box (UV)'      THEN ARRAY[30,120,60,90]
+        WHEN template_name = 'Full Finish Box (Varnish)' THEN ARRAY[30,120,60,90]
+        WHEN template_name = 'Print Only'                THEN ARRAY[120]
+        WHEN template_name = 'Print + Standalone Coat'   THEN ARRAY[90,60]
+        WHEN template_name = 'Non Woven'                 THEN ARRAY[120,60]
+        ELSE step_estimates_minutes
+      END
+      WHERE array_length(step_estimates_minutes, 1) IS NULL;
+    `);
+    logger.info("Migration 7: step_estimates_minutes column ensured on job_templates.");
+  } catch (err) {
+    logger.error("Migration 7 step_estimates_minutes failed:", err);
+  }
+
   // ─── MIGRATION 6: Add estimated_minutes to job_routing ──────────────
   try {
     await db.execute(sql`

@@ -13,6 +13,7 @@ export const machinesTable = pgTable("machines", {
   capabilities: text("capabilities").array().notNull().default([]),
   status: text("status").notNull().default("idle"), // idle/running/maintenance
   operatorName: text("operator_name").notNull(),
+  description: text("description"),
   notes: text("notes"),
 });
 

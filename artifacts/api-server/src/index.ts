@@ -19,8 +19,8 @@ if (Number.isNaN(port) || port <= 0) {
 
 async function start() {
   try {
-    await autoSeedIfEmpty();
     await runProdMigration();
+    await autoSeedIfEmpty();
   } catch (err) {
     logger.error({ err }, "Auto-seed/migration error — server will start anyway");
   }

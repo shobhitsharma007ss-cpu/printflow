@@ -18,5 +18,11 @@ export interface JobRouting {
   status: JobRoutingStatus;
   startedAt?: string | null;
   completedAt?: string | null;
+  pausedAt?: string | null;
+  totalPausedSeconds?: number | null;
+  pauseReason?: string | null;
+  estimatedMinutes?: number | null;
+  etaSeconds?: number | null;
+  etaFormatted?: string | null;
   notes?: string | null;
 }

@@ -9,6 +9,7 @@ export const jobTemplatesTable = pgTable("job_templates", {
   templateName: text("template_name").notNull(),
   description: text("description"),
   routingSteps: integer("routing_steps").array().notNull().default([]),
+  stepEstimatesMinutes: integer("step_estimates_minutes").array().notNull().default([]),
 });
 
 export const jobsTable = pgTable("jobs", {
