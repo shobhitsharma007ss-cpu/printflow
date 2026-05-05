@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useMachines } from "@/hooks/use-machines";
 import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/hooks/use-jobs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, cn } from "@/lib/utils";
 import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap } from "lucide-react";
@@ -24,7 +23,11 @@ function usePauseRouting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason, notes }: { id: number; reason: string; notes?: string }) =>
-      apiClient.patch(`/job-routing/${id}/pause`, { reason, notes }).then(r => r.data),
+      fetch(`/api/job-routing/${id}/pause`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, notes }),
+      }).then(r => { if (!r.ok) throw new Error("Pause failed"); return r.json(); }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["machines"] });
@@ -36,7 +39,11 @@ function useResumeRouting() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: { id: number }) =>
-      apiClient.patch(`/job-routing/${id}/resume`, {}).then(r => r.data),
+      fetch(`/api/job-routing/${id}/resume`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }).then(r => { if (!r.ok) throw new Error("Resume failed"); return r.json(); }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
       queryClient.invalidateQueries({ queryKey: ["machines"] });

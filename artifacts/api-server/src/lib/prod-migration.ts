@@ -12,6 +12,18 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 9: Add coating_type + finish_requirements to jobs ────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE jobs
+        ADD COLUMN IF NOT EXISTS coating_type        TEXT,
+        ADD COLUMN IF NOT EXISTS finish_requirements TEXT[] NOT NULL DEFAULT '{}';
+    `);
+    logger.info("Migration 9: coating_type + finish_requirements columns ensured on jobs.");
+  } catch (err) {
+    logger.error("Migration 9 failed:", err);
+  }
+
   // ─── MIGRATION 8: Add description to machines ─────────────────────────
   try {
     await db.execute(sql`

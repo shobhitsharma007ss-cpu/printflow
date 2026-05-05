@@ -9,6 +9,7 @@ export const jobTemplatesTable = pgTable("job_templates", {
   templateName: text("template_name").notNull(),
   description: text("description"),
   routingSteps: integer("routing_steps").array().notNull().default([]),
+  stepEstimatesMinutes: integer("step_estimates_minutes").array().notNull().default([]),
 });
 
 export const jobsTable = pgTable("jobs", {
@@ -37,8 +38,9 @@ export const jobRoutingTable = pgTable("job_routing", {
   status: text("status").notNull().default("pending"), // pending/in-progress/paused/completed
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
-  pausedAt: text("paused_at"),                        // NEW — when step was paused
-  totalPausedSeconds: integer("total_paused_seconds").notNull().default(0), // NEW — accumulated pause time
+  pausedAt: text("paused_at"),
+  totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
+  estimatedMinutes: integer("estimated_minutes").notNull().default(0),
   notes: text("notes"),
 });
 

@@ -21,7 +21,6 @@ import {
   CreateWastageLogBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
-import { z } from "zod/v4";
 
 const router: IRouter = Router();
 
@@ -126,6 +125,7 @@ async function buildJobWithDetails(jobId: number) {
       completedAt: jobRoutingTable.completedAt,
       pausedAt: jobRoutingTable.pausedAt,
       totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
+      estimatedMinutes: jobRoutingTable.estimatedMinutes,
       notes: jobRoutingTable.notes,
       speedPerHour: machinesTable.speedPerHour,
     })
@@ -429,17 +429,12 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
 });
 
 // ─── PAUSE endpoint ───────────────────────────────────────────────────────────
-const PauseBody = z.object({
-  reason: z.string(), // blanket-wash/plate-change/ink-change/paper-jam/breakdown/break/other
-  notes: z.string().optional(),
-});
-
 router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const parsed = PauseBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "reason is required" }); return; }
+  const { reason, notes } = req.body as { reason?: string; notes?: string };
+  if (!reason || typeof reason !== "string") { res.status(400).json({ error: "reason is required" }); return; }
 
   const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
   if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
@@ -462,8 +457,8 @@ router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
     jobRoutingId: routing.id,
     jobId: routing.jobId,
     machineId: routing.machineId,
-    reason: parsed.data.reason,
-    notes: parsed.data.notes ?? null,
+    reason,
+    notes: notes ?? null,
   });
 
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
