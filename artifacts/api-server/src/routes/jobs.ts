@@ -21,7 +21,7 @@ import {
   CreateWastageLogBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const router: IRouter = Router();
 
