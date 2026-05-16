@@ -12,6 +12,23 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 10: Add needs_paper_trim, coating_method to jobs + step_code, prerequisite_codes to job_routing ───
+  try {
+    await db.execute(sql`
+      ALTER TABLE jobs
+        ADD COLUMN IF NOT EXISTS needs_paper_trim BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS coating_method   TEXT    NOT NULL DEFAULT 'inline';
+    `);
+    await db.execute(sql`
+      ALTER TABLE job_routing
+        ADD COLUMN IF NOT EXISTS step_code           TEXT     NOT NULL DEFAULT '',
+        ADD COLUMN IF NOT EXISTS prerequisite_codes  TEXT[]   NOT NULL DEFAULT '{}';
+    `);
+    logger.info("Migration 10: needs_paper_trim, coating_method, step_code, prerequisite_codes columns ensured.");
+  } catch (err) {
+    logger.error("Migration 10 failed:", err);
+  }
+
   // ─── MIGRATION 9: Add coating_type + finish_requirements to jobs ────────
   try {
     await db.execute(sql`
