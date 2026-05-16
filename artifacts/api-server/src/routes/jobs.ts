@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable } from "@workspace/db";
-import { jobInterruptionsTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -37,13 +36,28 @@ const MACHINE_SPEEDS: Record<string, number> = {
   "DGM Folder Gluer": 12000,
   "Hyong Jung Folder Gluer": 10000,
   "Single Coater": 6000,
-  "Wohlenberg Cutter": 999999, // near instant
+  "Wohlenberg Cutter": 3000,
 };
 
-// ─── ETA Calculator ───────────────────────────────────────────────────────────
+// OEE factor — realistic efficiency for Indian sheetfed packaging
+const OEE: Record<string, number> = {
+  "Komori LA37": 0.65,
+  "Komori GL37": 0.65,
+  "Bobst Die Cutter 1": 0.70,
+  "Bobst Die Cutter 2": 0.70,
+  "Bobst Folder Gluer": 0.60,
+  "DGM Folder Gluer": 0.60,
+  "Hyong Jung Folder Gluer": 0.60,
+  "Single Coater": 0.65,
+  "Wohlenberg Cutter": 0.80,
+  "Planeta Super Variant": 0.55,
+};
+
 function calcEtaSeconds(sheets: number, machineName: string, makereadyMins = 30): number {
   const sph = MACHINE_SPEEDS[machineName] ?? 8000;
-  const pressSeconds = (sheets / sph) * 3600;
+  const oee = OEE[machineName] ?? 0.65;
+  const effectiveSph = sph * oee;
+  const pressSeconds = (sheets / effectiveSph) * 3600;
   const makereadySeconds = makereadyMins * 60;
   return Math.round(pressSeconds + makereadySeconds);
 }
@@ -54,6 +68,119 @@ function formatEta(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.round((seconds % 3600) / 60);
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// ─── Prerequisite check ───────────────────────────────────────────────────────
+async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise<{ canStart: boolean; waitingFor: string[] }> {
+  if (!prerequisiteCodes || prerequisiteCodes.length === 0) {
+    return { canStart: true, waitingFor: [] };
+  }
+
+  const prereqSteps = await db
+    .select({ stepCode: jobRoutingTable.stepCode, status: jobRoutingTable.status })
+    .from(jobRoutingTable)
+    .where(eq(jobRoutingTable.jobId, jobId));
+
+  const waitingFor: string[] = [];
+  for (const code of prerequisiteCodes) {
+    const step = prereqSteps.find(s => s.stepCode === code);
+    if (!step || (step.status !== "completed" && step.status !== "skipped")) {
+      waitingFor.push(code);
+    }
+  }
+
+  return { canStart: waitingFor.length === 0, waitingFor };
+}
+
+// ─── Build routing steps from job properties ──────────────────────────────────
+interface RoutingStep {
+  stepCode: string;
+  machineId: number;
+  prerequisiteCodes: string[];
+  estimatedMinutes: number;
+}
+
+async function buildRoutingSteps(
+  job: { needsPaperTrim: boolean; coatingMethod: string; qtySheets: number },
+  templateMachineIds: number[]
+): Promise<RoutingStep[]> {
+
+  const machines = await db.select().from(machinesTable);
+  const getMachine = (name: string) => machines.find(m => m.machineName === name);
+
+  const wohlenberg = getMachine("Wohlenberg Cutter");
+  const singleCoater = getMachine("Single Coater");
+
+  const steps: RoutingStep[] = [];
+
+  // Step 1 — CUT (only if needs paper trim)
+  if (job.needsPaperTrim && wohlenberg) {
+    steps.push({
+      stepCode: "CUT",
+      machineId: wohlenberg.id,
+      prerequisiteCodes: [],
+      estimatedMinutes: Math.ceil(job.qtySheets / 1000 * 10) + 7, // 10 mins/1000 sheets + 7 setup
+    });
+  }
+
+  // For template-based routing — add each template machine as a step
+  for (let i = 0; i < templateMachineIds.length; i++) {
+    const machineId = templateMachineIds[i];
+    const machine = machines.find(m => m.id === machineId);
+    if (!machine) continue;
+
+    // Skip Single Coater if coating is inline
+    if (machine.machineName === "Single Coater" && job.coatingMethod === "inline") {
+      continue;
+    }
+
+    // Skip Wohlenberg from template — we handle it separately above
+    if (machine.machineName === "Wohlenberg Cutter") {
+      continue;
+    }
+
+    let stepCode = "PRINT";
+    if (machine.capabilities?.includes("die-cutting")) stepCode = "DIE_CUT";
+    else if (machine.capabilities?.includes("folder-gluing")) stepCode = "FOLD_GLUE";
+    else if (machine.capabilities?.includes("uv-standalone") || machine.capabilities?.includes("varnish-standalone")) stepCode = "COAT_STANDALONE";
+    else if (machine.capabilities?.includes("pre-press-cutting")) stepCode = "CUT";
+
+    // Prerequisites: depends on what steps came before
+    const prereqs: string[] = [];
+    if (steps.length > 0) {
+      prereqs.push(steps[steps.length - 1].stepCode);
+    }
+
+    const etaSecs = calcEtaSeconds(job.qtySheets, machine.machineName);
+    steps.push({
+      stepCode,
+      machineId,
+      prerequisiteCodes: prereqs,
+      estimatedMinutes: Math.ceil(etaSecs / 60),
+    });
+  }
+
+  // Add standalone coater step if needed (after PRINT)
+  if (job.coatingMethod === "standalone" && singleCoater) {
+    const printStepIdx = steps.findIndex(s => s.stepCode === "PRINT");
+    if (printStepIdx !== -1) {
+      // Insert after print, before die cut
+      const coatStep: RoutingStep = {
+        stepCode: "COAT_STANDALONE",
+        machineId: singleCoater.id,
+        prerequisiteCodes: ["PRINT"],
+        estimatedMinutes: Math.ceil(calcEtaSeconds(job.qtySheets, "Single Coater") / 60),
+      };
+      steps.splice(printStepIdx + 1, 0, coatStep);
+      // Fix die cut prerequisites
+      const dieCutStep = steps.find(s => s.stepCode === "DIE_CUT");
+      if (dieCutStep) {
+        dieCutStep.prerequisiteCodes = ["COAT_STANDALONE"];
+      }
+    }
+  }
+
+  return steps;
 }
 
 async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
@@ -116,11 +243,13 @@ async function buildJobWithDetails(jobId: number) {
       id: jobRoutingTable.id,
       jobId: jobRoutingTable.jobId,
       stepNumber: jobRoutingTable.stepNumber,
+      stepCode: jobRoutingTable.stepCode,
       machineId: jobRoutingTable.machineId,
       machineName: machinesTable.machineName,
       machineType: machinesTable.machineType,
       operatorName: jobRoutingTable.operatorName,
       status: jobRoutingTable.status,
+      prerequisiteCodes: jobRoutingTable.prerequisiteCodes,
       startedAt: jobRoutingTable.startedAt,
       completedAt: jobRoutingTable.completedAt,
       pausedAt: jobRoutingTable.pausedAt,
@@ -134,12 +263,10 @@ async function buildJobWithDetails(jobId: number) {
     .where(eq(jobRoutingTable.jobId, jobId))
     .orderBy(jobRoutingTable.stepNumber);
 
-  // Attach ETA to each routing step
-  const routingWithEta = routing.map(step => {
+  const routingWithEta = await Promise.all(routing.map(async step => {
     const sheets = job.qtySheets ?? 0;
     const machineName = step.machineName ?? "";
     const etaSeconds = calcEtaSeconds(sheets, machineName);
-    const etaFormatted = formatEta(etaSeconds);
 
     let elapsedSeconds = 0;
     let remainingSeconds = etaSeconds;
@@ -153,15 +280,20 @@ async function buildJobWithDetails(jobId: number) {
       remainingSeconds = Math.max(0, etaSeconds - elapsedSeconds);
     }
 
+    // Check if this step can start
+    const { canStart, waitingFor } = await canStartStep(jobId, step.prerequisiteCodes ?? []);
+
     return {
       ...step,
       etaSeconds,
-      etaFormatted,
+      etaFormatted: formatEta(etaSeconds),
       elapsedSeconds,
       remainingSeconds,
       remainingFormatted: formatEta(remainingSeconds),
+      canStart,
+      waitingFor,
     };
-  });
+  }));
 
   const materials = await db
     .select({
@@ -253,23 +385,39 @@ router.post("/jobs", async (req, res): Promise<void> => {
     status: "pending",
   }).returning();
 
-  let routingMachineIds: number[] = [];
+  // Build routing machine IDs from template or custom
+  let templateMachineIds: number[] = [];
   if (templateId) {
     const [template] = await db.select().from(jobTemplatesTable).where(eq(jobTemplatesTable.id, templateId));
-    if (template) routingMachineIds = template.routingSteps;
+    if (template) templateMachineIds = template.routingSteps;
   } else if (customRouting && customRouting.length > 0) {
-    routingMachineIds = customRouting;
+    templateMachineIds = customRouting;
   }
 
-  for (let i = 0; i < routingMachineIds.length; i++) {
-    const machineId = routingMachineIds[i];
-    const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, machineId));
+  // Build smart routing steps with prerequisites and conditional logic
+  const routingSteps = await buildRoutingSteps(
+    {
+      needsPaperTrim: job.needsPaperTrim ?? false,
+      coatingMethod: job.coatingMethod ?? "inline",
+      qtySheets: job.qtySheets,
+    },
+    templateMachineIds
+  );
+
+  // Insert routing steps
+  for (let i = 0; i < routingSteps.length; i++) {
+    const step = routingSteps[i];
+    const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, step.machineId));
     await db.insert(jobRoutingTable).values({
       jobId: job.id,
       stepNumber: i + 1,
-      machineId,
+      stepCode: step.stepCode,
+      machineId: step.machineId,
       operatorName: machine?.operatorName ?? null,
-      status: "pending",
+      prerequisiteCodes: step.prerequisiteCodes,
+      estimatedMinutes: step.estimatedMinutes,
+      // First step with no prerequisites is immediately ready
+      status: step.prerequisiteCodes.length === 0 ? "ready" : "pending",
     });
   }
 
@@ -331,12 +479,7 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
 
   const [job] = await db.update(jobsTable).set({ status: parsed.data.status }).where(eq(jobsTable.id, params.data.id)).returning();
 
-  if (parsed.data.status === "in-progress") {
-    const routing = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, job.id));
-    for (const step of routing) {
-      await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, step.machineId));
-    }
-  } else if (parsed.data.status === "completed" || parsed.data.status === "on-hold") {
+  if (parsed.data.status === "completed" || parsed.data.status === "on-hold") {
     const routing = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, job.id));
     for (const step of routing) {
       await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, step.machineId));
@@ -358,18 +501,31 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   const parsed = UpdateJobRoutingStatusBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, params.data.id));
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
+
+  // ─── PREREQUISITE CHECK before allowing start ─────────────────────────
+  if (parsed.data.status === "in-progress") {
+    const { canStart, waitingFor } = await canStartStep(routing.jobId, routing.prerequisiteCodes ?? []);
+    if (!canStart) {
+      res.status(409).json({
+        error: `Cannot start — waiting for: ${waitingFor.join(", ")}`,
+        waitingFor,
+      });
+      return;
+    }
+  }
+
   const updates: Record<string, unknown> = { status: parsed.data.status };
   if (parsed.data.notes) updates.notes = parsed.data.notes;
   if (parsed.data.status === "in-progress") updates.startedAt = new Date().toISOString();
   if (parsed.data.status === "completed") updates.completedAt = new Date().toISOString();
 
-  const [routing] = await db
+  const [updatedRouting] = await db
     .update(jobRoutingTable)
     .set(updates)
     .where(eq(jobRoutingTable.id, params.data.id))
     .returning();
-
-  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
 
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, routing.jobId));
@@ -385,7 +541,7 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
     await createNotification({
       type: "step-started",
       title: "Step Started",
-      message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} started on ${machine?.machineName ?? 'Unknown'}`,
+      message: `${job?.jobCode ?? ''} — ${routing.stepCode} started on ${machine?.machineName ?? 'Unknown'}`,
       relatedId: routing.jobId,
     });
   }
@@ -401,29 +557,37 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
       await createNotification({
         type: "job-completed",
         title: "Job Completed",
-        message: `${job.jobCode} — ${job.jobName} has been completed`,
+        message: `${job.jobCode} — ${job.jobName} completed`,
         relatedId: job.id,
       });
     } else {
+      // ─── Unlock next steps whose prerequisites are now met ────────────
+      // DO NOT auto-start. Just mark them as "ready" so they appear in queue.
+      for (const step of allSteps) {
+        if (step.status === "pending" && step.id !== routing.id) {
+          const { canStart } = await canStartStep(routing.jobId, step.prerequisiteCodes ?? []);
+          if (canStart) {
+            await db.update(jobRoutingTable)
+              .set({ status: "ready" })
+              .where(eq(jobRoutingTable.id, step.id));
+          }
+        }
+      }
+
       await createNotification({
         type: "step-completed",
-        title: "Step Completed",
-        message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} completed on ${machine?.machineName ?? 'Unknown'}`,
+        title: "Step Complete",
+        message: `${job?.jobCode ?? ''} — ${routing.stepCode} done on ${machine?.machineName ?? 'Unknown'}`,
         relatedId: routing.jobId,
       });
-      const nextStep = allSteps.find(s => s.stepNumber === routing.stepNumber + 1);
-      if (nextStep && nextStep.status === "pending") {
-        await db.update(jobRoutingTable).set({ status: "in-progress", startedAt: new Date().toISOString() }).where(eq(jobRoutingTable.id, nextStep.id));
-        await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, nextStep.machineId));
-      }
     }
   }
 
   res.json({
-    ...routing,
+    ...updatedRouting,
     machineName: machine?.machineName ?? null,
     machineType: machine?.machineType ?? null,
-    operatorName: routing.operatorName ?? machine?.operatorName ?? null,
+    operatorName: updatedRouting.operatorName ?? machine?.operatorName ?? null,
     deductions: deductions.length > 0 ? deductions : null,
   });
 });
@@ -434,25 +598,27 @@ router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const { reason, notes } = req.body as { reason?: string; notes?: string };
-  if (!reason || typeof reason !== "string") { res.status(400).json({ error: "reason is required" }); return; }
+  if (!reason || typeof reason !== "string") {
+    res.status(400).json({ error: "reason is required" });
+    return;
+  }
 
   const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
   if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
-  if (routing.status !== "in-progress") { res.status(400).json({ error: "Can only pause an in-progress step" }); return; }
+  if (routing.status !== "in-progress") {
+    res.status(400).json({ error: "Can only pause an in-progress step" });
+    return;
+  }
 
   const now = new Date().toISOString();
-
-  // Update routing to paused
   const [updated] = await db
     .update(jobRoutingTable)
     .set({ status: "paused", pausedAt: now })
     .where(eq(jobRoutingTable.id, id))
     .returning();
 
-  // Set machine to idle while paused
   await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
 
-  // Log the interruption
   await db.insert(jobInterruptionsTable).values({
     jobRoutingId: routing.id,
     jobId: routing.jobId,
@@ -466,7 +632,7 @@ router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
   await createNotification({
     type: "step-started",
     title: "Machine Paused",
-    message: `${machine?.machineName ?? 'Machine'} paused — ${parsed.data.reason.replace(/-/g, ' ')}`,
+    message: `${machine?.machineName ?? 'Machine'} paused — ${reason.replace(/-/g, ' ')}`,
     relatedId: routing.jobId,
   });
 
@@ -480,14 +646,16 @@ router.patch("/job-routing/:id/resume", async (req, res): Promise<void> => {
 
   const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
   if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
-  if (routing.status !== "paused") { res.status(400).json({ error: "Can only resume a paused step" }); return; }
+  if (routing.status !== "paused") {
+    res.status(400).json({ error: "Can only resume a paused step" });
+    return;
+  }
 
   const now = new Date();
   const pausedAt = routing.pausedAt ? new Date(routing.pausedAt) : now;
   const pauseDurationSeconds = Math.floor((now.getTime() - pausedAt.getTime()) / 1000);
   const newTotalPaused = (routing.totalPausedSeconds ?? 0) + pauseDurationSeconds;
 
-  // Close the open interruption record
   const openInterruptions = await db
     .select()
     .from(jobInterruptionsTable)
@@ -504,18 +672,12 @@ router.patch("/job-routing/:id/resume", async (req, res): Promise<void> => {
       .where(eq(jobInterruptionsTable.id, openInterruption.id));
   }
 
-  // Resume routing step
   const [updated] = await db
     .update(jobRoutingTable)
-    .set({
-      status: "in-progress",
-      pausedAt: null,
-      totalPausedSeconds: newTotalPaused,
-    })
+    .set({ status: "in-progress", pausedAt: null, totalPausedSeconds: newTotalPaused })
     .where(eq(jobRoutingTable.id, id))
     .returning();
 
-  // Set machine back to running
   await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
 
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
@@ -527,25 +689,29 @@ router.patch("/job-routing/:id/resume", async (req, res): Promise<void> => {
     relatedId: routing.jobId,
   });
 
-  res.json({
-    ...updated,
-    machineName: machine?.machineName ?? null,
-    pauseDurationSeconds,
-  });
+  res.json({ ...updated, machineName: machine?.machineName ?? null, pauseDurationSeconds });
 });
 
-// ─── GET interruptions for a routing step ────────────────────────────────────
+// ─── GET interruptions ────────────────────────────────────────────────────────
 router.get("/job-routing/:id/interruptions", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-
   const rows = await db
     .select()
     .from(jobInterruptionsTable)
     .where(eq(jobInterruptionsTable.jobRoutingId, id))
     .orderBy(jobInterruptionsTable.startedAt);
-
   res.json(rows);
+});
+
+// ─── Check if step can start ──────────────────────────────────────────────────
+router.get("/job-routing/:id/can-start", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [routing] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!routing) { res.status(404).json({ error: "Routing step not found" }); return; }
+  const result = await canStartStep(routing.jobId, routing.prerequisiteCodes ?? []);
+  res.json(result);
 });
 
 router.patch("/job-routing/:id/notes", async (req, res): Promise<void> => {
