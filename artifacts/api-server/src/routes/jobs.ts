@@ -160,8 +160,6 @@ async function buildJobWithDetails(jobId: number) {
       pausedAt: jobRoutingTable.pausedAt,
       totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
       estimatedMinutes: jobRoutingTable.estimatedMinutes,
-      stepCode: jobRoutingTable.stepCode,
-      prerequisiteCodes: jobRoutingTable.prerequisiteCodes,
       notes: jobRoutingTable.notes,
       speedPerHour: machinesTable.speedPerHour,
     })
@@ -301,28 +299,16 @@ router.post("/jobs", async (req, res): Promise<void> => {
       templateStepMinutes = template.stepEstimatesMinutes ?? [];
     }
   } else if (customRouting && customRouting.length > 0) {
-    templateMachineIds = customRouting;
+    routingMachineIds = customRouting;
   }
 
-  // Build smart routing steps with prerequisites and conditional logic
-  const routingSteps = await buildRoutingSteps(
-    {
-      needsPaperTrim: job.needsPaperTrim ?? false,
-      coatingMethod: job.coatingMethod ?? "inline",
-      qtySheets: job.qtySheets,
-    },
-    templateMachineIds
-  );
-
-  // Insert routing steps
-  for (let i = 0; i < routingSteps.length; i++) {
-    const step = routingSteps[i];
-    const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, step.machineId));
+  for (let i = 0; i < routingMachineIds.length; i++) {
+    const machineId = routingMachineIds[i];
+    const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, machineId));
     await db.insert(jobRoutingTable).values({
       jobId: job.id,
       stepNumber: i + 1,
-      stepCode: step.stepCode,
-      machineId: step.machineId,
+      machineId,
       operatorName: machine?.operatorName ?? null,
       status: "pending",
       estimatedMinutes: templateStepMinutes[i] ?? 0,
