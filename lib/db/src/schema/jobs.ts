@@ -1,6 +1,6 @@
 import { pgTable, serial, text, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { materialsTable } from "./materials";
 import { machinesTable } from "./machines";
 
@@ -35,9 +35,11 @@ export const jobRoutingTable = pgTable("job_routing", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id").notNull().references(() => jobsTable.id),
   stepNumber: integer("step_number").notNull(),
+  stepCode: text("step_code").notNull().default(""), // CUT/PRINT/COAT_STANDALONE/LAMINATE/DIE_CUT/FOLD_GLUE
   machineId: integer("machine_id").notNull().references(() => machinesTable.id),
   operatorName: text("operator_name"),
-  status: text("status").notNull().default("pending"), // pending/in-progress/paused/completed
+  status: text("status").notNull().default("pending"), // pending/ready/in-progress/paused/completed
+  prerequisiteCodes: text("prerequisite_codes").array().notNull().default([]), // step codes that must complete first
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
   pausedAt: text("paused_at"),
@@ -48,16 +50,15 @@ export const jobRoutingTable = pgTable("job_routing", {
   notes: text("notes"),
 });
 
-// NEW — tracks every pause reason (blanket wash, plate change etc.)
 export const jobInterruptionsTable = pgTable("job_interruptions", {
   id: serial("id").primaryKey(),
   jobRoutingId: integer("job_routing_id").notNull().references(() => jobRoutingTable.id),
   jobId: integer("job_id").notNull().references(() => jobsTable.id),
   machineId: integer("machine_id").notNull().references(() => machinesTable.id),
-  reason: text("reason").notNull(), // blanket-wash/plate-change/ink-change/paper-jam/breakdown/break/other
+  reason: text("reason").notNull(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
-  durationSeconds: integer("duration_seconds"), // filled when resumed
+  durationSeconds: integer("duration_seconds"),
   notes: text("notes"),
 });
 

@@ -139,12 +139,12 @@ export async function runProdMigration(): Promise<void> {
         ADD COLUMN IF NOT EXISTS wastage_percent   NUMERIC(5,2)  NOT NULL DEFAULT 5,
         ADD COLUMN IF NOT EXISTS reserved_qty      NUMERIC(10,2) NOT NULL DEFAULT 0;
     `);
-    logger.info("Migration 2: materials rate/wastage/reserved columns ensured.");
+    logger.info("Migration 2: materials columns ensured.");
   } catch (err) {
     logger.error("Migration 2 failed:", err);
   }
 
-  // ─── MIGRATION 3: Add rate + createdAt to stock_inward ───────────────
+  // ─── MIGRATION 3: stock_inward rate column ────────────────────────────
   try {
     await db.execute(sql`
       ALTER TABLE stock_inward
@@ -161,7 +161,7 @@ export async function runProdMigration(): Promise<void> {
     logger.error("Migration 3 failed:", err);
   }
 
-  // ─── MIGRATION 4: Clean up ghost/duplicate materials ─────────────────
+  // ─── MIGRATION 4: clean up ghost/duplicate materials ─────────────────
   try {
     const oldCmyk = await db
       .select()
@@ -172,7 +172,7 @@ export async function runProdMigration(): Promise<void> {
       const ids = oldCmyk.map(m => m.id);
       await db.delete(materialVendorsTable).where(inArray(materialVendorsTable.materialId, ids));
       await db.delete(materialsTable).where(inArray(materialsTable.id, ids));
-      logger.info(`Migration 4: Deleted ${ids.length} old CMYK ghost record(s).`);
+      logger.info(`Migration 4: Deleted ${ids.length} CMYK ghost record(s).`);
     }
 
     const dupeCheck = await db.execute(sql`
@@ -200,19 +200,20 @@ export async function runProdMigration(): Promise<void> {
     logger.error("Migration 4 failed:", err);
   }
 
-  // ─── MIGRATION 5: Add pause tracking to job_routing ──────────────────
+  // ─── MIGRATION 5: job_routing pause columns ───────────────────────────
   try {
     await db.execute(sql`
       ALTER TABLE job_routing
         ADD COLUMN IF NOT EXISTS paused_at             TEXT,
-        ADD COLUMN IF NOT EXISTS total_paused_seconds  INTEGER NOT NULL DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS total_paused_seconds  INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS estimated_minutes     INTEGER NOT NULL DEFAULT 0;
     `);
     logger.info("Migration 5: job_routing pause columns ensured.");
   } catch (err) {
     logger.error("Migration 5 failed:", err);
   }
 
-  // ─── MIGRATION 6: Create job_interruptions table ─────────────────────
+  // ─── MIGRATION 6: job_interruptions table ────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS job_interruptions (
@@ -232,7 +233,54 @@ export async function runProdMigration(): Promise<void> {
     logger.error("Migration 6 failed:", err);
   }
 
-  // ─── MIGRATION 1 guard (original) ─────────────────────────────────────
+  // ─── MIGRATION 7: step_estimates_minutes on job_templates ────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_templates
+        ADD COLUMN IF NOT EXISTS step_estimates_minutes INTEGER[] NOT NULL DEFAULT '{}',
+        ADD COLUMN IF NOT EXISTS description TEXT;
+    `);
+    logger.info("Migration 7: job_templates columns ensured.");
+  } catch (err) {
+    logger.error("Migration 7 failed:", err);
+  }
+
+  // ─── MIGRATION 8: machines description ───────────────────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE machines
+        ADD COLUMN IF NOT EXISTS description TEXT;
+    `);
+    logger.info("Migration 8: machines description column ensured.");
+  } catch (err) {
+    logger.error("Migration 8 failed:", err);
+  }
+
+  // ─── MIGRATION 9: jobs routing control fields ─────────────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE jobs
+        ADD COLUMN IF NOT EXISTS needs_paper_trim  BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS coating_method    TEXT NOT NULL DEFAULT 'inline';
+    `);
+    logger.info("Migration 9: jobs routing control fields ensured.");
+  } catch (err) {
+    logger.error("Migration 9 failed:", err);
+  }
+
+  // ─── MIGRATION 10: job_routing DAG columns ────────────────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing
+        ADD COLUMN IF NOT EXISTS step_code           TEXT NOT NULL DEFAULT '',
+        ADD COLUMN IF NOT EXISTS prerequisite_codes  TEXT[] NOT NULL DEFAULT '{}';
+    `);
+    logger.info("Migration 10: job_routing DAG columns ensured.");
+  } catch (err) {
+    logger.error("Migration 10 failed:", err);
+  }
+
+  // ─── MIGRATION 1 guard (original machines/templates seed) ────────────
   const [testMachine] = await db
     .select({ capabilities: machinesTable.capabilities })
     .from(machinesTable)
@@ -279,31 +327,6 @@ export async function runProdMigration(): Promise<void> {
     await tx.update(machinesTable).set({ capabilities: ["folder-gluing"] }).where(eq(machinesTable.machineName, "Hyong Jung Folder Gluer"));
     await tx.update(machinesTable).set({ capabilities: ["pre-press-cutting"], notes: "Pre-press cutter" }).where(eq(machinesTable.machineName, "Wohlenberg Cutter"));
 
-    const oldCmyk = await tx.select().from(materialsTable).where(eq(materialsTable.materialName, "CMYK Ink Set")).limit(1);
-    if (oldCmyk.length > 0) {
-      const [saini] = await tx.select().from(vendorsTable).where(eq(vendorsTable.vendorName, "Saini Traders")).limit(1);
-      let vendorId: number;
-      if (saini) {
-        vendorId = saini.id;
-      } else {
-        const [newVendor] = await tx.insert(vendorsTable).values({ vendorName: "Saini Traders", contactPerson: "Manoj Saini", phone: "9876543214", city: "Delhi" }).returning();
-        vendorId = newVendor.id;
-      }
-      const cmykQty = parseFloat(String(oldCmyk[0].currentQty));
-      const perInk = (cmykQty / 4).toFixed(2);
-      await tx.delete(materialVendorsTable).where(eq(materialVendorsTable.materialId, oldCmyk[0].id));
-      await tx.delete(materialsTable).where(eq(materialsTable.id, oldCmyk[0].id));
-      const newInks = await tx.insert(materialsTable).values([
-        { materialName: "Cyan Ink", materialType: "consumable", subType: "cyan-ink", unit: "kg", currentQty: perInk, minReorderQty: "4" },
-        { materialName: "Magenta Ink", materialType: "consumable", subType: "magenta-ink", unit: "kg", currentQty: perInk, minReorderQty: "4" },
-        { materialName: "Yellow Ink", materialType: "consumable", subType: "yellow-ink", unit: "kg", currentQty: perInk, minReorderQty: "4" },
-        { materialName: "Black Ink (K)", materialType: "consumable", subType: "black-ink", unit: "kg", currentQty: perInk, minReorderQty: "4" },
-      ]).returning();
-      for (const ink of newInks) {
-        await tx.insert(materialVendorsTable).values({ materialId: ink.id, vendorId });
-      }
-    }
-
     const consumablesToAdd = [
       { name: "Cyan Ink", subType: "cyan-ink", unit: "kg", qty: 12, reorder: 4 },
       { name: "Magenta Ink", subType: "magenta-ink", unit: "kg", qty: 10, reorder: 4 },
@@ -348,13 +371,13 @@ export async function runProdMigration(): Promise<void> {
       await tx.insert(jobTemplatesTable).values([
         {
           templateName: "Full Finish Box (UV)",
-          description: "Full finish with UV: Wohlenberg → Komori LA37 → Bobst DC1 → Bobst Gluer",
+          description: "Wohlenberg → Komori LA37 (print + UV) → Bobst DC1 → Bobst Gluer",
           routingSteps: [wohlenberg[0].id, komoriLA[0].id, bobstDC1[0].id, bobstGluer[0].id],
           stepEstimatesMinutes: [30, 120, 60, 90],
         },
         {
           templateName: "Full Finish Box (Varnish)",
-          description: "Full finish with Varnish: Wohlenberg → Komori GL37 → Bobst DC1 → Bobst Gluer",
+          description: "Wohlenberg → Komori GL37 (print + varnish) → Bobst DC1 → Bobst Gluer",
           routingSteps: [wohlenberg[0].id, komoriGL[0].id, bobstDC1[0].id, bobstGluer[0].id],
           stepEstimatesMinutes: [30, 120, 60, 90],
         },
@@ -366,13 +389,13 @@ export async function runProdMigration(): Promise<void> {
         },
         {
           templateName: "Print + Standalone Coat",
-          description: "For already printed sheets: Single Coater → Bobst DC1",
+          description: "Single Coater → Bobst DC1",
           routingSteps: [singleCoater[0].id, bobstDC1[0].id],
           stepEstimatesMinutes: [90, 60],
         },
         {
           templateName: "Non Woven",
-          description: "Non-woven: Planeta → Bobst DC1",
+          description: "Planeta → Bobst DC1",
           routingSteps: [planeta[0].id, bobstDC1[0].id],
           stepEstimatesMinutes: [120, 60],
         },
