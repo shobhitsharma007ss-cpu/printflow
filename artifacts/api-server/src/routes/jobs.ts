@@ -411,7 +411,7 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   if (parsed.data.status === "in-progress") updates.startedAt = new Date().toISOString();
   if (parsed.data.status === "completed") updates.completedAt = new Date().toISOString();
 
-  const [updatedRouting] = await db
+  const [routing] = await db
     .update(jobRoutingTable)
     .set(updates)
     .where(eq(jobRoutingTable.id, params.data.id))
@@ -482,10 +482,10 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   }
 
   res.json({
-    ...updatedRouting,
+    ...routing,
     machineName: machine?.machineName ?? null,
     machineType: machine?.machineType ?? null,
-    operatorName: updatedRouting.operatorName ?? machine?.operatorName ?? null,
+    operatorName: routing.operatorName ?? machine?.operatorName ?? null,
     deductions: deductions.length > 0 ? deductions : null,
   });
 });
