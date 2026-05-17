@@ -1,0 +1,49 @@
+"Please do all of the following in order:
+Step 1 — Sync git:
+git fetch origin && git merge -X ours origin/master --no-edit && git push
+Step 2 — Update lib/db/src/schema/jobs.ts. Add these two fields to jobsTable:
+typescriptneedsPaperTrim: boolean("needs_paper_trim").notNull().default(false),
+coatingMethod: text("coating_method").notNull().default("inline"),
+Add them after the finishRequirements line and before createdAt.
+Step 3 — Update artifacts/api-server/src/routes/jobs.ts. Add these two functions after the formatEta function:
+typescriptasync function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise<{ canStart: boolean; waitingFor: string[] }> {
+  if (!prerequisiteCodes || prerequisiteCodes.length === 0) {
+    return { canStart: true, waitingFor: [] };
+  }
+  const prereqSteps = await db
+    .select({ stepCode: jobRoutingTable.stepCode, status: jobRoutingTable.status })
+    .from(jobRoutingTable)
+    .where(eq(jobRoutingTable.jobId, jobId));
+  const waitingFor: string[] = [];
+  for (const code of prerequisiteCodes) {
+    const step = prereqSteps.find(s => s.stepCode === code);
+    if (!step || (step.status !== 'completed' && step.status !== 'skipped')) {
+      waitingFor.push(code);
+    }
+  }
+  return { canStart: waitingFor.length === 0, waitingFor };
+}
+Step 4 — In the same jobs.ts file, find the PATCH /job-routing/:id/status endpoint. Before the line that sets updates.startedAt, add this prerequisite check:
+typescriptif (parsed.data.status === "in-progress") {
+  const { canStart, waitingFor } = await canStartStep(routing.jobId, routing.prerequisiteCodes ?? []);
+  if (!canStart) {
+    res.status(409).json({ error: `Cannot start — waiting for: ${waitingFor.join(", ")}`, waitingFor });
+    return;
+  }
+}
+Step 5 — In the same PATCH /job-routing/:id/status endpoint, find this block and REMOVE it:
+typescriptconst nextStep = allSteps.find(s => s.stepNumber === routing.stepNumber + 1);
+if (nextStep && nextStep.status === "pending") {
+  await db.update(jobRoutingTable).set({ status: "in-progress", startedAt: new Date().toISOString() })...
+  await db.update(machinesTable).set({ status: "running" })...
+}
+Replace it with:
+typescriptfor (const step of allSteps) {
+  if (step.status === "pending" && step.id !== routing.id) {
+    const { canStart } = await canStartStep(routing.jobId, step.prerequisiteCodes ?? []);
+    if (canStart) {
+      await db.update(jobRoutingTable).set({ status: "ready" }).where(eq(jobRoutingTable.id, step.id));
+    }
+  }
+}
+Step 6 — Restart the API server and confirm it starts cleanly with no errors."
