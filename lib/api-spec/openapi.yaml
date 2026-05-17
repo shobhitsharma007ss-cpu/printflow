@@ -1119,6 +1119,12 @@ components:
         completedAt:
           type: string
           nullable: true
+        stepCode:
+          type: string
+        prerequisiteCodes:
+          type: array
+          items:
+            type: string
         notes:
           type: string
           nullable: true

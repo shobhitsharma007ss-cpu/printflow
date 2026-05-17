@@ -350,26 +350,31 @@ export async function runProdMigration(): Promise<void> {
           templateName: "Full Finish Box (UV)",
           description: "Full finish with UV: Wohlenberg → Komori LA37 → Bobst DC1 → Bobst Gluer",
           routingSteps: [wohlenberg[0].id, komoriLA[0].id, bobstDC1[0].id, bobstGluer[0].id],
+          stepEstimatesMinutes: [30, 120, 60, 90],
         },
         {
           templateName: "Full Finish Box (Varnish)",
           description: "Full finish with Varnish: Wohlenberg → Komori GL37 → Bobst DC1 → Bobst Gluer",
           routingSteps: [wohlenberg[0].id, komoriGL[0].id, bobstDC1[0].id, bobstGluer[0].id],
+          stepEstimatesMinutes: [30, 120, 60, 90],
         },
         {
           templateName: "Print Only",
           description: "Print only: Komori GL37 or LA37",
           routingSteps: [komoriGL[0].id],
+          stepEstimatesMinutes: [120],
         },
         {
           templateName: "Print + Standalone Coat",
           description: "For already printed sheets: Single Coater → Bobst DC1",
           routingSteps: [singleCoater[0].id, bobstDC1[0].id],
+          stepEstimatesMinutes: [90, 60],
         },
         {
           templateName: "Non Woven",
           description: "Non-woven: Planeta → Bobst DC1",
           routingSteps: [planeta[0].id, bobstDC1[0].id],
+          stepEstimatesMinutes: [120, 60],
         },
       ]);
     }

@@ -144,6 +144,8 @@ async function buildJobWithDetails(jobId: number) {
       pausedAt: jobRoutingTable.pausedAt,
       totalPausedSeconds: jobRoutingTable.totalPausedSeconds,
       estimatedMinutes: jobRoutingTable.estimatedMinutes,
+      stepCode: jobRoutingTable.stepCode,
+      prerequisiteCodes: jobRoutingTable.prerequisiteCodes,
       notes: jobRoutingTable.notes,
       speedPerHour: machinesTable.speedPerHour,
     })
@@ -272,9 +274,13 @@ router.post("/jobs", async (req, res): Promise<void> => {
   }).returning();
 
   let routingMachineIds: number[] = [];
+  let templateStepMinutes: number[] = [];
   if (templateId) {
     const [template] = await db.select().from(jobTemplatesTable).where(eq(jobTemplatesTable.id, templateId));
-    if (template) routingMachineIds = template.routingSteps;
+    if (template) {
+      routingMachineIds = template.routingSteps;
+      templateStepMinutes = template.stepEstimatesMinutes ?? [];
+    }
   } else if (customRouting && customRouting.length > 0) {
     routingMachineIds = customRouting;
   }
@@ -288,6 +294,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
       machineId,
       operatorName: machine?.operatorName ?? null,
       status: "pending",
+      estimatedMinutes: templateStepMinutes[i] ?? 0,
     });
   }
 
