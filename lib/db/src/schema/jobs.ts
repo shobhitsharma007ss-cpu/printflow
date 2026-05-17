@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { materialsTable } from "./materials";
@@ -26,6 +26,8 @@ export const jobsTable = pgTable("jobs", {
   scheduledDate: text("scheduled_date"),
   coatingType: text("coating_type"),
   finishRequirements: text("finish_requirements").array().default([]),
+  needsPaperTrim: boolean("needs_paper_trim").notNull().default(false),
+  coatingMethod: text("coating_method").notNull().default("inline"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -41,6 +43,8 @@ export const jobRoutingTable = pgTable("job_routing", {
   pausedAt: text("paused_at"),
   totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
   estimatedMinutes: integer("estimated_minutes").notNull().default(0),
+  stepCode: text("step_code").notNull().default(""),
+  prerequisiteCodes: text("prerequisite_codes").array().notNull().default([]),
   notes: text("notes"),
 });
 

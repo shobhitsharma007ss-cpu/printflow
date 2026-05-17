@@ -56,6 +56,24 @@ function formatEta(seconds: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise<{ canStart: boolean; waitingFor: string[] }> {
+  if (!prerequisiteCodes || prerequisiteCodes.length === 0) {
+    return { canStart: true, waitingFor: [] };
+  }
+  const prereqSteps = await db
+    .select({ stepCode: jobRoutingTable.stepCode, status: jobRoutingTable.status })
+    .from(jobRoutingTable)
+    .where(eq(jobRoutingTable.jobId, jobId));
+  const waitingFor: string[] = [];
+  for (const code of prerequisiteCodes) {
+    const step = prereqSteps.find(s => s.stepCode === code);
+    if (!step || (step.status !== "completed" && step.status !== "skipped")) {
+      waitingFor.push(code);
+    }
+  }
+  return { canStart: waitingFor.length === 0, waitingFor };
+}
+
 async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
   const deductions: DeductionInfo[] = [];
 
@@ -358,6 +376,17 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   const parsed = UpdateJobRoutingStatusBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+  const [currentRouting] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, params.data.id));
+  if (!currentRouting) { res.status(404).json({ error: "Routing step not found" }); return; }
+
+  if (parsed.data.status === "in-progress") {
+    const { canStart, waitingFor } = await canStartStep(currentRouting.jobId, currentRouting.prerequisiteCodes ?? []);
+    if (!canStart) {
+      res.status(409).json({ error: `Cannot start — waiting for: ${waitingFor.join(", ")}`, waitingFor });
+      return;
+    }
+  }
+
   const updates: Record<string, unknown> = { status: parsed.data.status };
   if (parsed.data.notes) updates.notes = parsed.data.notes;
   if (parsed.data.status === "in-progress") updates.startedAt = new Date().toISOString();
@@ -411,10 +440,13 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
         message: `${job?.jobCode ?? ''} — Step ${routing.stepNumber} completed on ${machine?.machineName ?? 'Unknown'}`,
         relatedId: routing.jobId,
       });
-      const nextStep = allSteps.find(s => s.stepNumber === routing.stepNumber + 1);
-      if (nextStep && nextStep.status === "pending") {
-        await db.update(jobRoutingTable).set({ status: "in-progress", startedAt: new Date().toISOString() }).where(eq(jobRoutingTable.id, nextStep.id));
-        await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, nextStep.machineId));
+      for (const step of allSteps) {
+        if (step.status === "pending" && step.id !== routing.id) {
+          const { canStart } = await canStartStep(routing.jobId, step.prerequisiteCodes ?? []);
+          if (canStart) {
+            await db.update(jobRoutingTable).set({ status: "ready" }).where(eq(jobRoutingTable.id, step.id));
+          }
+        }
       }
     }
   }
