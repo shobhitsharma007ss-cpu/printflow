@@ -115,7 +115,7 @@ export default function FloorMonitor() {
 
   const getMachinePendingStep = (machineId: number): { step: JobRouting; job: JobWithDetails } | null => {
     for (const job of activeJobs) {
-      const step = job.routing?.find((r) => r.machineId === machineId && r.status === "pending");
+      const step = job.routing?.find((r) => r.machineId === machineId && (r.status === "pending" || r.status === "ready"));
       if (step) return { step, job };
     }
     return null;
