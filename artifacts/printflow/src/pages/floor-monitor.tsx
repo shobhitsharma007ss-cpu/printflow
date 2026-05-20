@@ -375,7 +375,7 @@ export default function FloorMonitor() {
                         )}
 
                         {/* Pending Step — Start button */}
-                        {!activeInfo && pendingInfo && machine.status !== "maintenance" && (
+                        {!activeInfo && pendingInfo && machine.status !== "maintenance" && pendingInfo.step.canStart === true && (
                           <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 mb-3">
                             <div className="flex items-center justify-between">
                               <div>
