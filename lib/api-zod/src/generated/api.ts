@@ -520,6 +520,7 @@ export const CreateJobBody = zod.object({
       }),
     )
     .nullish(),
+  needsPaperTrim: zod.boolean().nullish(),
 });
 
 /**

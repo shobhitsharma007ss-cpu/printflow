@@ -57,6 +57,7 @@ interface JobForm {
   inks: InkEntry[];
   routing: { machineId: number; machineName: string }[];
   templateId: string;
+  needsPaperTrim: boolean;
 }
 
 export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -82,6 +83,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     inks: [],
     routing: [],
     templateId: "",
+    needsPaperTrim: false,
   });
 
   const boardsMats = useMemo(
@@ -205,7 +207,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     const printMId = parseInt(form.printMachineId);
     const printMachine = machines?.find((m) => m.id === printMId);
 
-    if (wohlenberg) {
+    if (form.needsPaperTrim && wohlenberg) {
       steps.push({ machineId: wohlenberg.id, machineName: wohlenberg.machineName });
     }
 
@@ -311,6 +313,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
           coatingType: form.coatingType !== "none" ? form.coatingType : undefined,
           finishRequirements: form.finishRequirements.length > 0 ? form.finishRequirements : undefined,
           materials: jobMaterials.length > 0 ? jobMaterials : undefined,
+          needsPaperTrim: form.needsPaperTrim,
         },
       },
       {
@@ -341,6 +344,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       inks: [],
       routing: [],
       templateId: "",
+      needsPaperTrim: false,
     });
   };
 
@@ -620,6 +624,39 @@ function Step2Material({
           Planned sheets (with {form.wastagePercent || "4"}% wastage): <strong>{plannedSheets.toLocaleString()}</strong>
         </div>
       )}
+
+      <div className="space-y-2">
+        <Label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Paper Trimming</Label>
+        <p className="text-xs text-muted-foreground">Does this job need paper trimming before printing?</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, needsPaperTrim: false })}
+            className={cn(
+              "rounded-xl border p-3 text-left transition-all",
+              !form.needsPaperTrim
+                ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                : "border-border bg-card hover:border-primary/50 hover:bg-muted/30"
+            )}
+          >
+            <p className="font-semibold text-sm">No</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Paper goes directly to press</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, needsPaperTrim: true })}
+            className={cn(
+              "rounded-xl border p-3 text-left transition-all",
+              form.needsPaperTrim
+                ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                : "border-border bg-card hover:border-primary/50 hover:bg-muted/30"
+            )}
+          >
+            <p className="font-semibold text-sm">Yes</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Wohlenberg trim required</p>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

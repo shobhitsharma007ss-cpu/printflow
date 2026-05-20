@@ -1292,6 +1292,9 @@ components:
           items:
             $ref: "#/components/schemas/CreateJobMaterialRequest"
           nullable: true
+        needsPaperTrim:
+          type: boolean
+          nullable: true
       required: [jobName, clientName, qtySheets]
 
     UpdateJobRequest:

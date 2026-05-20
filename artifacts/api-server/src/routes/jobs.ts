@@ -62,6 +62,15 @@ function calcEtaSeconds(sheets: number, machineName: string, makereadyMins = 30)
   return Math.round(pressSeconds + makereadySeconds);
 }
 
+function getStepCode(capabilities: string[]): string {
+  if (capabilities.includes("pre-press-cutting")) return "CUT";
+  if (capabilities.includes("print")) return "PRINT";
+  if (capabilities.includes("uv-standalone") || capabilities.includes("varnish-standalone")) return "COAT_STANDALONE";
+  if (capabilities.includes("die-cutting")) return "DIE_CUT";
+  if (capabilities.includes("folder-gluing")) return "FOLD_GLUE";
+  return "";
+}
+
 function formatEta(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
@@ -279,7 +288,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const jobCode = await getNextJobCode();
-  const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, ...jobData } = parsed.data;
+  const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, needsPaperTrim, ...jobData } = parsed.data;
 
   const [job] = await db.insert(jobsTable).values({
     ...jobData,
@@ -287,6 +296,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
     templateId: templateId ?? null,
     coatingType: coatingType ?? null,
     finishRequirements: finishRequirements ?? [],
+    needsPaperTrim: needsPaperTrim ?? false,
     status: "pending",
   }).returning();
 
@@ -302,17 +312,23 @@ router.post("/jobs", async (req, res): Promise<void> => {
     routingMachineIds = customRouting;
   }
 
+  let prevStepCode = "";
   for (let i = 0; i < routingMachineIds.length; i++) {
     const machineId = routingMachineIds[i];
     const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, machineId));
+    const stepCode = getStepCode(machine?.capabilities ?? []);
+    const prerequisiteCodes = i === 0 ? [] : (prevStepCode ? [prevStepCode] : []);
     await db.insert(jobRoutingTable).values({
       jobId: job.id,
       stepNumber: i + 1,
+      stepCode,
       machineId,
       operatorName: machine?.operatorName ?? null,
-      status: "pending",
+      status: i === 0 ? "ready" : "pending",
       estimatedMinutes: templateStepMinutes[i] ?? 0,
+      prerequisiteCodes,
     });
+    prevStepCode = stepCode;
   }
 
   if (jobMats && jobMats.length > 0) {
