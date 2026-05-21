@@ -5,7 +5,7 @@ import { useVendors } from "@/hooks/use-vendors";
 import { useMaterials } from "@/hooks/use-inventory";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-elements";
 import { Package, AlertTriangle, Layers, X, Plus, ChevronLeft, ChevronRight, Check, IndianRupee } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, parseDim, formatDim, dimToCm } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StockSummaryRow } from "@workspace/api-client-react";
 import { AddStockWizard } from "@/components/add-stock-wizard";
@@ -213,16 +213,16 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
 
   // Sheet weight & rate per sheet — only for boards with dimensions + GSM
   const isBoardCategory = form.category === 'board';
-  const matDimParts = selectedMaterial?.dimensions?.toLowerCase().split('x').map(Number) ?? [];
+  const parsedDim = parseDim(selectedMaterial?.dimensions);
   const matGsm = selectedMaterial?.gsm;
-  const dimsValid = matDimParts.length === 2 && matDimParts[0] > 0 && matDimParts[1] > 0;
+  const dimsValid = parsedDim !== null;
 
   let sheetWeightKg: number | null = null;
   let ratePerSheet: number | null = null;
 
-  if (isBoardCategory && dimsValid && matGsm) {
-    const lengthCm = matDimParts[0] * 2.54;
-    const breadthCm = matDimParts[1] * 2.54;
+  if (isBoardCategory && parsedDim && matGsm) {
+    const lengthCm = dimToCm(parsedDim.w, parsedDim.unit);
+    const breadthCm = dimToCm(parsedDim.h, parsedDim.unit);
     sheetWeightKg = (lengthCm * breadthCm * matGsm) / 100000;
     const rateKg = parseFloat(form.ratePerUnit);
     if (!isNaN(rateKg) && rateKg > 0) {
@@ -342,7 +342,7 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     </div>
                     <div className="flex flex-wrap gap-1 justify-end">
                       {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.gsm} GSM</span>}
-                      {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{m.dimensions}"</span>}
+                      {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{formatDim(m.dimensions) ?? m.dimensions}</span>}
                     </div>
                   </div>
                 </button>
@@ -487,7 +487,7 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">kg</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {selectedMaterial?.dimensions}" · {matGsm} GSM
+                    {parsedDim ? `${parsedDim.w}×${parsedDim.h} ${parsedDim.unit}` : selectedMaterial?.dimensions} · {matGsm} GSM
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -641,7 +641,7 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
           {material.gsm && <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold">{material.gsm} GSM</span>}
-          {material.dimensions && <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.dimensions}"</span>}
+          {material.dimensions && <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{formatDim(material.dimensions) ?? material.dimensions}</span>}
           {material.grain && <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs capitalize">{material.grain} grain</span>}
           <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-xs">{material.materialType}</span>
         </div>

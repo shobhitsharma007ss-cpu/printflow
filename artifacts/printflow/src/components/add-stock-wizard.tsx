@@ -45,7 +45,7 @@ interface WizardState {
   gsm: number;
   width: string;
   height: string;
-  dimensionUnit: "inches" | "cm";
+  dimensionUnit: "in" | "cm" | "mm";
   grain: "long" | "short" | "";
   vendorId: string;
   newVendorName: string;
@@ -64,7 +64,7 @@ const initialState: WizardState = {
   gsm: 250,
   width: "",
   height: "",
-  dimensionUnit: "inches",
+  dimensionUnit: "in",
   grain: "",
   vendorId: "",
   newVendorName: "",
@@ -154,7 +154,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
   const handleSave = async () => {
     const materialName = getMaterialName(state);
     const unit = state.unit || getAutoUnit(state);
-    const dimensions = state.width && state.height ? `${state.width}x${state.height}` : undefined;
+    const dimensions = state.width && state.height ? `${state.width}x${state.height} ${state.dimensionUnit}` : undefined;
 
     try {
       let vendorIdToLink: number | null = null;
@@ -335,43 +335,39 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
         return (
           <div className="space-y-6">
             <div className="space-y-3">
-              <h3 className="text-lg font-bold text-center">Dimensions ({state.dimensionUnit})</h3>
+              <h3 className="text-lg font-bold text-center">Dimensions</h3>
               <div className="flex justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => update({ dimensionUnit: "inches" })}
-                  className={cn(
-                    "px-6 py-2 rounded-lg font-bold text-sm transition-all",
-                    state.dimensionUnit === "inches"
-                      ? "bg-primary text-white shadow-md"
-                      : "bg-muted hover:bg-muted/80"
-                  )}
-                >
-                  INCHES
-                </button>
-                <button
-                  type="button"
-                  onClick={() => update({ dimensionUnit: "cm" })}
-                  className={cn(
-                    "px-6 py-2 rounded-lg font-bold text-sm transition-all",
-                    state.dimensionUnit === "cm"
-                      ? "bg-primary text-white shadow-md"
-                      : "bg-muted hover:bg-muted/80"
-                  )}
-                >
-                  CM
-                </button>
+                {(["in", "cm", "mm"] as const).map(u => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => update({ dimensionUnit: u, width: "", height: "" })}
+                    className={cn(
+                      "px-6 py-2 rounded-lg font-bold text-sm transition-all",
+                      state.dimensionUnit === u
+                        ? "bg-primary text-white shadow-md"
+                        : "bg-muted hover:bg-muted/80"
+                    )}
+                  >
+                    {u.toUpperCase()}
+                  </button>
+                ))}
               </div>
+              <p className="text-xs text-center text-muted-foreground">
+                {state.dimensionUnit === "in" && "e.g. 25 × 35 inches (standard sheet)"}
+                {state.dimensionUnit === "cm" && "e.g. 63.5 × 88.9 cm"}
+                {state.dimensionUnit === "mm" && "e.g. 635 × 889 mm"}
+              </p>
             </div>
             <div className="flex items-center gap-3 justify-center">
               <div className="space-y-1.5 w-32">
                 <Label className="text-xs text-center block">Width</Label>
                 <Input
                   type="number"
-                  step={state.dimensionUnit === "cm" ? "0.1" : "1"}
+                  step={state.dimensionUnit === "in" ? "1" : "0.1"}
                   value={state.width}
                   onChange={e => update({ width: e.target.value })}
-                  placeholder={state.dimensionUnit === "inches" ? "25" : "56.5"}
+                  placeholder={state.dimensionUnit === "in" ? "25" : state.dimensionUnit === "cm" ? "63.5" : "635"}
                   className="text-center text-lg font-bold"
                 />
               </div>
@@ -380,32 +376,34 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
                 <Label className="text-xs text-center block">Height</Label>
                 <Input
                   type="number"
-                  step={state.dimensionUnit === "cm" ? "0.1" : "1"}
+                  step={state.dimensionUnit === "in" ? "1" : "0.1"}
                   value={state.height}
                   onChange={e => update({ height: e.target.value })}
-                  placeholder={state.dimensionUnit === "inches" ? "35" : "45.5"}
+                  placeholder={state.dimensionUnit === "in" ? "35" : state.dimensionUnit === "cm" ? "88.9" : "889"}
                   className="text-center text-lg font-bold"
                 />
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {DIMENSION_PRESETS.map(d => {
-                const [w, h] = d.split("×");
-                const isActive = state.width === w && state.height === h;
-                return (
-                  <button
-                    key={d}
-                    onClick={() => update({ width: w, height: h })}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-bold transition-all",
-                      isActive ? "bg-primary text-white shadow-md" : "bg-muted hover:bg-muted/80"
-                    )}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
+            {state.dimensionUnit === "in" && (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {DIMENSION_PRESETS.map(d => {
+                  const [w, h] = d.split("×");
+                  const isActive = state.width === w && state.height === h;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => update({ width: w, height: h })}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                        isActive ? "bg-primary text-white shadow-md" : "bg-muted hover:bg-muted/80"
+                      )}
+                    >
+                      {d}"
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
 
@@ -569,7 +567,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
                 {state.width && state.height && (
                   <div className="bg-background rounded-lg p-3">
                     <p className="text-xs text-muted-foreground mb-0.5">Dimensions</p>
-                    <p className="font-bold">{state.width}×{state.height}"</p>
+                    <p className="font-bold">{state.width}×{state.height} {state.dimensionUnit}</p>
                   </div>
                 )}
                 {state.grain && (

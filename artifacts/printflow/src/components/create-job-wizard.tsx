@@ -5,7 +5,7 @@ import { useMachines } from "@/hooks/use-machines";
 import { useCreateJob } from "@/hooks/use-jobs";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
 import { AddStockWizard } from "@/components/add-stock-wizard";
-import { cn } from "@/lib/utils";
+import { cn, formatDim } from "@/lib/utils";
 import {
   ArrowRight, ArrowLeft, Check, AlertTriangle, Plus, X,
   Printer, Droplets, Scissors, Package, Info, GripVertical,
@@ -565,7 +565,7 @@ function Step2Material({
                     <p className="font-bold text-sm">{m.materialName}</p>
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {m.gsm && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">{m.gsm} GSM</span>}
-                      {m.dimensions && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{m.dimensions}"</span>}
+                      {m.dimensions && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{formatDim(m.dimensions) ?? m.dimensions}</span>}
                       {m.grain && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded capitalize">{m.grain} Grain</span>}
                       {m.vendorName && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{m.vendorName}</span>}
                     </div>

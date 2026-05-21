@@ -5,7 +5,7 @@ import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendor
 import { useJobTemplates } from "@/hooks/use-templates";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
 import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
 import type { Machine, Material, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
 
@@ -305,7 +305,7 @@ function MaterialsSection() {
                         </div>
                         <div className="flex flex-wrap gap-2 mt-1">
                           {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">{m.gsm} GSM</span>}
-                          {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{m.dimensions}&quot;</span>}
+                          {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{formatDim(m.dimensions) ?? m.dimensions}</span>}
                           {m.grain && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded capitalize">{m.grain} grain</span>}
                           <span className="text-xs text-muted-foreground">{m.unit}</span>
                         </div>

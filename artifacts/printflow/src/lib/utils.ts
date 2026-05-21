@@ -50,3 +50,27 @@ export function getStatusDotColor(status: string) {
 export function isAnimatedStatus(status: string) {
   return status.toLowerCase() === 'running';
 }
+
+export type DimUnit = 'in' | 'cm' | 'mm';
+
+export function parseDim(dim: string | null | undefined): { w: number; h: number; unit: DimUnit } | null {
+  if (!dim) return null;
+  const parts = dim.trim().split(' ');
+  const wh = parts[0].split('x').map(Number);
+  if (wh.length !== 2 || !wh[0] || !wh[1]) return null;
+  const u = parts[1]?.toLowerCase();
+  const unit: DimUnit = u === 'cm' ? 'cm' : u === 'mm' ? 'mm' : 'in';
+  return { w: wh[0], h: wh[1], unit };
+}
+
+export function formatDim(dim: string | null | undefined): string | null {
+  const p = parseDim(dim);
+  if (!p) return null;
+  return `${p.w}×${p.h} ${p.unit}`;
+}
+
+export function dimToCm(value: number, unit: DimUnit): number {
+  if (unit === 'in') return value * 2.54;
+  if (unit === 'mm') return value * 0.1;
+  return value;
+}
