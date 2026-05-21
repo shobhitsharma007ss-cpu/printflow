@@ -211,8 +211,33 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     });
   };
 
+  // Sheet weight & rate per sheet — only for boards with dimensions + GSM
+  const isBoardCategory = form.category === 'board';
+  const matDimParts = selectedMaterial?.dimensions?.toLowerCase().split('x').map(Number) ?? [];
+  const matGsm = selectedMaterial?.gsm;
+  const dimsValid = matDimParts.length === 2 && matDimParts[0] > 0 && matDimParts[1] > 0;
+
+  let sheetWeightKg: number | null = null;
+  let ratePerSheet: number | null = null;
+
+  if (isBoardCategory && dimsValid && matGsm) {
+    const lengthCm = matDimParts[0] * 2.54;
+    const breadthCm = matDimParts[1] * 2.54;
+    sheetWeightKg = (lengthCm * breadthCm * matGsm) / 100000;
+    const rateKg = parseFloat(form.ratePerUnit);
+    if (!isNaN(rateKg) && rateKg > 0) {
+      ratePerSheet = sheetWeightKg * rateKg;
+    }
+  }
+
   const totalValue = form.qtyReceived && form.ratePerUnit
-    ? (parseFloat(form.qtyReceived) * parseFloat(form.ratePerUnit)).toLocaleString('en-IN', { maximumFractionDigits: 2 })
+    ? (() => {
+        const qty = parseFloat(form.qtyReceived);
+        if (isBoardCategory && ratePerSheet != null) {
+          return (qty * ratePerSheet).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+        }
+        return (qty * parseFloat(form.ratePerUnit)).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      })()
     : null;
 
   return (
@@ -421,22 +446,64 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label>Rate per {selectedMaterial?.unit ?? 'unit'} (₹)</Label>
+                <Label>
+                  {isBoardCategory && dimsValid && matGsm
+                    ? <>Rate per kg <span className="text-destructive">*</span></>
+                    : <>Rate per {selectedMaterial?.unit ?? 'unit'} (₹)</>
+                  }
+                </Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="e.g. 12.50"
+                    placeholder={isBoardCategory && dimsValid && matGsm ? "e.g. 85.00" : "e.g. 12.50"}
                     value={form.ratePerUnit}
                     onChange={e => setForm(f => ({ ...f, ratePerUnit: e.target.value }))}
                     className="pl-7"
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Updates material rate automatically</p>
+                <p className="text-xs text-muted-foreground">
+                  {isBoardCategory && dimsValid && matGsm
+                    ? 'Rate per kg — sheet rate auto-calculated below'
+                    : 'Updates material rate automatically'
+                  }
+                </p>
               </div>
             </div>
+
+            {/* Sheet weight & rate per sheet — boards only */}
+            {isBoardCategory && dimsValid && matGsm && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-muted-foreground">Sheet Weight (kg)</Label>
+                  <div className="relative">
+                    <Input
+                      readOnly
+                      value={sheetWeightKg != null ? sheetWeightKg.toFixed(6) : '—'}
+                      className="bg-muted/50 text-muted-foreground cursor-default pr-8"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">kg</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedMaterial?.dimensions}" · {matGsm} GSM
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-muted-foreground">Rate per Sheet (₹)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
+                    <Input
+                      readOnly
+                      value={ratePerSheet != null ? ratePerSheet.toFixed(4) : '—'}
+                      className="bg-muted/50 text-muted-foreground cursor-default pl-7"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">sheet wt × rate/kg</p>
+                </div>
+              </div>
+            )}
 
             {/* Total value preview */}
             {totalValue && (
@@ -449,7 +516,11 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   </span>
                 </div>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">
-                  {form.qtyReceived} {selectedMaterial?.unit} × ₹{form.ratePerUnit}
+                  {form.qtyReceived} {selectedMaterial?.unit}
+                  {isBoardCategory && ratePerSheet != null
+                    ? <> × ₹{ratePerSheet.toFixed(4)}/sheet</>
+                    : <> × ₹{form.ratePerUnit}</>
+                  }
                 </p>
               </div>
             )}
