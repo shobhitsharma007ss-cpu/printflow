@@ -200,7 +200,7 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
         vendorId: form.vendorId ? parseInt(form.vendorId) : undefined,
         qtyReceived: parseFloat(form.qtyReceived),
         ratePerUnit: form.ratePerUnit ? parseFloat(form.ratePerUnit) : undefined,
-        unit: selectedMaterial?.unit ?? 'units',
+        unit: isBoardCategory ? 'kg' : (selectedMaterial?.unit ?? 'units'),
         batchRef: form.batchRef || '',
         brand: form.brand || undefined,
         receivedDate: form.receivedDate,
@@ -230,14 +230,10 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
     }
   }
 
+  // For boards/paper: qty is in kg, rate is per kg → total = qty_kg × rate_kg
+  // For consumables: qty is in material unit, rate is per unit → total = qty × rate
   const totalValue = form.qtyReceived && form.ratePerUnit
-    ? (() => {
-        const qty = parseFloat(form.qtyReceived);
-        if (isBoardCategory && ratePerSheet != null) {
-          return (qty * ratePerSheet).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-        }
-        return (qty * parseFloat(form.ratePerUnit)).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-      })()
+    ? (parseFloat(form.qtyReceived) * parseFloat(form.ratePerUnit)).toLocaleString('en-IN', { maximumFractionDigits: 2 })
     : null;
 
   return (
@@ -428,20 +424,22 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
             {/* Qty + Rate — most important fields */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Qty Received <span className="text-destructive">*</span></Label>
+                <Label>
+                  Qty Received {isBoardCategory ? <span className="text-muted-foreground font-normal">(kg)</span> : null} <span className="text-destructive">*</span>
+                </Label>
                 <div className="relative">
                   <Input
                     type="number"
                     min="0.01"
                     step="0.01"
-                    placeholder={`e.g. 500`}
+                    placeholder={isBoardCategory ? 'e.g. 500' : 'e.g. 5000'}
                     value={form.qtyReceived}
                     onChange={e => setForm(f => ({ ...f, qtyReceived: e.target.value }))}
                     className="pr-14"
                     autoFocus
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">
-                    {selectedMaterial?.unit}
+                    {isBoardCategory ? 'kg' : selectedMaterial?.unit}
                   </span>
                 </div>
               </div>
@@ -487,7 +485,12 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">kg</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {parsedDim ? `${parsedDim.w}×${parsedDim.h} ${parsedDim.unit}` : selectedMaterial?.dimensions} · {matGsm} GSM
+                    {parsedDim
+                      ? parsedDim.unit === 'in'
+                        ? `${parsedDim.w}×${parsedDim.h} in → ${(parsedDim.w * 2.54).toFixed(2)}×${(parsedDim.h * 2.54).toFixed(2)} cm`
+                        : `${parsedDim.w}×${parsedDim.h} ${parsedDim.unit}`
+                      : selectedMaterial?.dimensions
+                    } · {matGsm} GSM
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -516,11 +519,10 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                   </span>
                 </div>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">
-                  {form.qtyReceived} {selectedMaterial?.unit}
-                  {isBoardCategory && ratePerSheet != null
-                    ? <> × ₹{ratePerSheet.toFixed(4)}/sheet</>
-                    : <> × ₹{form.ratePerUnit}</>
-                  }
+                  {form.qtyReceived} {isBoardCategory ? 'kg' : selectedMaterial?.unit} × ₹{form.ratePerUnit}/{isBoardCategory ? 'kg' : (selectedMaterial?.unit ?? 'unit')}
+                  {isBoardCategory && ratePerSheet != null && (
+                    <span className="ml-1 opacity-70">(₹{ratePerSheet.toFixed(4)}/sheet)</span>
+                  )}
                 </p>
               </div>
             )}
@@ -685,6 +687,34 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
             </div>
           )}
         </div>
+
+        {/* By Brand breakdown */}
+        {history && history.length > 0 && (() => {
+          const brandMap = new Map<string, { qty: number; unit: string }>();
+          for (const h of history) {
+            const brand = h.brand || 'Unbranded';
+            const existing = brandMap.get(brand);
+            const qty = parseFloat(String(h.qtyReceived)) || 0;
+            if (existing) { existing.qty += qty; }
+            else { brandMap.set(brand, { qty, unit: h.unit }); }
+          }
+          const brands = Array.from(brandMap.entries())
+            .map(([brand, data]) => ({ brand, ...data }))
+            .sort((a, b) => b.qty - a.qty);
+          return brands.length > 1 ? (
+            <div className="mb-5">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">By Brand / Mill</h4>
+              <div className="space-y-1.5">
+                {brands.map(b => (
+                  <div key={b.brand} className="flex items-center justify-between text-xs bg-muted/40 rounded-lg px-2.5 py-1.5">
+                    <span className="font-semibold text-foreground">{b.brand}</span>
+                    <span className="text-muted-foreground font-medium">{b.qty.toLocaleString('en-IN')} {b.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null;
+        })()}
 
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Recent Inward</h4>

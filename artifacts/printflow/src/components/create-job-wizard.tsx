@@ -589,6 +589,39 @@ function Step2Material({
         </button>
       </div>
 
+      {/* FIX 4 — Live rate ticker when material selected */}
+      {selectedMaterial && (selectedMaterial.ratePerUnit || selectedMaterial.ratePerSheet) && (
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-primary">Paper Cost Estimate</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-[11px] text-muted-foreground">Available Stock</p>
+              <p className="font-bold">{parseFloat(String(selectedMaterial.currentQty)).toLocaleString('en-IN')} <span className="font-normal text-muted-foreground text-xs">{selectedMaterial.unit}</span></p>
+            </div>
+            {selectedMaterial.ratePerUnit && (
+              <div>
+                <p className="text-[11px] text-muted-foreground">Rate / kg</p>
+                <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerUnit)).toLocaleString('en-IN')}</p>
+              </div>
+            )}
+            {selectedMaterial.ratePerSheet && (
+              <div>
+                <p className="text-[11px] text-muted-foreground">Rate / sheet</p>
+                <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerSheet)).toFixed(4)}</p>
+              </div>
+            )}
+            {selectedMaterial.ratePerSheet && plannedSheets > 0 && (
+              <div className="col-span-2 pt-1 border-t border-primary/20">
+                <p className="text-[11px] text-muted-foreground">Total Paper Cost ({plannedSheets.toLocaleString('en-IN')} sheets)</p>
+                <p className="font-black text-primary text-base">
+                  ₹{(plannedSheets * parseFloat(String(selectedMaterial.ratePerSheet))).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Quantity (Sheets) <span className="text-destructive">*</span></Label>
