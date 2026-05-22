@@ -49,7 +49,23 @@ router.post("/materials", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [material] = await db.insert(materialsTable).values(parsed.data).returning();
+
+  const insertData: Record<string, unknown> = { ...parsed.data };
+
+  // Auto-calculate ratePerSheet on creation if rate + dimensions + gsm provided
+  if (parsed.data.ratePerUnit != null && parsed.data.dimensions && parsed.data.gsm) {
+    const dimParts = parsed.data.dimensions.trim().split(' ');
+    const wh = dimParts[0].split('x').map(Number);
+    if (wh.length === 2 && wh[0] > 0 && wh[1] > 0) {
+      const dimUnit = dimParts[1]?.toLowerCase() ?? 'in';
+      const toCm = (v: number) => dimUnit === 'mm' ? v * 0.1 : dimUnit === 'cm' ? v : v * 2.54;
+      const sheetWeightKg = (toCm(wh[0]) * toCm(wh[1]) * parsed.data.gsm) / 10000000;
+      insertData.ratePerSheet = String(sheetWeightKg * parsed.data.ratePerUnit);
+      insertData.rateUpdatedAt = new Date();
+    }
+  }
+
+  const [material] = await db.insert(materialsTable).values(insertData as typeof materialsTable.$inferInsert).returning();
   res.status(201).json(material);
 });
 

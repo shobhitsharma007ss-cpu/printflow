@@ -52,6 +52,7 @@ interface WizardState {
   newVendorPhone: string;
   showNewVendor: boolean;
   openingQty: string;
+  openingRate: string;
   unit: string;
   reorderLevel: string;
   notes: string;
@@ -71,6 +72,7 @@ const initialState: WizardState = {
   newVendorPhone: "",
   showNewVendor: false,
   openingQty: "",
+  openingRate: "",
   unit: "sheets",
   reorderLevel: "",
   notes: "",
@@ -179,9 +181,10 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
           materialType: (state.category === "consumable" ? "consumable" : state.category) as "board" | "paper" | "consumable",
           subType: state.category === "consumable" ? state.consumableType : state.paperType,
           gsm: state.category !== "consumable" ? state.gsm : undefined,
-          unit: unit as any,
+          unit: unit as "sheets" | "reams" | "kg" | "litre",
           currentQty: parseFloat(state.openingQty) || 0,
           minReorderQty: parseFloat(state.reorderLevel) || 0,
+          ratePerUnit: state.openingRate ? parseFloat(state.openingRate) : undefined,
           dimensions: dimensions || undefined,
           grain: state.grain || undefined,
         }
@@ -487,7 +490,9 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
           </div>
         );
 
-      case "Stock Details":
+      case "Stock Details": {
+        const isBoardOrPaper = state.category === "board" || state.category === "paper";
+        const rateLabel = isBoardOrPaper ? "Opening Rate (₹/kg)" : `Opening Rate (₹/${state.unit || 'unit'})`;
         return (
           <div className="space-y-6">
             <h3 className="text-lg font-bold text-center">Stock Details</h3>
@@ -500,7 +505,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
                   step="0.01"
                   value={state.openingQty}
                   onChange={e => update({ openingQty: e.target.value })}
-                  placeholder="e.g. 500"
+                  placeholder="e.g. 5000"
                   className="text-lg font-bold"
                 />
               </div>
@@ -513,6 +518,26 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
                   <option value="litre">Litre</option>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{rateLabel}</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₹</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={state.openingRate}
+                  onChange={e => update({ openingRate: e.target.value })}
+                  placeholder="e.g. 82.00"
+                  className="pl-7"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {isBoardOrPaper
+                  ? "Rate per kg — rate per sheet auto-calculated from dimensions"
+                  : "Optional — can be updated later"}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Reorder Alert Level</Label>
@@ -538,6 +563,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
             </div>
           </div>
         );
+      }
 
       case "Review":
         const materialName = getMaterialName(state);

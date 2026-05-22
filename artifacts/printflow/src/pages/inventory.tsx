@@ -445,7 +445,7 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
               </div>
               <div className="space-y-1.5">
                 <Label>
-                  {isBoardCategory && dimsValid && matGsm
+                  {isBoardCategory
                     ? <>Rate per kg <span className="text-destructive">*</span></>
                     : <>Rate per {selectedMaterial?.unit ?? 'unit'} (₹)</>
                   }
@@ -456,15 +456,17 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder={isBoardCategory && dimsValid && matGsm ? "e.g. 85.00" : "e.g. 12.50"}
+                    placeholder="e.g. 85.00"
                     value={form.ratePerUnit}
                     onChange={e => setForm(f => ({ ...f, ratePerUnit: e.target.value }))}
                     className="pl-7"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {isBoardCategory && dimsValid && matGsm
-                    ? 'Rate per kg — sheet rate auto-calculated below'
+                  {isBoardCategory
+                    ? dimsValid && matGsm
+                      ? 'Rate per kg — sheet rate auto-calculated below'
+                      : 'Rate per kg — add dimensions to get rate/sheet'
                     : 'Updates material rate automatically'
                   }
                 </p>

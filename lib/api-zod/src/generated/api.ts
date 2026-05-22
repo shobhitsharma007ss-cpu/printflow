@@ -118,6 +118,7 @@ export const CreateMaterialBody = zod.object({
   unit: zod.enum(["reams", "kg", "litre", "sheets"]),
   currentQty: zod.number(),
   minReorderQty: zod.number(),
+  ratePerUnit: zod.number().nullish(),
   dimensions: zod.string().nullish(),
   grain: zod.string().nullish(),
 });
