@@ -14,6 +14,7 @@ export const machinesTable = pgTable("machines", {
   status: text("status").notNull().default("idle"), // idle/running/maintenance
   operatorName: text("operator_name").notNull(),
   description: text("description"),
+  colorUnits: integer("color_units").notNull().default(4),
   notes: text("notes"),
 });
 

@@ -28,6 +28,10 @@ export const jobsTable = pgTable("jobs", {
   finishRequirements: text("finish_requirements").array().default([]),
   needsPaperTrim: boolean("needs_paper_trim").notNull().default(false),
   coatingMethod: text("coating_method").notNull().default("inline"),
+  processColors: integer("process_colors").notNull().default(4),
+  spotColors: integer("spot_colors").notNull().default(0),
+  printPassCount: integer("print_pass_count").notNull().default(1),
+  dryingWaitHours: integer("drying_wait_hours").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

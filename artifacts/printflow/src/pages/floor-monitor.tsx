@@ -4,7 +4,7 @@ import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui-elements";
 import { getStatusColor, getStatusDotColor, cn } from "@/lib/utils";
-import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap } from "lucide-react";
+import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap, Wrench } from "lucide-react";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 // ─── Pause reasons ────────────────────────────────────────────────────────────
@@ -30,6 +30,21 @@ function usePauseRouting() {
       }).then(r => { if (!r.ok) throw new Error("Pause failed"); return r.json(); }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["machines"] });
+    },
+  });
+}
+
+function usePatchMachineStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      fetch(`/api/machines/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }).then(r => { if (!r.ok) throw new Error("Status update failed"); return r.json(); }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["machines"] });
     },
   });
@@ -91,6 +106,7 @@ export default function FloorMonitor() {
   const updateNotes = useUpdateJobRoutingNotes();
   const pauseRouting = usePauseRouting();
   const resumeRouting = useResumeRouting();
+  const patchMachineStatus = usePatchMachineStatus();
 
   const [expandedMachine, setExpandedMachine] = useState<number | null>(null);
   const [issueModal, setIssueModal] = useState<{ routingId: number; stepNumber: number; jobCode: string } | null>(null);
@@ -230,7 +246,8 @@ export default function FloorMonitor() {
                         "overflow-hidden border-t-4 hover:shadow-xl transition-all duration-300 relative z-10",
                         isExpanded && "ring-2 ring-primary/30",
                         machine.status === "running" && !isPaused && "ring-2 ring-emerald-500/50 shadow-emerald-500/20 shadow-lg",
-                        isPaused && "ring-2 ring-amber-400/50 shadow-amber-400/20 shadow-lg"
+                        isPaused && "ring-2 ring-amber-400/50 shadow-amber-400/20 shadow-lg",
+                        machine.status === "maintenance" && "ring-2 ring-rose-500/50 shadow-rose-500/20 shadow-lg border border-rose-300 dark:border-rose-700"
                       )}
                       style={{ borderTopColor: isPaused ? '#f59e0b' : getMachineColorCode(machine.status) }}
                     >
@@ -240,25 +257,50 @@ export default function FloorMonitor() {
                             <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
                             <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
                           </div>
-                          <div className="relative flex h-5 w-5">
-                            {machine.status === "running" && !isPaused && (
-                              <>
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" style={{ animationDelay: '0.3s' }}></span>
-                              </>
-                            )}
-                            {isPaused && (
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                            )}
-                            <span className={`relative inline-flex rounded-full h-5 w-5 ${isPaused ? 'bg-amber-400' : getStatusDotColor(machine.status)}`}></span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              title={machine.status === "maintenance" ? "Return to idle" : "Set maintenance"}
+                              onClick={() => patchMachineStatus.mutate({ id: machine.id, status: machine.status === "maintenance" ? "idle" : "maintenance" })}
+                              className={cn(
+                                "p-1 rounded-md transition-colors",
+                                machine.status === "maintenance"
+                                  ? "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-900/50"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              )}
+                            >
+                              <Wrench size={14} />
+                            </button>
+                            <div className="relative flex h-5 w-5">
+                              {machine.status === "running" && !isPaused && (
+                                <>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40" style={{ animationDelay: '0.3s' }}></span>
+                                </>
+                              )}
+                              {isPaused && (
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              )}
+                              {machine.status === "maintenance" && (
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                              )}
+                              <span className={`relative inline-flex rounded-full h-5 w-5 ${isPaused ? 'bg-amber-400' : getStatusDotColor(machine.status)}`}></span>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Maintenance banner */}
+                        {machine.status === "maintenance" && (
+                          <div className="mb-3 flex items-center gap-2 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800 rounded-lg px-3 py-2">
+                            <Wrench size={14} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                            <span className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Maintenance</span>
+                          </div>
+                        )}
 
                         {/* Current Job */}
                         <div className="bg-muted rounded-lg p-3 mb-3">
                           <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground block mb-1">Current Job</span>
                           <span className="text-base font-bold text-primary break-words block">
-                            {machine.currentJobName || "--- IDLE ---"}
+                            {machine.currentJobName || (machine.status === "maintenance" ? "— IN MAINTENANCE —" : "--- IDLE ---")}
                           </span>
                         </div>
 

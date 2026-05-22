@@ -58,6 +58,9 @@ interface JobForm {
   routing: { machineId: number; machineName: string }[];
   templateId: string;
   needsPaperTrim: boolean;
+  processColors: string;
+  spotColors: string;
+  dryingWaitHours: string;
 }
 
 export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -84,6 +87,9 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     routing: [],
     templateId: "",
     needsPaperTrim: false,
+    processColors: "4",
+    spotColors: "0",
+    dryingWaitHours: "6",
   });
 
   const boardsMats = useMemo(
@@ -314,6 +320,10 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
           finishRequirements: form.finishRequirements.length > 0 ? form.finishRequirements : undefined,
           materials: jobMaterials.length > 0 ? jobMaterials : undefined,
           needsPaperTrim: form.needsPaperTrim,
+          processColors: parseInt(form.processColors) || 4,
+          spotColors: parseInt(form.spotColors) || 0,
+          printPassCount: (parseInt(form.processColors) || 4) + (parseInt(form.spotColors) || 0) > 4 ? 2 : 1,
+          dryingWaitHours: parseInt(form.dryingWaitHours) || 0,
         },
       },
       {
@@ -345,6 +355,9 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       routing: [],
       templateId: "",
       needsPaperTrim: false,
+      processColors: "4",
+      spotColors: "0",
+      dryingWaitHours: "6",
     });
   };
 
@@ -590,7 +603,7 @@ function Step2Material({
       </div>
 
       {/* FIX 4 — Live rate ticker when material selected */}
-      {selectedMaterial && (selectedMaterial.ratePerUnit || selectedMaterial.ratePerSheet) && (
+      {selectedMaterial && (
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-3">
           <p className="text-xs font-bold uppercase tracking-wider text-primary">Paper Cost Estimate</p>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -708,6 +721,11 @@ function Step3Coating({
   printingMachines: Machine[];
   recommendedMachine: { machine: Machine; reason: string } | null;
 }) {
+  const processColorsNum = parseInt(form.processColors) || 0;
+  const spotColorsNum = parseInt(form.spotColors) || 0;
+  const totalColors = processColorsNum + spotColorsNum;
+  const needsDoublePass = totalColors > 4;
+  const isUvAqueous = form.coatingType === "uv" || form.coatingType === "aqueous" || form.coatingType === "led-uv";
   return (
     <div className="space-y-5">
       <div>
@@ -760,6 +778,60 @@ function Step3Coating({
             <span>
               <strong>Recommended: {recommendedMachine.machine.machineName}</strong> — {recommendedMachine.reason}
             </span>
+          </div>
+        )}
+      </div>
+
+      {/* Colour count fields */}
+      <div>
+        <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted-foreground">Colour Count</Label>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Process Colours</Label>
+            <Select
+              value={form.processColors}
+              onChange={(e) => setForm({ ...form, processColors: e.target.value })}
+            >
+              {[1,2,3,4].map(n => <option key={n} value={String(n)}>{n}</option>)}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Spot Colours</Label>
+            <Select
+              value={form.spotColors}
+              onChange={(e) => setForm({ ...form, spotColors: e.target.value })}
+            >
+              {[0,1,2,3,4].map(n => <option key={n} value={String(n)}>{n}</option>)}
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Total</Label>
+            <div className="flex items-center h-9 px-3 rounded-md border border-border bg-muted text-sm font-bold">
+              {totalColors}
+            </div>
+          </div>
+        </div>
+        {needsDoublePass && (
+          <div className="mt-3 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-sm text-amber-700 dark:text-amber-400">
+            <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+            <span className="font-semibold">5 colours on 4-unit press: requires 2 passes ⚠️</span>
+          </div>
+        )}
+        {needsDoublePass && (
+          <div className="mt-3 space-y-1.5">
+            <Label className="text-xs">Drying wait between passes (hours)</Label>
+            <Input
+              type="number"
+              min="0"
+              max="48"
+              value={isUvAqueous ? "0" : form.dryingWaitHours}
+              disabled={isUvAqueous}
+              onChange={(e) => setForm({ ...form, dryingWaitHours: e.target.value })}
+              placeholder="6"
+            />
+            {isUvAqueous && (
+              <p className="text-[11px] text-muted-foreground">UV/Aqueous jobs dry instantly — wait set to 0.</p>
+            )}
           </div>
         )}
       </div>

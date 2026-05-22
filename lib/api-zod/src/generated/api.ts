@@ -536,6 +536,10 @@ export const CreateJobBody = zod.object({
     )
     .nullish(),
   needsPaperTrim: zod.boolean().nullish(),
+  processColors: zod.number().nullish(),
+  spotColors: zod.number().nullish(),
+  printPassCount: zod.number().nullish(),
+  dryingWaitHours: zod.number().nullish(),
 });
 
 /**
