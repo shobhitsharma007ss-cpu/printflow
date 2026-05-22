@@ -611,26 +611,29 @@ function Step2Material({
               <p className="text-[11px] text-muted-foreground">Available Stock</p>
               <p className="font-bold">{parseFloat(String(selectedMaterial.currentQty)).toLocaleString('en-IN')} <span className="font-normal text-muted-foreground text-xs">{selectedMaterial.unit}</span></p>
             </div>
-            {selectedMaterial.ratePerUnit && (
-              <div>
-                <p className="text-[11px] text-muted-foreground">Rate / kg</p>
-                <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerUnit)).toLocaleString('en-IN')}</p>
-              </div>
-            )}
-            {selectedMaterial.ratePerSheet && (
-              <div>
-                <p className="text-[11px] text-muted-foreground">Rate / sheet</p>
-                <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerSheet)).toFixed(4)}</p>
-              </div>
-            )}
-            {selectedMaterial.ratePerSheet && plannedSheets > 0 && (
-              <div className="col-span-2 pt-1 border-t border-primary/20">
-                <p className="text-[11px] text-muted-foreground">Total Paper Cost ({plannedSheets.toLocaleString('en-IN')} sheets)</p>
-                <p className="font-black text-primary text-base">
-                  ₹{(plannedSheets * parseFloat(String(selectedMaterial.ratePerSheet))).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-            )}
+            <div>
+              <p className="text-[11px] text-muted-foreground">Rate / kg</p>
+              {selectedMaterial.ratePerUnit
+                ? <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerUnit)).toLocaleString('en-IN')}</p>
+                : <p className="text-[11px] text-amber-600 dark:text-amber-400 italic">Rate not set — record inward stock to set rate</p>
+              }
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Rate / sheet</p>
+              {selectedMaterial.ratePerSheet
+                ? <p className="font-bold">₹{parseFloat(String(selectedMaterial.ratePerSheet)).toFixed(4)}</p>
+                : <p className="text-[11px] text-muted-foreground italic">—</p>
+              }
+            </div>
+            <div className="col-span-2 pt-1 border-t border-primary/20">
+              <p className="text-[11px] text-muted-foreground">Total Paper Cost {plannedSheets > 0 ? `(${plannedSheets.toLocaleString('en-IN')} sheets)` : ""}</p>
+              {selectedMaterial.ratePerSheet && plannedSheets > 0
+                ? <p className="font-black text-primary text-base">
+                    ₹{(plannedSheets * parseFloat(String(selectedMaterial.ratePerSheet))).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </p>
+                : <p className="text-[11px] text-muted-foreground italic">{plannedSheets > 0 ? "Set rate to calculate" : "Enter quantity above"}</p>
+              }
+            </div>
           </div>
         </div>
       )}
