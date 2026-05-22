@@ -573,6 +573,11 @@ function Step2Material({
                   <div className="text-right shrink-0 ml-3">
                     <p className="text-sm font-bold">{parseFloat(String(m.currentQty)).toLocaleString()}</p>
                     <p className="text-[10px] text-muted-foreground">{m.unit} available</p>
+                    {m.ratePerSheet && (
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                        ₹{parseFloat(String(m.ratePerSheet)).toFixed(4)}/sheet
+                      </p>
+                    )}
                   </div>
                 </div>
               </button>

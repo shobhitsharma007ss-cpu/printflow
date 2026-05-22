@@ -7,7 +7,7 @@ import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-eleme
 import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle } from "lucide-react";
 import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
-import type { Machine, Material, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
+import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
 
 type Section = "machines" | "materials" | "vendors" | "templates";
 
@@ -194,23 +194,21 @@ function MaterialsSection() {
 
   const save = (m: Material) => {
     if (!editing) return;
-    const updateData: Record<string, unknown> = {
+    const updateData: CreateMaterialRequest = {
       materialName: m.materialName,
       materialType: m.materialType,
       subType: m.subType ?? '',
-      gsm: m.gsm ?? undefined,
-      unit: m.unit,
+      gsm: m.gsm ?? null,
+      unit: m.unit as CreateMaterialRequestUnit,
       currentQty: parseFloat(String(m.currentQty)) || 0,
-      minReorderQty: parseFloat(String(m.minReorderQty)) || 0,
-      dimensions: m.dimensions ?? undefined,
-      grain: m.grain ?? undefined,
+      minReorderQty: editing.field === 'reorder' ? (parseFloat(editValue) || 0) : (parseFloat(String(m.minReorderQty)) || 0),
+      ratePerUnit: editing.field === 'rate' ? (parseFloat(editValue) || null) : (m.ratePerUnit ?? null),
+      wastagePercent: editing.field === 'wastage' ? (parseFloat(editValue) || 5) : (m.wastagePercent ?? null),
+      dimensions: m.dimensions ?? null,
+      grain: m.grain ?? null,
     };
 
-    if (editing.field === 'reorder') updateData.minReorderQty = parseFloat(editValue) || 0;
-    if (editing.field === 'rate') updateData.ratePerUnit = parseFloat(editValue) || null;
-    if (editing.field === 'wastage') updateData.wastagePercent = parseFloat(editValue) || 5;
-
-    updateMaterial.mutate({ id: m.id, data: updateData as any }, {
+    updateMaterial.mutate({ id: m.id, data: updateData }, {
       onSuccess: () => {
         setEditing(null);
         setSaved(m.id);
@@ -358,10 +356,10 @@ function MaterialsSection() {
                         )}
                       </div>
 
-                      {/* Rate Per Unit */}
+                      {/* Rate Per kg (boards/paper) or per unit (consumables) */}
                       <div className="bg-muted/40 rounded-lg p-2.5">
                         <span className="text-muted-foreground text-xs block mb-0.5 flex items-center gap-1">
-                          Rate / {m.unit}
+                          {m.materialType !== 'consumable' ? 'Rate / kg' : `Rate / ${m.unit}`}
                           {rateStale && m.ratePerUnit && (
                             <span title="Rate not updated in 30+ days">
                               <AlertTriangle size={10} className="text-amber-500" />
@@ -388,6 +386,11 @@ function MaterialsSection() {
                               : <span className="text-muted-foreground font-normal text-xs">Set rate</span>
                             }
                           </button>
+                        )}
+                        {m.ratePerSheet && m.materialType !== 'consumable' && (
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 block mt-0.5 font-medium flex items-center gap-0.5">
+                            <IndianRupee size={10} />{parseFloat(String(m.ratePerSheet)).toFixed(4)}/sheet
+                          </span>
                         )}
                         {m.ratePerUnit && m.rateUpdatedAt && (
                           <span className="text-xs text-muted-foreground block mt-0.5">

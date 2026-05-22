@@ -42,7 +42,29 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
   const currentMaterial = await db.select().from(materialsTable).where(eq(materialsTable.id, parsed.data.materialId));
   if (currentMaterial[0]) {
     const newQty = parseFloat(String(currentMaterial[0].currentQty)) + parseFloat(String(parsed.data.qtyReceived));
-    await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, parsed.data.materialId));
+    const materialUpdate: Record<string, unknown> = { currentQty: String(newQty) };
+
+    if (parsed.data.ratePerUnit != null) {
+      const rateKg = parseFloat(String(parsed.data.ratePerUnit));
+      materialUpdate.ratePerUnit = String(rateKg);
+      materialUpdate.rateUpdatedAt = new Date();
+
+      const mat = currentMaterial[0];
+      if (mat.dimensions && mat.gsm) {
+        const dimParts = mat.dimensions.trim().split(' ');
+        const wh = dimParts[0].split('x').map(Number);
+        if (wh.length === 2 && wh[0] > 0 && wh[1] > 0) {
+          const unit = dimParts[1]?.toLowerCase() ?? 'in';
+          const toCm = (v: number) => unit === 'mm' ? v * 0.1 : unit === 'cm' ? v : v * 2.54;
+          const lCm = toCm(wh[0]);
+          const bCm = toCm(wh[1]);
+          const sheetWeightKg = (lCm * bCm * mat.gsm) / 10000000;
+          materialUpdate.ratePerSheet = String(sheetWeightKg * rateKg);
+        }
+      }
+    }
+
+    await db.update(materialsTable).set(materialUpdate).where(eq(materialsTable.id, parsed.data.materialId));
 
     await createNotification({
       type: "stock-inward",

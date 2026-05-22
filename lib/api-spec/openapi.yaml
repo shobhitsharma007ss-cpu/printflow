@@ -890,6 +890,15 @@ components:
           type: number
         minReorderQty:
           type: number
+        ratePerUnit:
+          type: number
+          nullable: true
+        ratePerSheet:
+          type: number
+          nullable: true
+        rateUpdatedAt:
+          type: string
+          nullable: true
         dimensions:
           type: string
           nullable: true

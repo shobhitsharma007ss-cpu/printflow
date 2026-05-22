@@ -223,7 +223,7 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   if (isBoardCategory && parsedDim && matGsm) {
     const lengthCm = dimToCm(parsedDim.w, parsedDim.unit);
     const breadthCm = dimToCm(parsedDim.h, parsedDim.unit);
-    sheetWeightKg = (lengthCm * breadthCm * matGsm) / 100000;
+    sheetWeightKg = (lengthCm * breadthCm * matGsm) / 10000000;
     const rateKg = parseFloat(form.ratePerUnit);
     if (!isNaN(rateKg) && rateKg > 0) {
       ratePerSheet = sheetWeightKg * rateKg;

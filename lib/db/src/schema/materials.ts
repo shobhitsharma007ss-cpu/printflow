@@ -13,6 +13,7 @@ export const materialsTable = pgTable("materials", {
   minReorderQty: numeric("min_reorder_qty", { precision: 10, scale: 2 }).notNull().default("0"),
   reservedQty: numeric("reserved_qty", { precision: 10, scale: 2 }).notNull().default("0"),
   ratePerUnit: numeric("rate_per_unit", { precision: 10, scale: 2 }),
+  ratePerSheet: numeric("rate_per_sheet", { precision: 12, scale: 6 }),
   rateUpdatedAt: timestamp("rate_updated_at", { withTimezone: true }),
   wastagePercent: numeric("wastage_percent", { precision: 5, scale: 2 }).notNull().default("5"),
   dimensions: text("dimensions"), // e.g. "25x35" in inches

@@ -12,6 +12,17 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 11: Add rate_per_sheet to materials ───────────────────────
+  try {
+    await db.execute(sql`
+      ALTER TABLE materials
+        ADD COLUMN IF NOT EXISTS rate_per_sheet NUMERIC(12,6);
+    `);
+    logger.info("Migration 11: rate_per_sheet column ensured on materials.");
+  } catch (err) {
+    logger.error("Migration 11 failed:", err);
+  }
+
   // ─── MIGRATION 10: Add needs_paper_trim, coating_method to jobs + step_code, prerequisite_codes to job_routing ───
   try {
     await db.execute(sql`

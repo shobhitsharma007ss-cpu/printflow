@@ -28,6 +28,7 @@ router.get("/materials", async (_req, res): Promise<void> => {
       minReorderQty: materialsTable.minReorderQty,
       reservedQty: materialsTable.reservedQty,
       ratePerUnit: materialsTable.ratePerUnit,
+      ratePerSheet: materialsTable.ratePerSheet,
       rateUpdatedAt: materialsTable.rateUpdatedAt,
       wastagePercent: materialsTable.wastagePercent,
       dimensions: materialsTable.dimensions,
@@ -78,10 +79,23 @@ router.put("/materials/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  // Auto-update rateUpdatedAt when rate changes
+  // Auto-update rateUpdatedAt and recalculate ratePerSheet when rate changes
   const updateData: Record<string, unknown> = { ...parsed.data };
-  if (parsed.data.ratePerUnit !== undefined) {
+  if (parsed.data.ratePerUnit != null) {
     updateData.rateUpdatedAt = new Date();
+    const rateKg = Number(parsed.data.ratePerUnit);
+    const dims = parsed.data.dimensions;
+    const gsm = parsed.data.gsm;
+    if (dims && gsm) {
+      const parts = dims.trim().split(' ');
+      const wh = parts[0].split('x').map(Number);
+      if (wh.length === 2 && wh[0] > 0 && wh[1] > 0) {
+        const unit = parts[1]?.toLowerCase() ?? 'in';
+        const toCm = (v: number) => unit === 'mm' ? v * 0.1 : unit === 'cm' ? v : v * 2.54;
+        const sheetWeightKg = (toCm(wh[0]) * toCm(wh[1]) * gsm) / 10000000;
+        updateData.ratePerSheet = String(sheetWeightKg * rateKg);
+      }
+    }
   }
 
   const [material] = await db

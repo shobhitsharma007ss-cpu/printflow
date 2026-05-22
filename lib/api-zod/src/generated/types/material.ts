@@ -17,6 +17,11 @@ export interface Material {
   unit: MaterialUnit;
   currentQty: number;
   minReorderQty: number;
+  reservedQty?: number | null;
+  ratePerUnit?: number | null;
+  ratePerSheet?: number | null;
+  rateUpdatedAt?: string | null;
+  wastagePercent?: number | null;
   dimensions?: string | null;
   grain?: string | null;
   createdAt: string;
