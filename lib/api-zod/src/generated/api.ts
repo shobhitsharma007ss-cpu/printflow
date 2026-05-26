@@ -272,8 +272,9 @@ export const ListStockInwardResponse = zod.array(ListStockInwardResponseItem);
  */
 export const CreateStockInwardBody = zod.object({
   materialId: zod.number(),
-  vendorId: zod.number(),
+  vendorId: zod.number().optional(),
   qtyReceived: zod.number(),
+  ratePerUnit: zod.number().optional(),
   unit: zod.string(),
   batchRef: zod.string(),
   brand: zod.string().nullish(),
@@ -1111,6 +1112,7 @@ export const GetStockSummaryResponseItem = zod.object({
   grain: zod.string().nullish(),
   isLowStock: zod.boolean(),
   stockPct: zod.number(),
+  oldestBatchDays: zod.number().nullish(),
 });
 export const GetStockSummaryResponse = zod.array(GetStockSummaryResponseItem);
 

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -18,6 +18,28 @@ export const materialsTable = pgTable("materials", {
   wastagePercent: numeric("wastage_percent", { precision: 5, scale: 2 }).notNull().default("5"),
   dimensions: text("dimensions"), // e.g. "25x35" in inches
   grain: text("grain"), // "long" or "short"
+  lengthCm: numeric("length_cm", { precision: 8, scale: 2 }),
+  widthCm: numeric("width_cm", { precision: 8, scale: 2 }),
+  dimensionsDisplayUnit: text("dimensions_display_unit").default("inches"),
+  currentStockKg: numeric("current_stock_kg", { precision: 12, scale: 3 }).default("0"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const materialBatchesTable = pgTable("material_batches", {
+  id: serial("id").primaryKey(),
+  materialId: integer("material_id").notNull().references(() => materialsTable.id),
+  vendorId: integer("vendor_id"),
+  brand: text("brand"),
+  batchCode: text("batch_code"),
+  invoiceNumber: text("invoice_number"),
+  invoiceDate: date("invoice_date"),
+  qtyKg: numeric("qty_kg", { precision: 12, scale: 3 }),
+  qtySheets: numeric("qty_sheets", { precision: 12, scale: 2 }),
+  qtyRemaining: numeric("qty_remaining", { precision: 12, scale: 2 }),
+  ratePerKg: numeric("rate_per_kg", { precision: 10, scale: 3 }),
+  ratePerSheet: numeric("rate_per_sheet", { precision: 10, scale: 3 }),
+  receivedDate: date("received_date"),
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

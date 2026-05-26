@@ -1,0 +1,81 @@
+Implement these inventory improvements from highest priority to lowest. Stop after P1 if time is short.
+P1 TASK 1 — Fix unit inconsistency in inventory list (CRITICAL):
+Every paper material in the inventory list must show BOTH kg AND sheets. Currently some show sheets only, some show kg only. Fix all material tiles to show:
+Art Card 250gsm          250 GSM · 23×36 in (58.4×91.4 cm)
+Current stock: 75,739 sheets · 12,118 kg
+Sheet weight formula for conversion: (L_cm × B_cm × GSM) / 10,000,000
+sheets = total_kg / sheet_weight_kg
+kg = total_sheets × sheet_weight_kg
+Show both units on every paper material tile and in the material list in Settings.
+P1 TASK 2 — Collapse Record Inward Stock from 4 steps to 2 steps:
+NEW STEP 1 — 'What arrived?':
+Single screen combining category filter + material search:
+
+Search box at top for fuzzy material name search
+Filter chips: All / Paper / Inks / Coatings / Glue
+Material list below showing name, GSM, dimensions, current stock in both kg and sheets
+'+ Add new material' link at bottom
+
+NEW STEP 2 — 'From whom & how much?':
+Single screen combining vendor + qty + rate:
+
+Vendor dropdown at top with '+ New vendor' option
+Brand/Make smart dropdown showing previously used brands for selected vendor
+Qty Received in kg
+Rate per kg
+Live derived preview updating as user types:
+
+→ X sheets (at Y kg/sheet)
+→ Invoice total: ₹Z
+→ New stock: X kg | Y sheets
+
+
+Sheet Weight and Rate per Sheet shown as read-only auto-calculated
+Batch/Invoice Ref and Date Received fields
+Collapsible 'Show more details' with Invoiced Qty vs Received Qty variance
+'Save & Add Another' button that resets form but keeps vendor selected
+
+P1 TASK 3 — Add New Material as single screen:
+Convert the multi-step Add Material wizard to a single form:
+
+Type selector at top: Paper / Ink / Coating / Glue / Other
+Paper fields: Category dropdown (Art Card/SBS/FBB/Duplex/Kraft/Maplitho), GSM, Dimensions (L × W with inches/cm toggle), Grain direction
+Auto-generate material name from inputs e.g. 'Art Card 250gsm 23×36 inches'
+Opening stock in kg
+Reorder level in kg
+'Save & Add Another' button
+Store dimensions internally ALWAYS in cm regardless of UI unit selected
+
+P2 TASK 4 — Inventory tile improvements:
+Each material tile should show:
+
+Both sheets AND kg with equal visual weight
+Oldest batch age with colour coding (green <30 days, yellow 30-60, orange 60-90, red >90 days)
+Reorder level breach → red border on tile
+Click tile → drawer showing batch-level detail (vendor, brand, rate, age, remaining qty)
+
+DB MIGRATION needed:
+sqlALTER TABLE materials ADD COLUMN IF NOT EXISTS length_cm DECIMAL(8,2);
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS width_cm DECIMAL(8,2);
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS dimensions_display_unit VARCHAR(10) DEFAULT 'inches';
+ALTER TABLE materials ADD COLUMN IF NOT EXISTS current_stock_kg DECIMAL(12,3) DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS material_batches (
+  id SERIAL PRIMARY KEY,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  vendor_id INTEGER REFERENCES vendors(id),
+  brand VARCHAR(100),
+  batch_code VARCHAR(50),
+  invoice_number VARCHAR(50),
+  invoice_date DATE,
+  qty_kg DECIMAL(12,3),
+  qty_sheets DECIMAL(12,2),
+  qty_remaining DECIMAL(12,2),
+  rate_per_kg DECIMAL(10,3),
+  rate_per_sheet DECIMAL(10,3),
+  received_date DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+After all changes sync git and republish."**
+🎯

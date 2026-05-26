@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, gt } from "drizzle-orm";
-import { db, wastageLogTable, jobsTable, materialsTable, jobMaterialsTable, jobRoutingTable, machinesTable } from "@workspace/db";
+import { eq, gt, sql } from "drizzle-orm";
+import { db, wastageLogTable, jobsTable, materialsTable, jobMaterialsTable, jobRoutingTable, machinesTable, stockInwardTable } from "@workspace/db";
 import { GetJobCostReportParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -90,7 +90,17 @@ router.get("/reports/wastage", async (_req, res): Promise<void> => {
 });
 
 router.get("/reports/stock-summary", async (_req, res): Promise<void> => {
-  const materials = await db.select().from(materialsTable).orderBy(materialsTable.materialType, materialsTable.materialName);
+  const [materials, batchAges] = await Promise.all([
+    db.select().from(materialsTable).orderBy(materialsTable.materialType, materialsTable.materialName),
+    db.select({
+      materialId: stockInwardTable.materialId,
+      oldestDate: sql<string>`MIN(${stockInwardTable.receivedDate})`,
+    })
+    .from(stockInwardTable)
+    .groupBy(stockInwardTable.materialId),
+  ]);
+
+  const batchAgeMap = new Map(batchAges.map(b => [b.materialId, b.oldestDate]));
 
   const result = materials.map(m => {
     const currentQty = parseFloat(String(m.currentQty));
@@ -98,6 +108,11 @@ router.get("/reports/stock-summary", async (_req, res): Promise<void> => {
     const isLowStock = currentQty <= minReorderQty;
     const maxStock = minReorderQty * 5;
     const stockPct = maxStock > 0 ? Math.min(100, (currentQty / maxStock) * 100) : 0;
+
+    const oldestDateStr = batchAgeMap.get(m.id);
+    const oldestBatchDays = oldestDateStr
+      ? Math.floor((Date.now() - new Date(oldestDateStr).getTime()) / 86_400_000)
+      : null;
 
     return {
       id: m.id,
@@ -112,6 +127,7 @@ router.get("/reports/stock-summary", async (_req, res): Promise<void> => {
       grain: m.grain,
       isLowStock,
       stockPct,
+      oldestBatchDays,
     };
   });
 

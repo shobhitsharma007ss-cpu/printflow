@@ -12,6 +12,39 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 13: Inventory dimension columns + material_batches table ──
+  try {
+    await db.execute(sql`
+      ALTER TABLE materials
+        ADD COLUMN IF NOT EXISTS length_cm                DECIMAL(8,2),
+        ADD COLUMN IF NOT EXISTS width_cm                 DECIMAL(8,2),
+        ADD COLUMN IF NOT EXISTS dimensions_display_unit  VARCHAR(10) DEFAULT 'inches',
+        ADD COLUMN IF NOT EXISTS current_stock_kg         DECIMAL(12,3) DEFAULT 0;
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS material_batches (
+        id             SERIAL PRIMARY KEY,
+        material_id    INTEGER NOT NULL REFERENCES materials(id),
+        vendor_id      INTEGER REFERENCES vendors(id),
+        brand          VARCHAR(100),
+        batch_code     VARCHAR(50),
+        invoice_number VARCHAR(50),
+        invoice_date   DATE,
+        qty_kg         DECIMAL(12,3),
+        qty_sheets     DECIMAL(12,2),
+        qty_remaining  DECIMAL(12,2),
+        rate_per_kg    DECIMAL(10,3),
+        rate_per_sheet DECIMAL(10,3),
+        received_date  DATE,
+        notes          TEXT,
+        created_at     TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    logger.info("Migration 13: costing columns + job_quotes table ensured.");
+  } catch (err) {
+    logger.error("Migration 13 failed:", err);
+  }
+
   // ─── MIGRATION 12: Costing columns on machines/jobs + job_quotes table ───
   try {
     await db.execute(sql`
