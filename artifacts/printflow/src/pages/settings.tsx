@@ -8,6 +8,8 @@ import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, T
 import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
 import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 type Section = "machines" | "materials" | "vendors" | "templates";
 
@@ -53,6 +55,8 @@ export default function Settings() {
       {activeSection === "materials" && <MaterialsSection />}
       {activeSection === "vendors" && <VendorsSection />}
       {activeSection === "templates" && <TemplatesSection />}
+
+      <DangerZone />
     </div>
   );
 }
@@ -1071,6 +1075,160 @@ function TemplatesSection() {
         <Card className="p-8 text-center text-muted-foreground">No job templates configured yet.</Card>
       )}
     </div>
+  );
+}
+
+function DangerZone() {
+  const queryClient = useQueryClient();
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const [invModal, setInvModal] = useState(false);
+  const [invText, setInvText] = useState("");
+  const [invLoading, setInvLoading] = useState(false);
+
+  const [jobModal, setJobModal] = useState(false);
+  const [jobText, setJobText] = useState("");
+  const [jobLoading, setJobLoading] = useState(false);
+
+  const clearInventory = async () => {
+    setInvLoading(true);
+    try {
+      const r = await fetch(`${base}/api/admin/clear-inventory`, { method: "POST" });
+      if (!r.ok) throw new Error("Server error");
+      await queryClient.invalidateQueries();
+      toast.success("All inventory cleared. Stock reset to zero.");
+      setInvModal(false);
+      setInvText("");
+    } catch {
+      toast.error("Failed to clear inventory. Please try again.");
+    } finally {
+      setInvLoading(false);
+    }
+  };
+
+  const clearJobs = async () => {
+    setJobLoading(true);
+    try {
+      const r = await fetch(`${base}/api/admin/clear-jobs`, { method: "POST" });
+      if (!r.ok) throw new Error("Server error");
+      await queryClient.invalidateQueries();
+      toast.success("All jobs cleared.");
+      setJobModal(false);
+      setJobText("");
+    } catch {
+      toast.error("Failed to clear jobs. Please try again.");
+    } finally {
+      setJobLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="border-2 border-rose-300 rounded-xl overflow-hidden mt-8">
+        <div className="bg-rose-50 px-5 py-4 flex items-center gap-3 border-b border-rose-200">
+          <AlertTriangle size={20} className="text-rose-600 shrink-0" />
+          <div>
+            <h2 className="font-bold text-rose-800 text-base">⚠️ Danger Zone</h2>
+            <p className="text-xs text-rose-600 font-medium mt-0.5">These actions are permanent and cannot be undone.</p>
+          </div>
+        </div>
+        <div className="p-5 bg-white space-y-4">
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border border-rose-100 bg-rose-50/40">
+            <div className="flex-1">
+              <p className="font-semibold text-sm text-foreground">Clear All Inventory</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Deletes all stock entries and resets all material quantities to zero.</p>
+            </div>
+            <button
+              onClick={() => { setInvText(""); setInvModal(true); }}
+              className="shrink-0 px-4 py-2 rounded-lg text-sm font-bold bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200 transition-colors"
+            >
+              Clear All Inventory
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border border-rose-100 bg-rose-50/40">
+            <div className="flex-1">
+              <p className="font-semibold text-sm text-foreground">Clear All Jobs</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Deletes all jobs, job routing, materials used, wastage logs, and interruptions.</p>
+            </div>
+            <button
+              onClick={() => { setJobText(""); setJobModal(true); }}
+              className="shrink-0 px-4 py-2 rounded-lg text-sm font-bold bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200 transition-colors"
+            >
+              Clear All Jobs
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <Modal isOpen={invModal} onClose={() => setInvModal(false)} title="Clear All Inventory">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 bg-rose-50 rounded-lg border border-rose-200">
+            <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-800">
+              This will permanently delete all stock entries and reset all material quantities to zero. This cannot be undone.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">
+              Type <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-rose-700">CLEAR INVENTORY</span> to confirm
+            </Label>
+            <Input
+              value={invText}
+              onChange={e => setInvText(e.target.value)}
+              placeholder="CLEAR INVENTORY"
+              className="font-mono"
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={() => setInvModal(false)} disabled={invLoading}>Cancel</Button>
+            <button
+              onClick={clearInventory}
+              disabled={invText !== "CLEAR INVENTORY" || invLoading}
+              className="px-4 py-2 rounded-lg text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {invLoading ? "Clearing…" : "Clear All Inventory"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={jobModal} onClose={() => setJobModal(false)} title="Clear All Jobs">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 bg-rose-50 rounded-lg border border-rose-200">
+            <AlertTriangle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-rose-800">
+              This will permanently delete all jobs, routing steps, material usage, wastage logs, and interruptions. This cannot be undone.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-semibold">
+              Type <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-rose-700">CLEAR JOBS</span> to confirm
+            </Label>
+            <Input
+              value={jobText}
+              onChange={e => setJobText(e.target.value)}
+              placeholder="CLEAR JOBS"
+              className="font-mono"
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={() => setJobModal(false)} disabled={jobLoading}>Cancel</Button>
+            <button
+              onClick={clearJobs}
+              disabled={jobText !== "CLEAR JOBS" || jobLoading}
+              className="px-4 py-2 rounded-lg text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {jobLoading ? "Clearing…" : "Clear All Jobs"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 
