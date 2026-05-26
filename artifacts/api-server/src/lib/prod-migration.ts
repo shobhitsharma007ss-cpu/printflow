@@ -12,6 +12,71 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 12: Costing columns on machines/jobs + job_quotes table ───
+  try {
+    await db.execute(sql`
+      ALTER TABLE machines
+        ADD COLUMN IF NOT EXISTS rated_sph               INTEGER,
+        ADD COLUMN IF NOT EXISTS peak_running_sph        INTEGER,
+        ADD COLUMN IF NOT EXISTS rated_speed_m_per_min   INTEGER,
+        ADD COLUMN IF NOT EXISTS setup_min_repeat        INTEGER,
+        ADD COLUMN IF NOT EXISTS setup_min_new           INTEGER,
+        ADD COLUMN IF NOT EXISTS oee_default             DECIMAL(3,2),
+        ADD COLUMN IF NOT EXISTS hour_rate               DECIMAL(10,2);
+    `);
+    await db.execute(sql`
+      ALTER TABLE jobs
+        ADD COLUMN IF NOT EXISTS carton_style        VARCHAR(20) DEFAULT 'straight_tuck',
+        ADD COLUMN IF NOT EXISTS is_new_die          BOOLEAN DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS die_cost            DECIMAL(10,2),
+        ADD COLUMN IF NOT EXISTS ups_per_sheet       INTEGER,
+        ADD COLUMN IF NOT EXISTS coating_application VARCHAR(20) DEFAULT 'inline';
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS job_quotes (
+        id            SERIAL PRIMARY KEY,
+        job_id        INTEGER REFERENCES jobs(id),
+        version       INTEGER NOT NULL,
+        costing_snapshot JSONB NOT NULL,
+        pre_gst_total DECIMAL(12,2),
+        final_total   DECIMAL(12,2),
+        per_1000_rate DECIMAL(10,2),
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (job_id, version)
+      );
+    `);
+    logger.info("Migration 12: costing columns + job_quotes table ensured.");
+  } catch (err) {
+    logger.error("Migration 12 failed:", err);
+  }
+
+  // ─── MIGRATION 12 SEED: machine costing defaults ─────────────────────────
+  try {
+    await db.execute(sql`
+      UPDATE machines SET rated_sph=12000, oee_default=0.70, setup_min_repeat=30, setup_min_new=45, hour_rate=2800
+        WHERE machine_name='Komori LA37'            AND hour_rate IS NULL;
+      UPDATE machines SET rated_sph=13000, oee_default=0.70, setup_min_repeat=30, setup_min_new=45, hour_rate=2500
+        WHERE machine_name='Komori GL37'            AND hour_rate IS NULL;
+      UPDATE machines SET rated_sph=5000,  oee_default=0.65, setup_min_repeat=35, setup_min_new=50,  hour_rate=1800
+        WHERE machine_name='Planeta Super Variant'  AND hour_rate IS NULL;
+      UPDATE machines SET rated_sph=8000,  peak_running_sph=5200, setup_min_repeat=10, setup_min_new=105, hour_rate=1500
+        WHERE machine_name='Bobst Die Cutter 1'     AND hour_rate IS NULL;
+      UPDATE machines SET rated_sph=8000,  peak_running_sph=5200, setup_min_repeat=10, setup_min_new=105, hour_rate=1500
+        WHERE machine_name='Bobst Die Cutter 2'     AND hour_rate IS NULL;
+      UPDATE machines SET rated_speed_m_per_min=350, oee_default=0.65, setup_min_repeat=25, setup_min_new=75, hour_rate=1200
+        WHERE machine_name='Bobst Folder Gluer'     AND hour_rate IS NULL;
+      UPDATE machines SET rated_speed_m_per_min=400, oee_default=0.55, setup_min_repeat=25, setup_min_new=75, hour_rate=1000
+        WHERE machine_name='Hyong Jung Folder Gluer' AND hour_rate IS NULL;
+      UPDATE machines SET rated_speed_m_per_min=400, oee_default=0.50, setup_min_repeat=30, setup_min_new=90, hour_rate=800
+        WHERE machine_name='DGM Folder Gluer'       AND hour_rate IS NULL;
+      UPDATE machines SET setup_min_repeat=6, hour_rate=550
+        WHERE machine_name='Wohlenberg Cutter'      AND hour_rate IS NULL;
+    `);
+    logger.info("Migration 12 seed: machine costing defaults applied.");
+  } catch (err) {
+    logger.error("Migration 12 seed failed:", err);
+  }
+
   // ─── MIGRATION 11: Add rate_per_sheet to materials ───────────────────────
   try {
     await db.execute(sql`

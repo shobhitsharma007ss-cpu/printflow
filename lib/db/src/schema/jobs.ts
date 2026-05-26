@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, numeric, boolean, jsonb, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { materialsTable } from "./materials";
@@ -32,6 +32,11 @@ export const jobsTable = pgTable("jobs", {
   spotColors: integer("spot_colors").notNull().default(0),
   printPassCount: integer("print_pass_count").notNull().default(1),
   dryingWaitHours: integer("drying_wait_hours").notNull().default(0),
+  cartonStyle: text("carton_style").default("straight_tuck"),
+  isNewDie: boolean("is_new_die").default(false),
+  dieCost: numeric("die_cost", { precision: 10, scale: 2 }),
+  upsPerSheet: integer("ups_per_sheet"),
+  coatingApplication: text("coating_application").default("inline"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -39,11 +44,11 @@ export const jobRoutingTable = pgTable("job_routing", {
   id: serial("id").primaryKey(),
   jobId: integer("job_id").notNull().references(() => jobsTable.id),
   stepNumber: integer("step_number").notNull(),
-  stepCode: text("step_code").notNull().default(""), // CUT/PRINT/COAT_STANDALONE/LAMINATE/DIE_CUT/FOLD_GLUE
+  stepCode: text("step_code").notNull().default(""),
   machineId: integer("machine_id").notNull().references(() => machinesTable.id),
   operatorName: text("operator_name"),
-  status: text("status").notNull().default("pending"), // pending/ready/in-progress/paused/completed
-  prerequisiteCodes: text("prerequisite_codes").array().notNull().default([]), // step codes that must complete first
+  status: text("status").notNull().default("pending"),
+  prerequisiteCodes: text("prerequisite_codes").array().notNull().default([]),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
   pausedAt: text("paused_at"),
@@ -87,6 +92,19 @@ export const wastageLogTable = pgTable("wastage_log", {
   loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const jobQuotesTable = pgTable("job_quotes", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").references(() => jobsTable.id),
+  version: integer("version").notNull(),
+  costingSnapshot: jsonb("costing_snapshot").notNull(),
+  preGstTotal: numeric("pre_gst_total", { precision: 12, scale: 2 }),
+  finalTotal: numeric("final_total", { precision: 12, scale: 2 }),
+  per1000Rate: numeric("per_1000_rate", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("job_quotes_job_version_unique").on(table.jobId, table.version),
+]);
+
 export const insertJobSchema = createInsertSchema(jobsTable).omit({ id: true, createdAt: true });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobsTable.$inferSelect;
@@ -95,3 +113,4 @@ export type JobRouting = typeof jobRoutingTable.$inferSelect;
 export type JobMaterial = typeof jobMaterialsTable.$inferSelect;
 export type WastageLog = typeof wastageLogTable.$inferSelect;
 export type JobInterruption = typeof jobInterruptionsTable.$inferSelect;
+export type JobQuote = typeof jobQuotesTable.$inferSelect;

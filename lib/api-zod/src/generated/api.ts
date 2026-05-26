@@ -297,6 +297,13 @@ export const ListMachinesResponseItem = zod.object({
   operatorName: zod.string(),
   notes: zod.string().nullish(),
   currentJobName: zod.string().nullish(),
+  ratedSph: zod.number().nullish(),
+  peakRunningSph: zod.number().nullish(),
+  ratedSpeedMPerMin: zod.number().nullish(),
+  setupMinRepeat: zod.number().nullish(),
+  setupMinNew: zod.number().nullish(),
+  oeeDefault: zod.string().nullish(),
+  hourRate: zod.string().nullish(),
 });
 export const ListMachinesResponse = zod.array(ListMachinesResponseItem);
 

@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   PackageX,
   Clock,
-  X
+  X,
+  Calculator
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlantAlerts } from "@/hooks/use-notifications";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/floor-monitor", label: "Floor Monitor", icon: MonitorPlay },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
+  { href: "/costing", label: "Costing", icon: Calculator },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },

@@ -1,0 +1,137 @@
+"Build a complete Costing Calculator for PrintFlow. This is the most critical demo feature. Follow these specs exactly.
+STEP 1 — Add to sidebar navigation:
+Add 'Costing' to the sidebar with a calculator icon, route /costing. Add it between Jobs and Inventory.
+STEP 2 — Database migrations:
+Run these SQL additions via prod-migration.ts as Migration 11:
+sqlALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_sph INTEGER;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS peak_running_sph INTEGER;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS rated_speed_m_per_min INTEGER;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS setup_min_repeat INTEGER;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS setup_min_new INTEGER;
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS oee_default DECIMAL(3,2);
+ALTER TABLE machines ADD COLUMN IF NOT EXISTS hour_rate DECIMAL(10,2);
+
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS carton_style VARCHAR(20) DEFAULT 'straight_tuck';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_new_die BOOLEAN DEFAULT FALSE;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS die_cost DECIMAL(10,2);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS ups_per_sheet INTEGER;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS coating_application VARCHAR(20) DEFAULT 'inline';
+
+CREATE TABLE IF NOT EXISTS job_quotes (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id),
+  version INTEGER NOT NULL,
+  costing_snapshot JSONB NOT NULL,
+  pre_gst_total DECIMAL(12,2),
+  final_total DECIMAL(12,2),
+  per_1000_rate DECIMAL(10,2),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (job_id, version)
+);
+Also seed machine defaults in the migration:
+sqlUPDATE machines SET rated_sph=12000, oee_default=0.70, setup_min_repeat=30, setup_min_new=45, hour_rate=2800 WHERE machine_name='Komori LA37';
+UPDATE machines SET rated_sph=13000, oee_default=0.70, setup_min_repeat=30, setup_min_new=45, hour_rate=2500 WHERE machine_name='Komori GL37';
+UPDATE machines SET rated_sph=5000, oee_default=0.65, setup_min_repeat=35, setup_min_new=50, hour_rate=1800 WHERE machine_name='Planeta Super Variant';
+UPDATE machines SET rated_sph=8000, peak_running_sph=5200, setup_min_repeat=10, setup_min_new=105, hour_rate=1500 WHERE machine_name='Bobst Die Cutter 1';
+UPDATE machines SET rated_sph=8000, peak_running_sph=5200, setup_min_repeat=10, setup_min_new=105, hour_rate=1500 WHERE machine_name='Bobst Die Cutter 2';
+UPDATE machines SET rated_speed_m_per_min=350, oee_default=0.65, setup_min_repeat=25, setup_min_new=75, hour_rate=1200 WHERE machine_name='Bobst Folder Gluer';
+UPDATE machines SET rated_speed_m_per_min=400, oee_default=0.55, setup_min_repeat=25, setup_min_new=75, hour_rate=1000 WHERE machine_name='Hyong Jung Folder Gluer';
+UPDATE machines SET rated_speed_m_per_min=400, oee_default=0.50, setup_min_repeat=30, setup_min_new=90, hour_rate=800 WHERE machine_name='DGM Folder Gluer';
+UPDATE machines SET setup_min_repeat=6, hour_rate=550 WHERE machine_name='Wohlenberg Cutter';
+STEP 3 — Build costing.tsx page with these exact formulas:
+Sheet weight:
+sheet_weight_kg = (L_in × 2.54 × B_in × 2.54 × GSM) / 10000000
+sheet_cost = sheet_weight_kg × rate_per_kg
+Quantities:
+required_sheets = ceil(qty_required / ups_per_sheet)
+planned_sheets = ceil((required_sheets + makeready_waste) × (1 + running_waste_pct/100))
+makeready_waste default = 400 for 4-colour, 500 for 5+ colours
+running_waste_pct default = 3%
+Paper cost:
+paper_cost = planned_sheets × sheet_cost
+Plate cost:
+plate_count = total_colors × print_pass_count
+if coating is inline: plate_count += print_pass_count
+plate_cost = plate_count × plate_rate_per_plate (default ₹1,200)
+Press cost:
+effective_sph = rated_sph × oee_default
+run_time_min = (planned_sheets / effective_sph) × 60 × print_pass_count
+setup_time_min = setup_min_repeat (default 30)
+press_cost = ((setup_time_min + run_time_min) / 60) × hour_rate
+Ink cost:
+sheet_area_m2 = (L_in × 2.54 × B_in × 2.54) / 10000
+image_area_m2 = sheet_area_m2 × 0.75 (default image coverage)
+cmyk_ink_per_color_kg = (image_area_m2 × 0.35 × planned_sheets × 1.3) / 1000
+spot_ink_per_color_kg = (image_area_m2 × 0.60 × planned_sheets × 1.5) / 1000
+cmyk_cost = process_colors × cmyk_ink_per_color_kg × 420 (₹/kg default)
+spot_cost = spot_colors × spot_ink_per_color_kg × 650 (₹/kg default)
+total_ink_cost = cmyk_cost + spot_cost
+Coating cost (inline aqueous only for v1):
+aqueous_kg = (planned_sheets × sheet_area_m2 × 2) / 1000
+coating_cost = aqueous_kg × 230 (₹/kg default)
+Die cutter cost:
+setup_min = is_new_die ? 105 : 10
+run_time_min = (planned_sheets / 5200) × 60
+die_cutter_cost = ((setup_min + run_time_min) / 60) × 1500
+if is_new_die: die_cutter_cost += die_fabrication_cost
+Folder-gluer cost — CRITICAL: in CARTONS not sheets:
+carton_length_mm = entered by user (e.g. 100mm)
+style_factors = { straight_tuck: 1.0, reverse_tuck: 0.85, auto_bottom: 0.60, crash_lock: 0.55 }
+rated_cph = (350 × 60 × 1000) / carton_length_mm
+effective_cph = rated_cph × 0.65 × style_factor
+run_time_min = (qty_required / effective_cph) × 60
+setup_min = 25
+folder_gluer_cost = ((setup_min + run_time_min) / 60) × 1200
+glue_cost = (qty_required × 0.4 / 1000) × 150
+Totals:
+direct_cost = paper + plates + ink + coating + press + die_cutter + folder_gluer + glue + handwork
+factory_oh = direct_cost × 0.10
+admin_oh = direct_cost × 0.05
+subtotal = direct_cost + factory_oh + admin_oh
+profit = subtotal × 0.15
+pre_gst = subtotal + profit
+gst = pre_gst × 0.12 (default, dropdown for 12% or 18%)
+final_total = pre_gst + gst
+per_1000_rate = (pre_gst / qty_required) × 1000
+STEP 4 — UI Layout:
+Two-column layout:
+
+LEFT: inputs (all editable, defaults pre-filled)
+RIGHT: live cost breakdown updating as user types
+
+Required input fields:
+
+Select job (dropdown, pulls from jobs table) OR manual entry
+Qty required (cartons)
+Carton dimensions L×W×H (mm)
+Carton style (straight tuck/reverse tuck/auto bottom/crash lock)
+Ups per sheet (manual entry for now, default 6)
+Paper material (dropdown from materials with rate)
+Process colours (1-4)
+Spot colours (0-4)
+Print passes (auto from colours, manual override)
+Coating type (None/Aqueous/UV/Varnish)
+Is new die? (toggle)
+Die fabrication cost (if new die)
+Handwork per 1000 (default ₹250)
+Overhead % / Profit % / GST %
+
+Cost breakdown right side shows every line item separately.
+Bottom: per-1000-carton rate highlighted in large text.
+STEP 5 — Two view modes:
+
+'Detailed View' (default): all line items visible
+'Customer View': shows only total, per-1000 rate, plate charges, GST. Has 'Copy to clipboard' button.
+
+STEP 6 — Save Quote button:
+Saves to job_quotes table as versioned snapshot with all inputs and outputs stored as JSONB.
+VALIDATION: After building, test with this job:
+
+25,000 cartons, 100×80×40mm, straight tuck
+23×36 inch sheet, 300 gsm SBS at ₹85/kg
+5 colours (4 process + 1 spot), single pass, inline aqueous
+Existing die, Bobst folder gluer
+Expected pre-GST total: ₹97,000–1,09,000
+
+If pre-GST total is outside this range, find which line item is wrong and fix it before committing.
+Sync git and republish when done."

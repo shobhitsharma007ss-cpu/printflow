@@ -9,6 +9,7 @@ import templatesRouter from "./templates";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import notificationsRouter from "./notifications";
+import quotesRouter from "./quotes";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(templatesRouter);
 router.use(dashboardRouter);
 router.use(reportsRouter);
 router.use(notificationsRouter);
+router.use(quotesRouter);
 
 export default router;
