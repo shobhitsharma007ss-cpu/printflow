@@ -105,9 +105,11 @@ router.get("/reports/stock-summary", async (_req, res): Promise<void> => {
   const result = materials.map(m => {
     const currentQty = parseFloat(String(m.currentQty));
     const minReorderQty = parseFloat(String(m.minReorderQty));
-    const isLowStock = currentQty <= minReorderQty;
+    // Only flag low stock when a reorder threshold is actually set (> 0)
+    const isLowStock = minReorderQty > 0 && currentQty <= minReorderQty;
     const maxStock = minReorderQty * 5;
-    const stockPct = maxStock > 0 ? Math.min(100, (currentQty / maxStock) * 100) : 0;
+    const rawPct = maxStock > 0 ? (currentQty / maxStock) * 100 : 0;
+    const stockPct = Number.isFinite(rawPct) ? Math.min(100, Math.max(0, rawPct)) : 0;
 
     const oldestDateStr = batchAgeMap.get(m.id);
     const oldestBatchDays = oldestDateStr

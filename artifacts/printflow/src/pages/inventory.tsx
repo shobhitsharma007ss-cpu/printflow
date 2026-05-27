@@ -59,6 +59,13 @@ export default function Inventory() {
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
 
+  // Clear stale selected material whenever stock data changes
+  React.useEffect(() => {
+    if (!stock || selectedMaterialId === null) return;
+    const stillExists = stock.some(s => s.id === selectedMaterialId);
+    if (!stillExists) setSelectedMaterialId(null);
+  }, [stock, selectedMaterialId]);
+
   if (isLoading) return (
     <div className="flex justify-center p-12">
       <div className="animate-spin w-8 h-8 border-2 border-primary rounded-full border-t-transparent" />
@@ -746,24 +753,32 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
         </div>
 
         <div className="mb-5">
-          <div className="flex justify-between text-xs mb-1 font-medium">
-            <span className="text-muted-foreground">Stock Level</span>
-            <span>{material.stockPct?.toFixed(0)}%</span>
-          </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className={cn("h-full rounded-full transition-all",
-                material.stockPct < 30 ? "bg-rose-500" :
-                material.stockPct < 60 ? "bg-amber-500" : "bg-emerald-500"
-              )}
-              style={{ width: `${material.stockPct}%` }}
-            />
-          </div>
-          {material.isLowStock && (
-            <p className="text-xs text-rose-500 font-semibold mt-1 flex items-center gap-1">
-              <AlertTriangle size={12} /> Below reorder level
-            </p>
-          )}
+          {(() => {
+            const pct = (typeof material.stockPct === "number" && Number.isFinite(material.stockPct))
+              ? Math.min(100, Math.max(0, material.stockPct))
+              : 0;
+            return (
+              <>
+                <div className="flex justify-between text-xs mb-1 font-medium">
+                  <span className="text-muted-foreground">Stock Level</span>
+                  <span>{pct.toFixed(0)}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all",
+                      pct < 30 ? "bg-rose-500" : pct < 60 ? "bg-amber-500" : "bg-emerald-500"
+                    )}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                {material.isLowStock && (
+                  <p className="text-xs text-rose-500 font-semibold mt-1 flex items-center gap-1">
+                    <AlertTriangle size={12} /> Below reorder level
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div className="mb-5">
@@ -844,8 +859,9 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
 // ─── Visuals ────────────────────────────────────────────────────────────────
 
 function StackVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isSelected: boolean; onClick: () => void }) {
-  const fillPct = Math.min(Math.max(item.stockPct, 5), 100);
-  const fillColor = item.stockPct < 30 ? "bg-rose-500" : item.stockPct < 60 ? "bg-amber-500" : "bg-emerald-500";
+  const safePct = (typeof item.stockPct === "number" && Number.isFinite(item.stockPct)) ? item.stockPct : 0;
+  const fillPct = Math.min(Math.max(safePct, 0), 100);
+  const fillColor = safePct < 30 ? "bg-rose-500" : safePct < 60 ? "bg-amber-500" : "bg-emerald-500";
   const du = dualUnits(item);
   const oldestDays = (item as unknown as Record<string, unknown>)["oldestBatchDays"] as number | null | undefined;
 
@@ -892,8 +908,9 @@ function StackVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isS
 }
 
 function CylinderVisual({ item, vendorName, isSelected, onClick }: { item: StockSummaryRow; vendorName?: string; isSelected: boolean; onClick: () => void }) {
-  const fillPct = Math.min(Math.max(item.stockPct, 5), 100);
-  const colorClass = item.stockPct < 30 ? "from-rose-400 to-rose-600" : item.stockPct < 60 ? "from-amber-400 to-amber-600" : "from-emerald-400 to-emerald-600";
+  const safePct = (typeof item.stockPct === "number" && Number.isFinite(item.stockPct)) ? item.stockPct : 0;
+  const fillPct = Math.min(Math.max(safePct, 0), 100);
+  const colorClass = safePct < 30 ? "from-rose-400 to-rose-600" : safePct < 60 ? "from-amber-400 to-amber-600" : "from-emerald-400 to-emerald-600";
   const oldestDays = (item as unknown as Record<string, unknown>)["oldestBatchDays"] as number | null | undefined;
 
   return (

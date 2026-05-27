@@ -5,19 +5,34 @@ import { sql } from "drizzle-orm";
 const router: IRouter = Router();
 
 router.post("/admin/clear-inventory", async (_req, res): Promise<void> => {
-  await db.delete(materialBatchesTable);
-  await db.delete(stockInwardTable);
-  await db.execute(sql`UPDATE materials SET current_qty = 0, current_stock_kg = 0`);
-  res.json({ ok: true });
+  try {
+    await db.delete(materialBatchesTable);
+    await db.delete(stockInwardTable);
+    // Always reset current_qty (NOT NULL, always exists)
+    await db.execute(sql`UPDATE materials SET current_qty = 0, reserved_qty = 0`);
+    // current_stock_kg was added in migration 13 — attempt separately so older DBs don't fail
+    try {
+      await db.execute(sql`UPDATE materials SET current_stock_kg = 0`);
+    } catch {
+      // column may not exist on older schema — safe to ignore
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 router.post("/admin/clear-jobs", async (_req, res): Promise<void> => {
-  await db.delete(jobInterruptionsTable);
-  await db.delete(wastageLogTable);
-  await db.delete(jobMaterialsTable);
-  await db.delete(jobRoutingTable);
-  await db.delete(jobsTable);
-  res.json({ ok: true });
+  try {
+    await db.delete(jobInterruptionsTable);
+    await db.delete(wastageLogTable);
+    await db.delete(jobMaterialsTable);
+    await db.delete(jobRoutingTable);
+    await db.delete(jobsTable);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 export default router;
