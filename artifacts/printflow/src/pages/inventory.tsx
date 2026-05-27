@@ -36,10 +36,12 @@ function dualUnits(item: StockSummaryRow): { sheets: number | null; kg: number |
   return { sheets: null, kg: null };
 }
 
-function fmtKg(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}t`;
-  if (n >= 100) return `${Math.round(n)} kg`;
-  return `${n.toFixed(1)} kg`;
+function fmtKg(n: number | null | undefined): string {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return "0.0 kg";
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}t`;
+  if (v >= 100) return `${Math.round(v)} kg`;
+  return `${v.toFixed(1)} kg`;
 }
 
 function batchAgeColor(days: number): string {

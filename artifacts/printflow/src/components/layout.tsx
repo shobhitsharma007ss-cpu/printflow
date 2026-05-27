@@ -107,7 +107,7 @@ function NotificationBell() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground truncate">{m.materialName}</p>
                         <p className="text-xs text-rose-600 dark:text-rose-400 mt-0.5">
-                          {m.currentQty.toFixed(0)} {m.unit} remaining · reorder at {m.minReorderQty.toFixed(0)}
+                          {Number(m.currentQty || 0).toFixed(0)} {m.unit} remaining · reorder at {Number(m.minReorderQty || 0).toFixed(0)}
                         </p>
                       </div>
                     </Link>
