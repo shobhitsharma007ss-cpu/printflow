@@ -64,7 +64,7 @@ function buildDimensionString(w: string, h: string, dimUnit: DimUnit): string | 
   if (!wn || !hn) return undefined;
   const wCm = dimToCm(wn, dimUnit);
   const hCm = dimToCm(hn, dimUnit);
-  return `${wCm.toFixed(2)}x${hCm.toFixed(2)} cm`;
+  return `${Number(wCm || 0).toFixed(2)}x${Number(hCm || 0).toFixed(2)} cm`;
 }
 
 function buildAutoName(cat: MatCategory, subType: string, gsm: number, w: string, h: string, dimUnit: DimUnit): string {
@@ -400,7 +400,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
               </div>
               {sheetWtKg && sheetWtKg > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Sheet weight: <span className="font-semibold">{(sheetWtKg * 1000).toFixed(1)} g</span>
+                  Sheet weight: <span className="font-semibold">{(Number(sheetWtKg || 0) * 1000).toFixed(1)} g</span>
                 </p>
               )}
             </div>

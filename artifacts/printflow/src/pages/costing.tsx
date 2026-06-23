@@ -20,7 +20,7 @@ const STYLE_FACTORS: Record<string, number> = {
 
 const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 const fmt = (v: number) => INR.format(Math.round(v));
-const dec = (v: number, d = 2) => v.toFixed(d);
+const dec = (v: number | string | null | undefined, d = 2) => Number(v || 0).toFixed(d);
 
 function n(val: string | undefined, fallback = 0): number {
   if (val === undefined || val === "") return fallback;

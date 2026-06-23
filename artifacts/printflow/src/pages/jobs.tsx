@@ -670,7 +670,7 @@ function LogWastageModal({ isOpen, onClose, jobId, jobMaterials }: LogWastageMod
           )}>
             <div className="flex justify-between">
               <span className="font-medium">Wastage:</span>
-              <span className="font-bold">{wastageQty.toFixed(2)} units ({wastagePct.toFixed(1)}%)</span>
+              <span className="font-bold">{Number(wastageQty || 0).toFixed(2)} units ({Number(wastagePct || 0).toFixed(1)}%)</span>
             </div>
             {wastagePct > 5 && (
               <p className="text-xs text-rose-500 mt-1 flex items-center gap-1">

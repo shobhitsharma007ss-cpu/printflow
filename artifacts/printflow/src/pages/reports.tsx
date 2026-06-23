@@ -122,7 +122,7 @@ export default function Reports() {
                     cursor={{ fill: 'hsl(var(--muted))' }}
                     contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'hsl(var(--card))' }}
                     formatter={(value: number, _name: string, props: { payload?: { label?: string } }) => [
-                      `${value.toFixed(2)}%`,
+                      `${Number(value || 0).toFixed(2)}%`,
                       props.payload?.label ?? 'Wastage'
                     ]}
                     labelFormatter={(label) => {

@@ -574,8 +574,8 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
                     className="pl-7"
                   />
                 </div>
-                {ratePerSheet !== null && (
-                  <p className="text-xs text-muted-foreground">₹{ratePerSheet.toFixed(4)}/sheet</p>
+                {ratePerSheet != null && (
+                  <p className="text-xs text-muted-foreground">₹{Number(ratePerSheet || 0).toFixed(4)}/sheet</p>
                 )}
               </div>
             </div>
