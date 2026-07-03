@@ -1,0 +1,2 @@
+- [Migration script pitfalls](migration-pitfalls.md) — startup migrations swallow errors via catch + bad pino call signature; deletes must repoint FK refs first.
+- [Drizzle numeric coercion](drizzle-numeric-strings.md) — Drizzle returns numeric/decimal columns as strings; always Number() before math/.toFixed().

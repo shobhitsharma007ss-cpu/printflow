@@ -272,6 +272,14 @@ export async function runProdMigration(): Promise<void> {
 
   // ─── MIGRATION 4: clean up ghost/duplicate materials ─────────────────
   try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS material_vendors (
+        id           SERIAL PRIMARY KEY,
+        material_id  INTEGER NOT NULL REFERENCES materials(id),
+        vendor_id    INTEGER NOT NULL
+      );
+    `);
+
     const oldCmyk = await db
       .select()
       .from(materialsTable)
@@ -297,16 +305,24 @@ export async function runProdMigration(): Promise<void> {
         .from(materialsTable)
         .where(eq(materialsTable.materialName, row.material_name))
         .orderBy(materialsTable.currentQty);
+      const survivorId = dupes[dupes.length - 1].id;
       const toDelete = dupes.slice(0, -1).map(d => d.id);
       if (toDelete.length > 0) {
+        for (const dupeId of toDelete) {
+          await db.execute(sql`UPDATE job_materials    SET material_id = ${survivorId} WHERE material_id = ${dupeId}`);
+          await db.execute(sql`UPDATE wastage_log      SET material_id = ${survivorId} WHERE material_id = ${dupeId}`);
+          await db.execute(sql`UPDATE stock_inward     SET material_id = ${survivorId} WHERE material_id = ${dupeId}`);
+          await db.execute(sql`UPDATE material_batches SET material_id = ${survivorId} WHERE material_id = ${dupeId}`);
+          await db.execute(sql`UPDATE jobs             SET material_id = ${survivorId} WHERE material_id = ${dupeId}`);
+        }
         await db.delete(materialVendorsTable).where(inArray(materialVendorsTable.materialId, toDelete));
         await db.delete(materialsTable).where(inArray(materialsTable.id, toDelete));
-        logger.info(`Migration 4: Removed ${toDelete.length} duplicate(s) of "${row.material_name}".`);
+        logger.info(`Migration 4: Removed ${toDelete.length} duplicate(s) of "${row.material_name}" (references repointed to #${survivorId}).`);
       }
     }
     logger.info("Migration 4: Ghost/duplicate cleanup complete.");
   } catch (err) {
-    logger.error("Migration 4 failed:", err);
+    logger.error({ err }, "Migration 4 failed");
   }
 
   // ─── MIGRATION 5: job_routing pause columns ───────────────────────────
