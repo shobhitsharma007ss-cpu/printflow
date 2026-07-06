@@ -148,6 +148,13 @@ export interface Machine {
   maxPaperWidth?: string | null;
   maxPaperLength?: string | null;
   speedPerHour?: number | null;
+  ratedSph?: number | null;
+  peakRunningSph?: number | null;
+  ratedSpeedMPerMin?: number | null;
+  setupMinRepeat?: number | null;
+  setupMinNew?: number | null;
+  oeeDefault?: string | null;
+  hourRate?: string | null;
   capabilities: string[];
   status: MachineStatus;
   operatorName: string;
@@ -313,6 +320,13 @@ export interface JobWithDetails {
   coatingType?: string | null;
   finishRequirements?: string[] | null;
   createdAt: string;
+  processColors?: number | null;
+  spotColors?: number | null;
+  printPassCount?: number | null;
+  cartonStyle?: string | null;
+  upsPerSheet?: number | null;
+  isNewDie?: boolean | null;
+  dieCost?: string | null;
   routing: JobRouting[];
   materials: JobMaterial[];
   wastageLogs: WastageLog[];

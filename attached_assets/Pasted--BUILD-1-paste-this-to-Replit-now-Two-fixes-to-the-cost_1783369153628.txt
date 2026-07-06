@@ -1,0 +1,27 @@
+
+BUILD 1 — paste this to Replit now
+
+"Two fixes to the costing calculator. No new features — precision fixes to existing behaviour. Do BOTH, then stop.
+FIX 1 — Job-link must transfer colour and pass data (silent misquote bug):
+On the Costing page, handleJobLink(jobId) currently auto-fills only qtyRequired, materialId, gsm, ratePerKg, and coatingType. This silently misquotes: a 5-colour linked job computes on the default 4+0 colours — wrong plates, wrong ink, wrong passes, wrong makeready.
+Extend handleJobLink to also transfer from the job record:
+
+process_colors → the calculator's process colours field
+spot_colors → spot colours field
+print_pass_count → passes field
+carton_style → carton style (only if the job has it set; otherwise leave the calculator default)
+ups_per_sheet → ups field (only if set and > 0)
+is_new_die / die_cost → the die fields (only if set)
+Also transfer the job's material sheet dimensions: look up the linked material's length_cm/width_cm (or parse its dimensions string), convert to inches, and fill sheetLengthIn/sheetBreadthIn — currently these stay at defaults even when a job with a known sheet size is linked.
+
+After linking, show a small summary line under the dropdown: 'Loaded from JOB-CODE: qty, material, N colours, N passes' so the user can see what was auto-filled.
+FIX 2 — Die cutter and folder-gluer costs must read from the machines table, not hardcodes:
+The costing code hardcodes: die cutter 5,200 sph and ₹1,500/hr; folder-gluer 350 m/min, 65% efficiency, ₹1,200/hr, 25 min setup. But the machines table already has these as columns: peak_running_sph, rated_speed_m_per_min, oee_default, hour_rate, setup_min_repeat, setup_min_new.
+
+Add two dropdowns to the costing form, styled like the existing press picker: Die Cutter (machines of the die-cutting type) and Folder Gluer (machines of the folder-gluer type). Default each to the first matching machine.
+Die cutter math: run speed = machine.peak_running_sph (fallback 5200), setup = is_new_die ? machine.setup_min_new (fallback 105) : machine.setup_min_repeat (fallback 10), rate = machine.hour_rate (fallback 1500).
+Folder-gluer math: feed speed = machine.rated_speed_m_per_min (fallback 350), efficiency = machine.oee_default (fallback 0.65), setup = machine.setup_min_repeat (fallback 25), rate = machine.hour_rate (fallback 1200).
+Keep all current fallback values so behaviour is identical when a machine row lacks data.
+The saved quote snapshot (job_quotes.costing_snapshot) must record which die cutter and gluer machine IDs were used.
+
+VALIDATION before you finish: link a job with 4+1 colours and confirm the calculator shows 5 colours/plates accordingly; select Bobst Die Cutter 1 and Bobst Folder Gluer and confirm the totals equal the previous hardcoded output (same numbers, now DB-driven). Report the before/after totals to me."**

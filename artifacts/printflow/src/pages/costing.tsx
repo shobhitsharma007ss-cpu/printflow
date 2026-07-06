@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Calculator, Save, Copy, Info, Printer, Link2 } from "lucide-react";
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMachines } from "@/hooks/use-machines";
@@ -6,10 +6,9 @@ import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { z } from "zod";
-import type { ListMachinesResponseItem } from "@workspace/api-zod";
+import type { Machine } from "@workspace/api-client-react";
 
-type MachineRow = z.infer<typeof ListMachinesResponseItem>;
+type MachineRow = Machine;
 
 const STYLE_FACTORS: Record<string, number> = {
   straight_tuck: 1.0,
@@ -48,6 +47,8 @@ interface CostForm {
   isNewDie: boolean;
   dieFabCost: string;
   selectedMachineId: string;
+  selectedDieCutterId: string;
+  selectedGluerId: string;
   handworkPer1000: string;
   runningWastePct: string;
   makereadyOverride: string;
@@ -83,6 +84,8 @@ const DEFAULTS: CostForm = {
   isNewDie: false,
   dieFabCost: "0",
   selectedMachineId: "",
+  selectedDieCutterId: "",
+  selectedGluerId: "",
   handworkPer1000: "250",
   runningWastePct: "3",
   makereadyOverride: "",
@@ -105,7 +108,12 @@ function coatingLabel(type: string) {
   return "Coating";
 }
 
-function compute(form: CostForm, machine: MachineRow | null) {
+function compute(
+  form: CostForm,
+  machine: MachineRow | null,
+  dieMachine: MachineRow | null,
+  gluerMachine: MachineRow | null,
+) {
   const qty        = n(form.qtyRequired);
   const L_cm       = n(form.sheetLengthIn) * 2.54;
   const B_cm       = n(form.sheetBreadthIn) * 2.54;
@@ -190,18 +198,26 @@ function compute(form: CostForm, machine: MachineRow | null) {
     coatingCost = coatingKg * varnishRate;
   }
 
-  // Die cutter
-  const dieSetupMin = isNewDie ? 105 : 10;
-  const dieRunMin   = (planSheets / 5200) * 60;
-  let dieCutCost    = ((dieSetupMin + dieRunMin) / 60) * 1500;
+  // Die cutter — params from selected machine row, fallbacks = legacy hardcodes
+  const dieRunSph   = dieMachine?.peakRunningSph ?? 5200;
+  const dieSetupMin = isNewDie
+    ? (dieMachine?.setupMinNew ?? 105)
+    : (dieMachine?.setupMinRepeat ?? 10);
+  const dieHrRate   = dieMachine?.hourRate != null ? parseFloat(String(dieMachine.hourRate)) : 1500;
+  const dieRunMin   = dieRunSph > 0 ? (planSheets / dieRunSph) * 60 : 0;
+  let dieCutCost    = ((dieSetupMin + dieRunMin) / 60) * dieHrRate;
   if (isNewDie) dieCutCost += dieFab;
 
-  // Folder-gluer (carton units)
+  // Folder-gluer (carton units) — params from selected machine row, fallbacks = legacy hardcodes
   const styleFact  = STYLE_FACTORS[form.cartonStyle] ?? 1.0;
-  const ratedCph   = (350 * 60 * 1000) / clMm;
-  const effCph     = ratedCph * 0.65 * styleFact;
+  const glFeedM    = gluerMachine?.ratedSpeedMPerMin ?? 350;
+  const glEff      = gluerMachine?.oeeDefault != null ? parseFloat(String(gluerMachine.oeeDefault)) : 0.65;
+  const glSetupMin = gluerMachine?.setupMinRepeat ?? 25;
+  const glHrRate   = gluerMachine?.hourRate != null ? parseFloat(String(gluerMachine.hourRate)) : 1200;
+  const ratedCph   = (glFeedM * 60 * 1000) / clMm;
+  const effCph     = ratedCph * glEff * styleFact;
   const glueRunMin = qty > 0 && effCph > 0 ? (qty / effCph) * 60 : 0;
-  const gluerCost  = ((25 + glueRunMin) / 60) * 1200;
+  const gluerCost  = ((glSetupMin + glueRunMin) / 60) * glHrRate;
   const glueCost   = (qty * 0.4 / 1000) * 150;
 
   // Handwork
@@ -225,8 +241,9 @@ function compute(form: CostForm, machine: MachineRow | null) {
     paperCost, plateCnt, plateCost,
     ratedSph, oee, setupMin, hrRate, pressRunMin, pressCost,
     cmykCost, spotCostAmt, inkCost,
-    coatingCost, coatingKg, coatingRate, dieSetupMin, dieRunMin, dieCutCost,
-    ratedCph, effCph, glueRunMin, gluerCost, glueCost,
+    coatingCost, coatingKg, coatingRate,
+    dieRunSph, dieSetupMin, dieHrRate, dieRunMin, dieCutCost,
+    glFeedM, glEff, glSetupMin, glHrRate, ratedCph, effCph, glueRunMin, gluerCost, glueCost,
     hwCost, directCost, factoryOh, adminOh,
     subtotal, profit, preGst, gstAmt, finalTotal, per1kRate,
     procC, spotC, totalC, passes,
@@ -254,6 +271,7 @@ export default function CostingPage() {
   const [form, setForm]     = useState<CostForm>(DEFAULTS);
   const [view, setView]     = useState<"detailed" | "customer">("detailed");
   const [saving, setSaving] = useState(false);
+  const [linkSummary, setLinkSummary] = useState("");
 
   const { data: machines }  = useMachines();
   const { data: materials } = useMaterials();
@@ -275,20 +293,78 @@ export default function CostingPage() {
     () => pressOptions.find(m => String(m.id) === form.selectedMachineId) ?? null,
     [pressOptions, form.selectedMachineId],
   );
+  const dieOptions = useMemo(
+    () => (machines ?? []).filter(
+      m => m.machineType === "cutting" && (m.capabilities ?? []).includes("die-cutting"),
+    ),
+    [machines],
+  );
+  const gluerOptions = useMemo(
+    () => (machines ?? []).filter(
+      m => m.machineType === "gluing" && (m.capabilities ?? []).includes("folder-gluing"),
+    ),
+    [machines],
+  );
+  const selDieMachine = useMemo(
+    () => dieOptions.find(m => String(m.id) === form.selectedDieCutterId) ?? null,
+    [dieOptions, form.selectedDieCutterId],
+  );
+  const selGluerMachine = useMemo(
+    () => gluerOptions.find(m => String(m.id) === form.selectedGluerId) ?? null,
+    [gluerOptions, form.selectedGluerId],
+  );
   const activeJobs = useMemo(
     () => (jobs ?? []).filter(j => j.status !== "completed"),
     [jobs],
   );
 
-  const c = useMemo(() => compute(form, selMachine), [form, selMachine]);
+  // Default the die-cutter / folder-gluer pickers to the first available machine.
+  useEffect(() => {
+    setForm(p => {
+      let next = p;
+      if (!p.selectedDieCutterId && dieOptions[0]) {
+        next = { ...next, selectedDieCutterId: String(dieOptions[0].id) };
+      }
+      if (!p.selectedGluerId && gluerOptions[0]) {
+        next = { ...next, selectedGluerId: String(gluerOptions[0].id) };
+      }
+      return next;
+    });
+  }, [dieOptions, gluerOptions]);
+
+  const c = useMemo(
+    () => compute(form, selMachine, selDieMachine, selGluerMachine),
+    [form, selMachine, selDieMachine, selGluerMachine],
+  );
 
   function handleJobLink(jobId: string) {
     const job = (jobs ?? []).find(j => String(j.id) === jobId);
     if (!job) {
       setForm(p => ({ ...p, linkedJobId: "" }));
+      setLinkSummary("");
       return;
     }
     const mat = boardMats.find(m => m.id === job.materialId);
+
+    // Sheet dimensions live on the material as a string like "23x36".
+    // Values are treated as inches unless the string explicitly carries a cm/mm unit.
+    let sheetDims: { sheetLengthIn: string; sheetBreadthIn: string } | undefined;
+    if (mat?.dimensions) {
+      const raw = mat.dimensions.toLowerCase();
+      const parts = raw.split(/[x×*]/i).map(s => parseFloat(s.trim()));
+      if (parts.length >= 2 && parts[0] > 0 && parts[1] > 0) {
+        const toIn = raw.includes("mm") ? 1 / 25.4 : raw.includes("cm") ? 1 / 2.54 : 1;
+        sheetDims = {
+          sheetLengthIn: String(+(parts[0] * toIn).toFixed(4)),
+          sheetBreadthIn: String(+(parts[1] * toIn).toFixed(4)),
+        };
+      }
+    }
+
+    const procC  = job.processColors;
+    const spotC  = job.spotColors;
+    const passes = job.printPassCount;
+
     setForm(p => ({
       ...p,
       linkedJobId: jobId,
@@ -299,8 +375,28 @@ export default function CostingPage() {
       ...(job.coatingType && ["none", "aqueous", "uv", "varnish"].includes(job.coatingType)
         ? { coatingType: job.coatingType }
         : {}),
+      ...(procC != null && { processColors: String(procC) }),
+      ...(spotC != null && { spotColors: String(spotC) }),
+      ...(passes != null && { printPassCount: String(passes) }),
+      ...(job.cartonStyle && STYLE_FACTORS[job.cartonStyle] != null
+        ? { cartonStyle: job.cartonStyle }
+        : {}),
+      ...(job.upsPerSheet != null && job.upsPerSheet > 0 && { upsPerSheet: String(job.upsPerSheet) }),
+      ...(job.isNewDie != null && { isNewDie: job.isNewDie }),
+      dieFabCost: job.dieCost != null ? String(job.dieCost) : "0",
+      ...(sheetDims ?? {}),
     }));
-    toast.success(`Loaded: ${job.jobName}`, { description: "Qty, material & coating filled from job." });
+
+    const nColours = (procC ?? n(DEFAULTS.processColors)) + (spotC ?? 0);
+    const nPasses  = passes ?? Number(DEFAULTS.printPassCount);
+    const matName  = mat?.materialName ?? "material n/a";
+    setLinkSummary(
+      `Loaded from ${job.jobCode}: ${job.qtySheets.toLocaleString("en-IN")} qty, ${matName}, `
+      + `${nColours} colour${nColours !== 1 ? "s" : ""}, ${nPasses} pass${nPasses !== 1 ? "es" : ""}`,
+    );
+    toast.success(`Loaded: ${job.jobName}`, {
+      description: "Qty, material, colours, passes & finishing filled from job.",
+    });
   }
 
   async function saveQuote() {
@@ -312,7 +408,15 @@ export default function CostingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobId: form.linkedJobId ? Number(form.linkedJobId) : null,
-          costingSnapshot: { inputs: form, outputs: c },
+          costingSnapshot: {
+            inputs: form,
+            outputs: c,
+            machines: {
+              pressId: form.selectedMachineId ? Number(form.selectedMachineId) : null,
+              dieCutterId: form.selectedDieCutterId ? Number(form.selectedDieCutterId) : null,
+              gluerId: form.selectedGluerId ? Number(form.selectedGluerId) : null,
+            },
+          },
           preGstTotal: c.preGst,
           finalTotal: c.finalTotal,
           per1000Rate: c.per1kRate,
@@ -429,8 +533,8 @@ export default function CostingPage() {
               </Select>
               {form.linkedJobId && (
                 <p className="text-xs text-primary flex items-center gap-1">
-                  <Info size={11} />
-                  Qty, material & coating auto-filled from job. Edit below to override.
+                  <Info size={11} className="shrink-0" />
+                  {linkSummary || "Auto-filled from job. Edit below to override."}
                 </p>
               )}
             </Card>
@@ -605,6 +709,24 @@ export default function CostingPage() {
                   <option value="varnish">Varnish (Inline) — ₹180/kg</option>
                 </Select>
               </div>
+              <div>
+                <Label className="text-xs mb-1 block">Die Cutter</Label>
+                <Select value={form.selectedDieCutterId} onChange={field("selectedDieCutterId")} className="w-full">
+                  <option value="">— Default die-cutter params —</option>
+                  {dieOptions.map(m => (
+                    <option key={m.id} value={m.id}>{m.machineName}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Folder Gluer</Label>
+                <Select value={form.selectedGluerId} onChange={field("selectedGluerId")} className="w-full">
+                  <option value="">— Default folder-gluer params —</option>
+                  {gluerOptions.map(m => (
+                    <option key={m.id} value={m.id}>{m.machineName}</option>
+                  ))}
+                </Select>
+              </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs font-medium">New Die Required?</Label>
                 <button
@@ -728,7 +850,7 @@ export default function CostingPage() {
                     <Row label="Die Cutting" value={c.dieCutCost}
                       sub={`${form.isNewDie ? "New die" : "Existing die"} — ${c.dieSetupMin}m setup + ${dec(c.dieRunMin, 0)}m run`} />
                     <Row label="Folder-Gluer" value={c.gluerCost}
-                      sub={`25m setup + ${dec(c.glueRunMin, 0)}m run @ ₹1,200/hr`} />
+                      sub={`${dec(c.glSetupMin, 0)}m setup + ${dec(c.glueRunMin, 0)}m run @ ₹${c.glHrRate.toLocaleString("en-IN")}/hr`} />
                     <Row label="Glue" value={c.glueCost}
                       sub={`${dec(c.qty * 0.4 / 1000, 2)} kg × ₹150/kg`} />
                     <Row label="Handwork" value={c.hwCost}

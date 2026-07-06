@@ -1030,6 +1030,27 @@ components:
         currentJobName:
           type: string
           nullable: true
+        ratedSph:
+          type: integer
+          nullable: true
+        peakRunningSph:
+          type: integer
+          nullable: true
+        ratedSpeedMPerMin:
+          type: integer
+          nullable: true
+        setupMinRepeat:
+          type: integer
+          nullable: true
+        setupMinNew:
+          type: integer
+          nullable: true
+        oeeDefault:
+          type: string
+          nullable: true
+        hourRate:
+          type: string
+          nullable: true
       required: [id, machineName, machineCode, machineType, capabilities, status, operatorName]
 
     CreateMachineRequest:
@@ -1227,6 +1248,27 @@ components:
           type: array
           items:
             type: string
+          nullable: true
+        processColors:
+          type: integer
+          nullable: true
+        spotColors:
+          type: integer
+          nullable: true
+        printPassCount:
+          type: integer
+          nullable: true
+        cartonStyle:
+          type: string
+          nullable: true
+        upsPerSheet:
+          type: integer
+          nullable: true
+        isNewDie:
+          type: boolean
+          nullable: true
+        dieCost:
+          type: string
           nullable: true
         createdAt:
           type: string
