@@ -337,6 +337,36 @@ export default function CostingPage() {
     [form, selMachine, selDieMachine, selGluerMachine],
   );
 
+  // Receive a layout handed off from the Layout Planner (sessionStorage, one-shot).
+  useEffect(() => {
+    const raw = sessionStorage.getItem("pf.layoutHandoff");
+    if (!raw) return;
+    sessionStorage.removeItem("pf.layoutHandoff");
+    try {
+      const h = JSON.parse(raw) as Partial<CostForm> & { _label?: string };
+      const { _label, ...fields } = h;
+      const allowed: (keyof CostForm)[] = [
+        "qtyRequired", "cartonLengthMm", "cartonWidthMm", "cartonHeightMm",
+        "cartonStyle", "upsPerSheet", "sheetLengthIn", "sheetBreadthIn",
+        "materialId", "gsm", "ratePerKg",
+      ];
+      setForm(p => {
+        const next = { ...p };
+        for (const k of allowed) {
+          const v = fields[k];
+          if (typeof v === "string" && v !== "") (next as Record<string, unknown>)[k] = v;
+        }
+        return next;
+      });
+      const label = _label ?? "layout";
+      setLinkSummary(`Layout loaded: ${label}`);
+      toast.success("Layout loaded from planner", { description: label });
+    } catch {
+      /* corrupt payload — ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleJobLink(jobId: string) {
     const job = (jobs ?? []).find(j => String(j.id) === jobId);
     if (!job) {

@@ -8,6 +8,7 @@ import FloorMonitor from "@/pages/floor-monitor";
 import Inventory from "@/pages/inventory";
 import Jobs from "@/pages/jobs";
 import Costing from "@/pages/costing";
+import LayoutPlanner from "@/pages/layout-planner";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/floor-monitor" component={FloorMonitor} />
         <Route path="/inventory" component={Inventory} />
         <Route path="/jobs" component={Jobs} />
+        <Route path="/layout" component={LayoutPlanner} />
         <Route path="/costing" component={Costing} />
         <Route path="/reports" component={Reports} />
         <Route path="/settings" component={Settings} />
