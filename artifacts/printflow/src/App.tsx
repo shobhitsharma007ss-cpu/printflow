@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 
@@ -9,6 +9,7 @@ import Inventory from "@/pages/inventory";
 import Jobs from "@/pages/jobs";
 import Costing from "@/pages/costing";
 import LayoutPlanner from "@/pages/layout-planner";
+import OperatorStation, { StationsPicker } from "@/pages/operator-station";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -23,6 +24,15 @@ const queryClient = new QueryClient({
 });
 
 function Router() {
+  const [location] = useLocation();
+  if (location.startsWith("/floor/station")) {
+    return (
+      <Switch>
+        <Route path="/floor/stations" component={StationsPicker} />
+        <Route path="/floor/station/:machineId" component={OperatorStation} />
+      </Switch>
+    );
+  }
   return (
     <AppLayout>
       <Switch>
