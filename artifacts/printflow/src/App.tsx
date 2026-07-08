@@ -10,6 +10,7 @@ import Jobs from "@/pages/jobs";
 import Costing from "@/pages/costing";
 import LayoutPlanner from "@/pages/layout-planner";
 import OperatorStation, { StationsPicker } from "@/pages/operator-station";
+import JobCard from "@/pages/job-card";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -25,11 +26,12 @@ const queryClient = new QueryClient({
 
 function Router() {
   const [location] = useLocation();
-  if (location.startsWith("/floor/station")) {
+  if (location.startsWith("/floor/station") || location.startsWith("/job-card")) {
     return (
       <Switch>
         <Route path="/floor/stations" component={StationsPicker} />
         <Route path="/floor/station/:machineId" component={OperatorStation} />
+        <Route path="/job-card/:id" component={JobCard} />
       </Switch>
     );
   }

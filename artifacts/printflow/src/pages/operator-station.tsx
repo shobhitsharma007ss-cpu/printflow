@@ -194,15 +194,24 @@ export default function OperatorStation() {
     return list;
   }, [jobs, machineId]);
 
-  const current = active ?? nexts[0] ?? null;
-  const queueRest = active ? nexts.slice(0, 3) : nexts.slice(1, 4);
+  const current = useMemo(() => {
+    if (pinnedJobId != null) {
+      const hit = (active && active.job.id === pinnedJobId ? active : null)
+        ?? nexts.find((n) => n.job.id === pinnedJobId) ?? null;
+      if (hit) return hit;
+    }
+    return active ?? nexts[0] ?? null;
+  }, [active, nexts, pinnedJobId]);
+  const queueRest = (active ? nexts : nexts.filter((n) => n !== current)).slice(0, 3);
 
   const isPaused = active?.step.status === "paused";
   const elapsed = useLiveElapsed(active?.step.startedAt, active?.step.totalPausedSeconds ?? 0, !!isPaused);
 
   const [showReasons, setShowReasons] = useState(false);
   const [showCount, setShowCount] = useState(false);
+  const [showScan, setShowScan] = useState(false);
   const [count, setCount] = useState(0);
+  const [pinnedJobId, setPinnedJobId] = useState<number | null>(null);
 
   const needName = !operator;
   const stamp = operator ? ` — by ${operator}` : "";
@@ -238,6 +247,19 @@ export default function OperatorStation() {
     );
   }
 
+  function onScanned(text: string) {
+    setShowScan(false);
+    const m = text.match(/job[:/](\d+)/i) ?? text.match(/^(\d+)$/);
+    const id = m ? parseInt(m[1], 10) : NaN;
+    if (isNaN(id)) { toast.error("QR समझ नहीं आया"); return; }
+    const job = (jobs ?? []).find((j) => j.id === id);
+    if (!job) { toast.error(`Job #${id} नहीं मिला`); return; }
+    const hasStepHere = job.routing?.some((r) => r.machineId === machineId && r.status !== "completed");
+    if (!hasStepHere) { toast.error(`${job.jobCode} इस मशीन का काम नहीं`); return; }
+    setPinnedJobId(id);
+    toast.success(`${job.jobCode} खुल गया`);
+  }
+
   if (!machine) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
@@ -271,7 +293,15 @@ export default function OperatorStation() {
           )} />
           <h1 className="text-2xl md:text-3xl font-black truncate">{machine.machineName}</h1>
         </div>
-        <LiveClock />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowScan(true)}
+            className="flex items-center gap-2 px-4 py-3 rounded-xl border-2 border-primary text-primary font-black text-lg"
+          >
+            <QrCode size={24} /> स्कैन
+          </button>
+          <LiveClock />
+        </div>
       </header>
 
       {/* WHO row */}
@@ -449,7 +479,46 @@ export default function OperatorStation() {
           </div>
         </Overlay>
       )}
+      {/* SCAN overlay */}
+      {showScan && <ScanOverlay onResult={onScanned} onClose={() => setShowScan(false)} />}
     </div>
+  );
+}
+
+/* camera QR scanner via html5-qrcode */
+function ScanOverlay({ onResult, onClose }: { onResult: (t: string) => void; onClose: () => void }) {
+  const boxId = "pf-qr-scan-box";
+  useEffect(() => {
+    let scanner: { stop: () => Promise<void>; clear: () => void } | null = null;
+    let stopped = false;
+    import("html5-qrcode").then(({ Html5Qrcode }) => {
+      if (stopped) return;
+      const s = new Html5Qrcode(boxId);
+      scanner = s as unknown as { stop: () => Promise<void>; clear: () => void };
+      s.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (text: string) => {
+          s.stop().then(() => s.clear()).catch(() => {});
+          scanner = null;
+          onResult(text);
+        },
+        () => {},
+      ).catch(() => {
+        onClose();
+      });
+    });
+    return () => {
+      stopped = true;
+      if (scanner) scanner.stop().then(() => scanner?.clear()).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <Overlay title="जॉब कार्ड स्कैन करें" onClose={onClose}>
+      <div id={boxId} className="max-w-md mx-auto rounded-2xl overflow-hidden border-2 border-border" />
+      <p className="text-center text-muted-foreground mt-4 text-lg">QR को कैमरे के सामने रखें</p>
+    </Overlay>
   );
 }
 

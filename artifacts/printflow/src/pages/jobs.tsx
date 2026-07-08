@@ -469,6 +469,14 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
 
             {/* Footer actions */}
             <div className="border-t border-border p-4 space-y-2 shrink-0 bg-background">
+              <a
+                href={`/job-card/${job.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full inline-flex items-center justify-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-bold hover:bg-muted transition-colors"
+              >
+                🖨 Print Job Card (QR)
+              </a>
               {job.status === "completed" && (
                 <Button
                   onClick={() => setIsWastageOpen(true)}
