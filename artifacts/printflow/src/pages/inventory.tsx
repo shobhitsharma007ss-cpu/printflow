@@ -7,6 +7,7 @@ import { Package, AlertTriangle, Layers, X, Plus, ChevronLeft, Search, IndianRup
 import { cn, parseDim, formatDim, dimToCm } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StockSummaryRow } from "@workspace/api-client-react";
+import { InventoryTable } from "@/components/inventory-table";
 import { AddStockWizard } from "@/components/add-stock-wizard";
 import { toast } from "sonner";
 
@@ -57,6 +58,7 @@ export default function Inventory() {
   const { data: stock, isLoading } = useStockSummary();
   const { data: allMaterials } = useMaterials();
   const [activeTab, setActiveTab] = useState<"boards" | "consumables">("boards");
+  const [viewMode, setViewMode] = useState<"table" | "visual">("table");
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
@@ -118,7 +120,30 @@ export default function Inventory() {
         ))}
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex items-center gap-2 -mt-4">
+        {(["table", "visual"] as const).map(v => (
+          <button
+            key={v}
+            onClick={() => setViewMode(v)}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-xs font-bold border",
+              viewMode === v ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground"
+            )}
+          >
+            {v === "table" ? "📋 Table" : "🎨 Visual"}
+          </button>
+        ))}
+      </div>
+
+      {viewMode === "table" && (
+        <InventoryTable
+          stock={activeTab === "boards" ? boards : consumables}
+          onSelect={setSelectedMaterialId}
+          onInward={() => setIsInwardOpen(true)}
+        />
+      )}
+
+      <div className={cn("flex gap-6", viewMode !== "visual" && "hidden")}>
         <div className="flex-1 min-w-0">
           {activeTab === "boards" && (
             <Card className="p-8">
