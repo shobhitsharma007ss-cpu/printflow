@@ -1,0 +1,51 @@
+WAIT THERES A BUG WHEN I CLICK ON JOBS WRITE CLIENT AND JOB NAME AND CLKICK ON NEXT SCREEN GOES WHITE
+
+Wizard crash — my carton patch likely. White screen = JS error rendering Step 2.
+
+Need the exact error, one step:
+
+Chrome → app page → F12 (or Cmd+Option+J) → Console tab → red error text → paste first 3 lines here.
+
+That tells me which line broke. Paste it.
+
+Screenshot 2026-07-11 at 12.43.35 AM.png
+
+Diagnosed scope isolation issue and devised localized computation fix
+Diagnosed scope isolation issue and devised localized computation fix
+cartonPlan defined in parent scope, Step 2 renders in child scope. My anchor sat wrong. Fixing render block to self-compute — one patch:
+
+
+The user prompt is empty, so I cannot determine the primary language. However, based on the thinking block being in English, here is the summary: Verifying child component prop accessibility and payload structure
+The user prompt is empty, so I cannot determine the primary language. However, based on the thinking block being in English, here is the summary: Verifying child component prop accessibility and payload structure
+Fix zip ready (1 file).
+
+Download printflow_bridge_fix.zip, drag to Replit
+Shell:
+cd ~/workspace && find . -maxdepth 3 -name "printflow_bridge_fix.zip" -exec mv {} . \; ; unzip -o printflow_bridge_fix.zip && rm printflow_bridge_fix.zip
+git add -A && git commit -m "fix carton scope" && git push
+Republish, hard refresh
+Jobs → new job → names → Next. White screen gone? Then paper + 100/40/40 → blank line?
+Report.
+
+
+Printflow bridge fix
+ZIP 
+will this delete the old one
+
+Yes — overwrites the broken wizard file with fixed one. That's the point. Nothing else touched, all other work safe.
+
+Go.
+
+lets build the next step
+
+Bridge fix confirmed working? Need that "works" first — broken wizard blocks everything downstream.
+
+If works: next = auth build via Replit Agent (my tokens too dead for code). Paste this to Agent:
+
+"Build authentication + roles for PrintFlow. Spec:
+
+Backend: email+password auth using express-session + connect-pg-simple (session table in Postgres) + bcrypt. New table via prod-migration.ts (IF NOT EXISTS): users(id serial pk, name text, email text unique, password_hash text, role text, created_at timestamptz default now()). Roles: owner, supervisor, operator. Seed one owner user in migration: email owner@printflow.in, password printflow123 (bcrypt hashed), name 'Owner'. Routes: POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me. Protect all /api routes except auth + healthz: 401 if no session.
+
+Frontend: login page (match costing.tsx visual style: same Card/Input/Button components). Auth context + route guard. Role gates: Settings/Costing/Reports = owner only; Jobs/Inventory = owner+supervisor; Floor Monitor + Operator Mode = all roles. Logged-out users see only login. Operator-role login lands directly on /floor/stations.
+
+Rules: do NOT regenerate API types wholesale — extend surgically. Add users table to prod-migration.ts as Migration next-number with IF NOT EXISTS. VALIDATION you must report: (1) logged-out user hitting /jobs redirects to login, (2) owner login works with seeded credentials, (3) operator login lands on /floor/stations, (4) existing pages all still render after login. Change nothing else."
