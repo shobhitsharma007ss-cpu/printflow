@@ -715,11 +715,21 @@ function Step2Material({
             {CARTON_STYLES.map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
           </Select>
         </div>
-        {cartonPlan && (
-          <p className="text-xs font-semibold text-primary">
-            Blank {cartonPlan.blank.blankW}×{cartonPlan.blank.blankH}mm · {cartonPlan.label}
-          </p>
-        )}
+        {(() => {
+          const L = parseFloat(form.cartonL), W = parseFloat(form.cartonW), H = parseFloat(form.cartonH);
+          if (!(L > 0) || !(W > 0) || !(H > 0)) return null;
+          const blank = flatBlank(L, W, H, form.cartonStyle);
+          const dims = parseSheetDimsMm(selectedMaterial?.dimensions);
+          const label = !dims ? "select paper to compute ups" : (() => {
+            const u = upsOnSheet(blank.blankW, blank.blankH, dims.longMm, dims.shortMm);
+            return u.ups > 0 ? `${u.ups}-up on ${dims.label} · ${u.yieldPct}% yield` : "blank does not fit this sheet";
+          })();
+          return (
+            <p className="text-xs font-semibold text-primary">
+              Blank {blank.blankW}×{blank.blankH}mm · {label}
+            </p>
+          );
+        })()}
       </div>
 
       <div className="space-y-2">
