@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { LayoutGrid, ArrowRight, ChevronDown, ChevronUp, Ruler, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMaterials } from "@/hooks/use-inventory";
+import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +48,8 @@ interface Recommendation {
 export default function LayoutPlanner() {
   const [, navigate] = useLocation();
   const { data: materials } = useMaterials();
+  const { data: jobs } = useJobs();
+  const [saveJobId, setSaveJobId] = useState<string>("");
 
   const [cartonL, setCartonL] = useState("100");
   const [cartonW, setCartonW] = useState("40");
@@ -377,7 +380,33 @@ export default function LayoutPlanner() {
                       ups={selected.ups}
                       allow={allow}
                     />
-                    <div className="mt-4 flex justify-end">
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                      <select
+                        value={saveJobId}
+                        onChange={(e) => setSaveJobId(e.target.value)}
+                        className="rounded-lg border border-input bg-background px-2 py-2 text-sm"
+                      >
+                        <option value="">Save to job…</option>
+                        {(jobs ?? []).filter((j) => j.status !== "completed").map((j) => (
+                          <option key={j.id} value={j.id}>{j.jobCode} · {j.clientName}</option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="outline"
+                        disabled={!saveJobId || !selected}
+                        onClick={async () => {
+                          if (!saveJobId || !selected) return;
+                          const r = await fetch(`/api/jobs/${saveJobId}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ cartonStyle: style, upsPerSheet: selected.ups.ups }),
+                          });
+                          if (r.ok) toast.success(`Saved ${selected.ups.ups}-up to job`);
+                          else toast.error("Save failed");
+                        }}
+                      >
+                        Save
+                      </Button>
                       <Button onClick={useInCosting} className="flex items-center gap-2">
                         Use in Costing <ArrowRight size={16} />
                       </Button>

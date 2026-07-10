@@ -12,6 +12,7 @@ import {
   Zap, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
+import { flatBlank, upsOnSheet, parseSheetDimsMm, CARTON_STYLES } from "@/lib/imposition";
 import type { Machine, Material } from "@workspace/api-client-react";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5 | 6;
@@ -61,6 +62,10 @@ interface JobForm {
   processColors: string;
   spotColors: string;
   dryingWaitHours: string;
+  cartonL: string;
+  cartonW: string;
+  cartonH: string;
+  cartonStyle: string;
 }
 
 export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -90,6 +95,10 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     processColors: "4",
     spotColors: "0",
     dryingWaitHours: "6",
+    cartonL: "",
+    cartonW: "",
+    cartonH: "",
+    cartonStyle: "straight_tuck",
   });
 
   const boardsMats = useMemo(
@@ -272,6 +281,17 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
   const qtyNum = parseInt(form.qtySheets) || 0;
   const wastageMultiplier = 1 + (parseFloat(form.wastagePercent) || 4) / 100;
   const plannedSheets = Math.ceil(qtyNum * wastageMultiplier);
+
+  // Bridge: inline layout plan from carton dims
+  const cartonPlan = (() => {
+    const L = parseFloat(form.cartonL), W = parseFloat(form.cartonW), H = parseFloat(form.cartonH);
+    if (!(L > 0) || !(W > 0) || !(H > 0)) return null;
+    const blank = flatBlank(L, W, H, form.cartonStyle);
+    const dims = parseSheetDimsMm(selectedMaterial?.dimensions);
+    if (!dims) return { blank, ups: null as number | null, label: "select paper to compute ups" };
+    const u = upsOnSheet(blank.blankW, blank.blankH, dims.longMm, dims.shortMm);
+    return { blank, ups: u.ups > 0 ? u.ups : null, label: u.ups > 0 ? `${u.ups}-up on ${dims.label} · ${u.yieldPct}% yield` : "blank does not fit this sheet" };
+  })();
   const stockAvailable = selectedMaterial ? parseFloat(String(selectedMaterial.currentQty)) : 0;
   const stockInsufficient = selectedMaterial && qtyNum > 0 && qtyNum > stockAvailable;
 
@@ -324,6 +344,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
           spotColors: parseInt(form.spotColors) || 0,
           printPassCount: (parseInt(form.processColors) || 4) + (parseInt(form.spotColors) || 0) > 4 ? 2 : 1,
           dryingWaitHours: parseInt(form.dryingWaitHours) || 0,
+          cartonStyle: cartonPlan ? form.cartonStyle : undefined,
+          upsPerSheet: cartonPlan?.ups ?? undefined,
         },
       },
       {
@@ -358,6 +380,10 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       processColors: "4",
       spotColors: "0",
       dryingWaitHours: "6",
+    cartonL: "",
+    cartonW: "",
+    cartonH: "",
+    cartonStyle: "straight_tuck",
     });
   };
 
@@ -678,6 +704,23 @@ function Step2Material({
           Planned sheets (with {form.wastagePercent || "4"}% wastage): <strong>{plannedSheets.toLocaleString()}</strong>
         </div>
       )}
+
+      <div className="space-y-2 rounded-xl border border-border p-3">
+        <Label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Carton Dimensions (optional — auto ups)</Label>
+        <div className="grid grid-cols-4 gap-2">
+          <Input type="number" placeholder="L mm" value={form.cartonL} onChange={(e) => setForm({ ...form, cartonL: e.target.value })} />
+          <Input type="number" placeholder="W mm" value={form.cartonW} onChange={(e) => setForm({ ...form, cartonW: e.target.value })} />
+          <Input type="number" placeholder="H mm" value={form.cartonH} onChange={(e) => setForm({ ...form, cartonH: e.target.value })} />
+          <Select value={form.cartonStyle} onChange={(e) => setForm({ ...form, cartonStyle: e.target.value })}>
+            {CARTON_STYLES.map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+          </Select>
+        </div>
+        {cartonPlan && (
+          <p className="text-xs font-semibold text-primary">
+            Blank {cartonPlan.blank.blankW}×{cartonPlan.blank.blankH}mm · {cartonPlan.label}
+          </p>
+        )}
+      </div>
 
       <div className="space-y-2">
         <Label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Paper Trimming</Label>

@@ -375,6 +375,10 @@ router.put("/jobs/:id", async (req, res): Promise<void> => {
   if (parsed.data.plannedSheets !== undefined) updates.plannedSheets = parsed.data.plannedSheets;
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
   if (parsed.data.scheduledDate !== undefined) updates.scheduledDate = parsed.data.scheduledDate;
+  if (parsed.data.cartonStyle !== undefined) updates.cartonStyle = parsed.data.cartonStyle;
+  if (parsed.data.upsPerSheet !== undefined) updates.upsPerSheet = parsed.data.upsPerSheet;
+  if (parsed.data.isNewDie !== undefined) updates.isNewDie = parsed.data.isNewDie;
+  if (parsed.data.dieCost !== undefined) updates.dieCost = parsed.data.dieCost;
 
   const [job] = await db.update(jobsTable).set(updates).where(eq(jobsTable.id, params.data.id)).returning();
   if (!job) { res.status(404).json({ error: "Job not found" }); return; }

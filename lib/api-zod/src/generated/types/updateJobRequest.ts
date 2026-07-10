@@ -16,4 +16,8 @@ export interface UpdateJobRequest {
   plannedSheets?: number | null;
   status?: UpdateJobRequestStatus;
   scheduledDate?: string | null;
+  cartonStyle?: string | null;
+  upsPerSheet?: number | null;
+  isNewDie?: boolean | null;
+  dieCost?: number | null;
 }

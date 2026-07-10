@@ -20,4 +20,8 @@ export interface CreateJobRequest {
   coatingType?: string | null;
   finishRequirements?: string[] | null;
   materials?: CreateJobMaterialRequest[] | null;
+  cartonStyle?: string | null;
+  upsPerSheet?: number | null;
+  isNewDie?: boolean | null;
+  dieCost?: number | null;
 }

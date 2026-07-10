@@ -346,6 +346,10 @@ export interface CreateJobRequest {
   coatingType?: string | null;
   finishRequirements?: string[] | null;
   materials?: CreateJobMaterialRequest[] | null;
+  cartonStyle?: string | null;
+  upsPerSheet?: number | null;
+  isNewDie?: boolean | null;
+  dieCost?: number | null;
 }
 
 export type UpdateJobRequestStatus =
@@ -367,6 +371,10 @@ export interface UpdateJobRequest {
   plannedSheets?: number | null;
   status?: UpdateJobRequestStatus;
   scheduledDate?: string | null;
+  cartonStyle?: string | null;
+  upsPerSheet?: number | null;
+  isNewDie?: boolean | null;
+  dieCost?: number | null;
 }
 
 export type CreateWastageLogRequestReason =

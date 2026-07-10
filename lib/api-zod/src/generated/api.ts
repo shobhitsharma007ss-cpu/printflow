@@ -548,6 +548,10 @@ export const CreateJobBody = zod.object({
   spotColors: zod.number().nullish(),
   printPassCount: zod.number().nullish(),
   dryingWaitHours: zod.number().nullish(),
+  cartonStyle: zod.string().nullish(),
+  upsPerSheet: zod.number().nullish(),
+  isNewDie: zod.boolean().nullish(),
+  dieCost: zod.number().nullish(),
 });
 
 /**
@@ -654,6 +658,10 @@ export const UpdateJobBody = zod.object({
     .enum(["pending", "in-progress", "completed", "on-hold"])
     .optional(),
   scheduledDate: zod.string().nullish(),
+  cartonStyle: zod.string().nullish(),
+  upsPerSheet: zod.number().nullish(),
+  isNewDie: zod.boolean().nullish(),
+  dieCost: zod.number().nullish(),
 });
 
 export const UpdateJobResponse = zod.object({
