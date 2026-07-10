@@ -1,0 +1,103 @@
+Screenshot 2026-07-11 at 12.43.35 AM.png
+
+Diagnosed scope isolation issue and devised localized computation fix
+Diagnosed scope isolation issue and devised localized computation fix
+cartonPlan defined in parent scope, Step 2 renders in child scope. My anchor sat wrong. Fixing render block to self-compute — one patch:
+
+
+The user prompt is empty, so I cannot determine the primary language. However, based on the thinking block being in English, here is the summary: Verifying child component prop accessibility and payload structure
+The user prompt is empty, so I cannot determine the primary language. However, based on the thinking block being in English, here is the summary: Verifying child component prop accessibility and payload structure
+Fix zip ready (1 file).
+
+Download printflow_bridge_fix.zip, drag to Replit
+Shell:
+cd ~/workspace && find . -maxdepth 3 -name "printflow_bridge_fix.zip" -exec mv {} . \; ; unzip -o printflow_bridge_fix.zip && rm printflow_bridge_fix.zip
+git add -A && git commit -m "fix carton scope" && git push
+Republish, hard refresh
+Jobs → new job → names → Next. White screen gone? Then paper + 100/40/40 → blank line?
+Report.
+
+
+Printflow bridge fix
+ZIP 
+will this delete the old one
+
+Yes — overwrites the broken wizard file with fixed one. That's the point. Nothing else touched, all other work safe.
+
+Go.
+
+lets build the next step
+
+Bridge fix confirmed working? Need that "works" first — broken wizard blocks everything downstream.
+
+If works: next = auth build via Replit Agent (my tokens too dead for code). Paste this to Agent:
+
+"Build authentication + roles for PrintFlow. Spec:
+
+Backend: email+password auth using express-session + connect-pg-simple (session table in Postgres) + bcrypt. New table via prod-migration.ts (IF NOT EXISTS): users(id serial pk, name text, email text unique, password_hash text, role text, created_at timestamptz default now()). Roles: owner, supervisor, operator. Seed one owner user in migration: email owner@printflow.in, password printflow123 (bcrypt hashed), name 'Owner'. Routes: POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me. Protect all /api routes except auth + healthz: 401 if no session.
+
+Frontend: login page (match costing.tsx visual style: same Card/Input/Button components). Auth context + route guard. Role gates: Settings/Costing/Reports = owner only; Jobs/Inventory = owner+supervisor; Floor Monitor + Operator Mode = all roles. Logged-out users see only login. Operator-role login lands directly on /floor/stations.
+
+Rules: do NOT regenerate API types wholesale — extend surgically. Add users table to prod-migration.ts as Migration next-number with IF NOT EXISTS. VALIDATION you must report: (1) logged-out user hitting /jobs redirects to login, (2) owner login works with seeded credentials, (3) operator login lands on /floor/stations, (4) existing pages all still render after login. Change nothing else."
+
+After Agent finishes: git sync, republish, test login, change the seeded password.
+
+Report Bridge test + Agent progress.
+
+before i build with replit this is his plan okay? #18 - Authentication & Roles
+What & Why
+PrintFlow currently has no login — anyone reaching the app sees every screen. Add email + password authentication with three roles (owner, supervisor, operator) so the factory owner controls who can see costing/reports/settings, supervisors manage jobs and inventory, and shop-floor operators only reach the station screens. This is the foundation for safe multi-user use on the plant floor.
+
+Done looks like
+Logged-out users see only a login page; every other screen redirects to login.
+The seeded owner account can log in and reach all screens.
+An operator account logs in and lands directly on the station picker (/floor/stations), and cannot open owner/supervisor screens.
+A supervisor account can open Jobs and Inventory but not Costing, Reports, or Settings.
+Role gates:
+Owner only: Settings, Costing, Reports.
+Owner + Supervisor: Jobs, Inventory.
+All roles: Floor Monitor, Operator Mode (stations), Job Card.
+Logging out returns the user to the login page and clears the session.
+Sessions persist across page refreshes.
+The sidebar only shows links the current role is allowed to open.
+Out of scope
+Self-service signup, password reset, and email verification (owner creates users later; only the seeded owner exists now).
+Per-user audit trails and activity logging.
+OAuth / SSO / third-party login.
+A user-management admin UI (adding/editing users) — seed one owner for now.
+Steps
+Auth backend — Add server-side email/password auth backed by Postgres-stored sessions with hashed passwords. Endpoints for login, logout, and fetching the current user. On failed login return a clear error; never leak whether the email exists.
+Users table + seed migration — Add a users table (id, name, email unique, password hash, role, created_at) as a new idempotent migration that creates the table only if missing, and seed a single owner account (email owner@printflow.in, password printflow123, name "Owner"). Also provision the session storage table.
+Login page — Build a login screen that visually matches the existing app (reuse the same Card/Input/Button components and styling seen in the costing page). Show inline errors on bad credentials and a loading state while submitting.
+Auth context + route guard — Add a client-side auth provider that loads the current user on startup, gates the whole app so logged-out users only see login, and redirects by role. Operator logins land on /floor/stations.
+Role gating — Enforce the role matrix on both the routes and the sidebar so disallowed screens are neither navigable nor linked. Wire logout into the existing UI.
+Verification — Confirm and report: (1) a logged-out user hitting /jobs is redirected to login, (2) owner login works with the seeded credentials, (3) operator login lands on /floor/stations and cannot reach owner screens, (4) all existing pages still render after login.
+Critical constraints
+Do NOT regenerate the API client/types wholesale. The generated packages in lib/api-zod and lib/api-client-react are hand-maintained with drift beyond lib/api-spec/openapi.yaml; a full codegen run deletes drifted endpoints and breaks the app. Extend types surgically instead.
+Add the new database work as a new numbered migration using IF NOT EXISTS, following the existing idempotent pattern; do not alter or renumber existing migrations.
+Reuse the existing session/cookie setup conventions already present; keep session secret in an environment variable, not hardcoded.
+Preserve the two existing route trees (operator/job-card full-screen tree and the main AppLayout tree); both must sit behind auth.
+Relevant files
+artifacts/api-server/src/app.ts
+artifacts/api-server/src/index.ts
+artifacts/api-server/src/routes/index.ts
+artifacts/api-server/src/middlewares
+artifacts/api-server/src/lib/prod-migration.ts
+artifacts/api-server/package.json
+lib/db/src/schema/jobs.ts
+lib/db/src/schema/materials.ts
+artifacts/printflow/src/App.tsx
+artifacts/printflow/src/components/layout.tsx
+artifacts/printflow/src/pages/costing.tsx
+artifacts/printflow/src/pages/operator-station.tsx
+
+Show more
+Plan solid. Approve. It read the landmines right: surgical types, idempotent migration numbering, both route trees behind auth, env session secret.
+
+Two flags before you click go:
+
+Operator "login" contradiction watch: floor stations were designed passwordless (tap-name chips). Agent's plan puts stations behind auth. Acceptable if: one shared operator account per plant logs into the tablet once, session persists — chips still handle who-did-what. Tell Agent: "Operator auth = tablet stays logged in with one operator-role account; do NOT add per-action password prompts on station screens."
+Job Card route — plan lists it all-roles behind auth. Fine, printing happens from logged-in office anyway.
+Add flag 1 as one line, then approve. After build: git sync → republish → test all 4 validations → change seeded password immediately.
+
+Go.
