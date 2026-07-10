@@ -11,10 +11,18 @@ import reportsRouter from "./reports";
 import notificationsRouter from "./notifications";
 import quotesRouter from "./quotes";
 import adminRouter from "./admin";
+import authRouter from "./auth";
+import { requireAuth, requireRole } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
 
+// Public routes (no session required).
 router.use(healthRouter);
+router.use(authRouter);
+
+// Everything below this line requires an authenticated session.
+router.use(requireAuth);
+
 router.use(vendorsRouter);
 router.use(materialsRouter);
 router.use(stockRouter);
@@ -22,9 +30,13 @@ router.use(machinesRouter);
 router.use(jobsRouter);
 router.use(templatesRouter);
 router.use(dashboardRouter);
-router.use(reportsRouter);
 router.use(notificationsRouter);
 router.use(quotesRouter);
-router.use(adminRouter);
+
+// Owner-only routes: Reports screen and destructive admin actions must not be
+// reachable by supervisor/operator sessions (e.g. the shared operator tablet),
+// even though the frontend already hides these screens from those roles.
+router.use(requireRole("owner"), reportsRouter);
+router.use(requireRole("owner"), adminRouter);
 
 export default router;

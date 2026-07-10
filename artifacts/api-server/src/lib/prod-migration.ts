@@ -1,4 +1,5 @@
 import { eq, sql, inArray } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 import {
   db,
   vendorsTable,
@@ -7,10 +8,61 @@ import {
   machinesTable,
   jobTemplatesTable,
   jobRoutingTable,
+  usersTable,
 } from "@workspace/db";
 import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
+
+  // ─── MIGRATION 14: users table, session store table + seed owner account ─
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id            SERIAL PRIMARY KEY,
+        name          TEXT NOT NULL,
+        email         TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role          TEXT NOT NULL DEFAULT 'operator',
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Session store table for connect-pg-simple (its runtime createTableIfMissing
+    // reads a sibling table.sql that does not survive esbuild bundling).
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        sid    VARCHAR NOT NULL COLLATE "default",
+        sess   JSON NOT NULL,
+        expire TIMESTAMP(6) NOT NULL,
+        CONSTRAINT user_sessions_pkey PRIMARY KEY (sid)
+      );
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON user_sessions (expire);
+    `);
+
+    const ownerEmail = "owner@printflow.in";
+    const existingOwner = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, ownerEmail))
+      .limit(1);
+
+    if (existingOwner.length === 0) {
+      const passwordHash = await bcrypt.hash("printflow123", 10);
+      await db.insert(usersTable).values({
+        name: "Owner",
+        email: ownerEmail,
+        passwordHash,
+        role: "owner",
+      });
+      logger.info("Migration 14: users table created + owner account seeded.");
+    } else {
+      logger.info("Migration 14: users table ensured (owner already present).");
+    }
+  } catch (err) {
+    logger.error("Migration 14 failed:", err);
+  }
 
   // ─── MIGRATION 13: Inventory dimension columns + material_batches table ──
   try {

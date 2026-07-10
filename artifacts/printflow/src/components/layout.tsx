@@ -17,22 +17,31 @@ import {
   X,
   Calculator,
   LayoutGrid,
-  TabletSmartphone
+  TabletSmartphone,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlantAlerts } from "@/hooks/use-notifications";
+import { useAuth } from "@/hooks/use-auth";
+import type { Role } from "@/lib/auth-api";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/floor-monitor", label: "Floor Monitor", icon: MonitorPlay },
-  { href: "/floor/stations", label: "Operator Mode", icon: TabletSmartphone },
-  { href: "/jobs", label: "Jobs", icon: Briefcase },
-  { href: "/layout", label: "Layout Planner", icon: LayoutGrid },
-  { href: "/costing", label: "Costing", icon: Calculator },
-  { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; roles: Role[] }[] = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["owner", "supervisor"] },
+  { href: "/floor-monitor", label: "Floor Monitor", icon: MonitorPlay, roles: ["owner", "supervisor", "operator"] },
+  { href: "/floor/stations", label: "Operator Mode", icon: TabletSmartphone, roles: ["owner", "supervisor", "operator"] },
+  { href: "/jobs", label: "Jobs", icon: Briefcase, roles: ["owner", "supervisor"] },
+  { href: "/layout", label: "Layout Planner", icon: LayoutGrid, roles: ["owner", "supervisor"] },
+  { href: "/costing", label: "Costing", icon: Calculator, roles: ["owner"] },
+  { href: "/inventory", label: "Inventory", icon: Package, roles: ["owner", "supervisor"] },
+  { href: "/reports", label: "Reports", icon: BarChart3, roles: ["owner"] },
+  { href: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },
 ];
+
+const ROLE_LABELS: Record<Role, string> = {
+  owner: "Owner",
+  supervisor: "Supervisor",
+  operator: "Operator",
+};
 
 function NotificationBell() {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -189,6 +198,9 @@ function NotificationBell() {
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const { user, logout } = useAuth();
+
+  const navItems = NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -201,7 +213,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = location === item.href;
             return (
               <Link 
@@ -226,14 +238,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="p-4 border-t border-sidebar-border mt-auto">
           <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-9 h-9 rounded-full bg-sidebar-accent border border-sidebar-border flex items-center justify-center overflow-hidden">
-               <span className="text-xs font-bold text-white">PI</span>
+            <div className="w-9 h-9 rounded-full bg-sidebar-accent border border-sidebar-border flex items-center justify-center overflow-hidden shrink-0">
+               <span className="text-xs font-bold text-white">
+                 {(user?.name ?? "?").slice(0, 2).toUpperCase()}
+               </span>
             </div>
-            <div>
-              <p className="text-sm font-medium text-white leading-tight">Prakash Industries</p>
-              <p className="text-xs text-sidebar-foreground/50">Plant Manager</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white leading-tight truncate">{user?.name ?? "User"}</p>
+              <p className="text-xs text-sidebar-foreground/50">{user ? ROLE_LABELS[user.role] : ""}</p>
             </div>
           </div>
+          <button
+            onClick={() => logout()}
+            className="mt-2 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-white transition-colors"
+          >
+            <LogOut size={18} />
+            Sign out
+          </button>
         </div>
       </aside>
 
@@ -280,7 +301,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <span className="text-xl font-bold text-white">PrintFlow</span>
             </div>
             <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const isActive = location === item.href;
                 return (
                   <Link 
