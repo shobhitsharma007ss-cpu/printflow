@@ -122,12 +122,13 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     if (!mat) continue;
     const plannedQty = parseFloat(String(jm.plannedQty));
     const currentQty = parseFloat(String(mat.currentQty));
-    const newQty = Math.max(0, currentQty - plannedQty);
+    const actualDeducted = Math.min(plannedQty, currentQty); // actual amount removed (never below zero)
+    const newQty = currentQty - actualDeducted;
     await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
     await db.insert(stockMovementsTable).values({
       materialId: mat.id,
       movementType: "deduction",
-      qty: String(-plannedQty),
+      qty: String(-actualDeducted),
       jobId,
       sourceRef: jobForDeduction.jobCode,
     });
@@ -147,12 +148,13 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, jobForDeduction.materialId));
     if (mat) {
       const currentQty = parseFloat(String(mat.currentQty));
-      const newQty = Math.max(0, currentQty - jobForDeduction.qtySheets);
+      const actualDeducted = Math.min(jobForDeduction.qtySheets, currentQty);
+      const newQty = currentQty - actualDeducted;
       await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
       await db.insert(stockMovementsTable).values({
         materialId: mat.id,
         movementType: "deduction",
-        qty: String(-jobForDeduction.qtySheets),
+        qty: String(-actualDeducted),
         jobId,
         sourceRef: jobForDeduction.jobCode,
       });
@@ -178,14 +180,31 @@ async function reverseJobMaterials(jobId: number): Promise<void> {
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job || !job.materialsDeducted) return;
 
-  const deductionMovements = await db
+  // Only reverse deductions that have not yet been reversed.
+  // Each reversal stamps sourceRef = 'reversal-of-{deductionId}' so we can detect already-reversed ones.
+  const allDeductions = await db
     .select()
     .from(stockMovementsTable)
     .where(and(eq(stockMovementsTable.jobId, jobId), eq(stockMovementsTable.movementType, "deduction")));
 
-  for (const mv of deductionMovements) {
+  // Build the set of already-reversed deduction IDs by checking existing reversal sourceRefs.
+  const reversals = await db
+    .select({ sourceRef: stockMovementsTable.sourceRef })
+    .from(stockMovementsTable)
+    .where(and(eq(stockMovementsTable.jobId, jobId), eq(stockMovementsTable.movementType, "reversal")));
+  const alreadyReversedIds = new Set(
+    reversals
+      .map(r => r.sourceRef)
+      .filter((s): s is string => typeof s === "string" && s.startsWith("reversal-of-"))
+      .map(s => parseInt(s.replace("reversal-of-", ""), 10))
+  );
+
+  const pendingDeductions = allDeductions.filter(d => !alreadyReversedIds.has(d.id));
+
+  for (const mv of pendingDeductions) {
     const deductedQty = parseFloat(String(mv.qty)); // stored as negative
     const returnQty = -deductedQty; // positive amount to return
+    if (returnQty <= 0) continue; // skip zero-amount movements (nothing was actually removed)
     const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, mv.materialId));
     if (!mat) continue;
     const currentQty = parseFloat(String(mat.currentQty));
@@ -197,7 +216,7 @@ async function reverseJobMaterials(jobId: number): Promise<void> {
       movementType: "reversal",
       qty: String(returnQty),
       jobId,
-      sourceRef: job.jobCode,
+      sourceRef: `reversal-of-${mv.id}`, // link back to the specific deduction — prevents double-reversal
     });
   }
 
