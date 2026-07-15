@@ -34,12 +34,12 @@ async function start() {
     logger.info({ port }, "Server listening");
   });
 
-  // Check for overdue jobs every hour and send external alerts if configured.
+  // Check for overdue jobs every 5 minutes and send external alerts if configured.
   setInterval(() => {
     checkAndAlertOverdueJobs().catch(err =>
       logger.warn({ err }, "Overdue job alert check failed")
     );
-  }, 60 * 60 * 1000);
+  }, 5 * 60 * 1000);
 }
 
 start();
