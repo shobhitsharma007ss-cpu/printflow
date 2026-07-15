@@ -470,6 +470,7 @@ export default function CostingPage() {
       if (!r.ok) throw new Error("save failed");
       const d = await r.json() as { id: number; version: number };
       toast.success(`Quote saved — v${d.version} (ID #${d.id})`);
+      queryClient.invalidateQueries({ queryKey: getListJobQuotesQueryKey() });
     } catch {
       toast.error("Could not save quote — please try again.");
     } finally {

@@ -278,16 +278,51 @@ async function buildJobWithDetails(jobId: number) {
   }
 
   // ─── Actual cost summary — per-category breakdown ─────────────────────────
-  let paperActualCost = materials.reduce((sum, m) => {
-    const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
-    const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
-    return sum + qty * rate;
-  }, 0);
+  //
+  // Source priority for paper actual qty (most → least accurate):
+  //   1. wastage_log.actualQty  — recorded when job finishes (true total used incl. waste)
+  //   2. job_materials.actualQty — updated during execution (may lag behind wastage log)
+  //   3. job_materials.plannedQty — planned; used before execution starts
+  //   4. material.ratePerSheet × plannedSheets — fallback when no job_materials rows at all
+  //
+  // Build a per-material actual-qty map from wastage logs.
+  const wastageActualMap = new Map<number, number>();
+  for (const wl of wastageLogs) {
+    const prev = wastageActualMap.get(wl.materialId) ?? 0;
+    wastageActualMap.set(wl.materialId, prev + parseFloat(String(wl.actualQty)));
+  }
 
-  // Fallback: no job_materials rows but job has a material linked directly
-  // (e.g. standard jobs created via wizard; also covers pre-conversion state).
-  // Use material.ratePerSheet × plannedSheets to give an estimated paper cost.
-  if (paperActualCost === 0 && materials.length === 0 && material) {
+  let paperActualCost = 0;
+  const accountedMaterialIds = new Set<number>();
+
+  for (const m of materials) {
+    const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
+    const actualFromWastage = wastageActualMap.get(m.materialId);
+    if (actualFromWastage != null) {
+      paperActualCost += actualFromWastage * rate;
+    } else {
+      const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
+      paperActualCost += qty * rate;
+    }
+    accountedMaterialIds.add(m.materialId);
+  }
+
+  // Wastage for materials not tracked in job_materials rows
+  // (wizard-created jobs where the primary material is on jobs.materialId directly).
+  for (const wl of wastageLogs) {
+    if (!accountedMaterialIds.has(wl.materialId)) {
+      if (material && wl.materialId === material.id) {
+        const ratePerSheet = material.ratePerSheet != null ? parseFloat(String(material.ratePerSheet)) : 0;
+        paperActualCost += parseFloat(String(wl.actualQty)) * ratePerSheet;
+      }
+      accountedMaterialIds.add(wl.materialId);
+    }
+  }
+
+  // Fallback: no job_materials and no wastage but job has a directly-linked material.
+  // Use material.ratePerSheet × plannedSheets so Budget vs Actual is populated even
+  // before the job has started producing actual figures.
+  if (paperActualCost === 0 && materials.length === 0 && wastageLogs.length === 0 && material) {
     const ratePerSheet = material.ratePerSheet != null ? parseFloat(String(material.ratePerSheet)) : 0;
     if (ratePerSheet > 0) {
       const sheets = job.plannedSheets ?? job.qtySheets;
