@@ -39,6 +39,24 @@ export async function runProdMigration(): Promise<void> {
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS stock_movements_job_id_idx ON stock_movements (job_id) WHERE job_id IS NOT NULL;
     `);
+    // Seed opening-balance movements for existing materials that have stock but no ledger entries yet.
+    // This ensures SUM(stock_movements.qty) == materials.current_qty from the moment the ledger is activated.
+    await db.execute(sql`
+      INSERT INTO stock_movements (material_id, movement_type, qty, source_ref, reason, performed_by)
+      SELECT
+        m.id,
+        'opening',
+        m.current_qty::DECIMAL,
+        'migration-15',
+        'Opening stock balance at ledger activation',
+        'system'
+      FROM materials m
+      WHERE m.current_qty IS NOT NULL
+        AND m.current_qty::DECIMAL > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM stock_movements sm WHERE sm.material_id = m.id
+        );
+    `);
     logger.info("Migration 15: stock_movements ledger + materials_deducted flag ensured.");
   } catch (err) {
     logger.error("Migration 15 failed:", err);

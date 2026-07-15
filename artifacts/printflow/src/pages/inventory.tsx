@@ -1011,12 +1011,14 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
                 const qty = parseFloat(mv.qty);
                 const isPositive = qty >= 0;
                 const typeLabel: Record<string, string> = {
+                  opening: "Opening",
                   inward: "Inward",
                   deduction: "Job Use",
                   reversal: "Reversal",
                   adjustment: "Adjust",
                 };
                 const typeCls: Record<string, string> = {
+                  opening: "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400",
                   inward: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
                   deduction: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400",
                   reversal: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400",
