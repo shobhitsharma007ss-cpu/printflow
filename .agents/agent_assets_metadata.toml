@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "qhyvuPntW68ZbaG-HUZ7z"
+uri = "file://CHANGES_SUMMARY.md"
+type = "text"
+title = "PrintFlow — Alert System Changes Summary"
