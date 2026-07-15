@@ -103,7 +103,7 @@ async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise
   return { canStart: waitingFor.length === 0, waitingFor };
 }
 
-async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
+async function deductJobMaterials(jobId: number, performedBy = "system"): Promise<DeductionInfo[]> {
   // Idempotency: skip if materials already deducted for this job
   const [jobForDeduction] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!jobForDeduction || jobForDeduction.materialsDeducted) return [];
@@ -131,6 +131,7 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
       qty: String(-actualDeducted),
       jobId,
       sourceRef: jobForDeduction.jobCode,
+      performedBy,
     });
     deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: plannedQty, unit: mat.unit });
     deductedMaterialIds.add(mat.id);
@@ -157,6 +158,7 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
         qty: String(-actualDeducted),
         jobId,
         sourceRef: jobForDeduction.jobCode,
+        performedBy,
       });
       deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: jobForDeduction.qtySheets, unit: mat.unit });
       if (newQty <= parseFloat(String(mat.minReorderQty))) {
@@ -176,7 +178,7 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
   return deductions;
 }
 
-async function reverseJobMaterials(jobId: number): Promise<void> {
+async function reverseJobMaterials(jobId: number, performedBy = "system"): Promise<void> {
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job || !job.materialsDeducted) return;
 
@@ -217,6 +219,7 @@ async function reverseJobMaterials(jobId: number): Promise<void> {
       qty: String(returnQty),
       jobId,
       sourceRef: `reversal-of-${mv.id}`, // link back to the specific deduction — prevents double-reversal
+      performedBy,
     });
   }
 
@@ -616,13 +619,14 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     }
   }
 
+  const performer = (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system";
   let deductions: DeductionInfo[] = [];
   if (parsed.data.status === "in-progress" && currentJob.status === "pending") {
-    deductions = await deductJobMaterials(job.id);
+    deductions = await deductJobMaterials(job.id, performer);
   }
 
   if (parsed.data.status === "pending" && currentJob.status === "in-progress") {
-    await reverseJobMaterials(job.id);
+    await reverseJobMaterials(job.id, performer);
   }
 
   const result = await buildJobWithDetails(job.id);
@@ -662,11 +666,12 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
 
   let deductions: DeductionInfo[] = [];
 
+  const routingPerformer = (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system";
   if (parsed.data.status === "in-progress") {
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
     if (job && job.status === "pending") {
       await db.update(jobsTable).set({ status: "in-progress" }).where(eq(jobsTable.id, job.id));
-      deductions = await deductJobMaterials(job.id);
+      deductions = await deductJobMaterials(job.id, routingPerformer);
     }
     await createNotification({
       type: "step-started",
@@ -732,7 +737,7 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
     );
     if (!hasOtherActiveSteps && job && job.status === "in-progress") {
       await db.update(jobsTable).set({ status: "pending" }).where(eq(jobsTable.id, job.id));
-      await reverseJobMaterials(routing.jobId);
+      await reverseJobMaterials(routing.jobId, routingPerformer);
     }
   }
 

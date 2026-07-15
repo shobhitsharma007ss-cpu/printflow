@@ -758,6 +758,7 @@ export type StockMovementMovementType =
   (typeof StockMovementMovementType)[keyof typeof StockMovementMovementType];
 
 export const StockMovementMovementType = {
+  opening: "opening",
   inward: "inward",
   deduction: "deduction",
   reversal: "reversal",

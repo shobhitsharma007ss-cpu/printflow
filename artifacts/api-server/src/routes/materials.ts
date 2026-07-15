@@ -69,6 +69,19 @@ router.post("/materials", async (req, res): Promise<void> => {
   }
 
   const [material] = await db.insert(materialsTable).values(insertData as typeof materialsTable.$inferInsert).returning();
+
+  // Create opening-balance movement so ledger starts in sync with currentQty
+  const initialQty = parseFloat(String(material.currentQty ?? "0"));
+  if (initialQty > 0) {
+    await db.insert(stockMovementsTable).values({
+      materialId: material.id,
+      movementType: "opening",
+      qty: String(initialQty),
+      reason: "Initial stock on material creation",
+      performedBy: (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system",
+    });
+  }
+
   res.status(201).json(material);
 });
 
@@ -113,6 +126,26 @@ router.put("/materials/:id", async (req, res): Promise<void> => {
         const toCm = (v: number) => unit === 'mm' ? v * 0.1 : unit === 'cm' ? v : v * 2.54;
         const sheetWeightKg = (toCm(wh[0]) * toCm(wh[1]) * gsm) / 10000000;
         updateData.ratePerSheet = String(sheetWeightKg * rateKg);
+      }
+    }
+  }
+
+  // If currentQty is being changed directly, write an adjustment movement to maintain ledger parity
+  if (parsed.data.currentQty != null) {
+    const [existing] = await db.select({ currentQty: materialsTable.currentQty }).from(materialsTable).where(eq(materialsTable.id, params.data.id));
+    if (existing) {
+      const oldQty = parseFloat(String(existing.currentQty ?? "0"));
+      const newQtyVal = parseFloat(String(parsed.data.currentQty));
+      const delta = newQtyVal - oldQty;
+      if (delta !== 0) {
+        await db.insert(stockMovementsTable).values({
+          materialId: params.data.id,
+          movementType: "adjustment",
+          qty: String(delta),
+          reason: "Direct stock edit",
+          sourceRef: `Previous: ${Math.round(oldQty).toLocaleString("en-IN")}`,
+          performedBy: (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system",
+        });
       }
     }
   }
@@ -232,6 +265,7 @@ router.post("/materials/:id/adjust", async (req, res): Promise<void> => {
     qty: String(delta),
     reason: parsed.data.reason,
     sourceRef: `Physical count (was ${Math.round(currentQty).toLocaleString("en-IN")})`,
+    performedBy: (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system",
   }).returning();
 
   res.status(201).json({ movement, newQty: parsed.data.countedQty });

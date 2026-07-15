@@ -82,6 +82,7 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
       movementType: "inward",
       qty: String(sheetsToAdd),
       sourceRef: parsed.data.batchRef || parsed.data.brand || null,
+      performedBy: (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system",
     });
 
     await createNotification({
