@@ -747,6 +747,7 @@ export interface ScheduleResponse {
 export interface GetScheduleParams {
   startDate?: string;
   weeks?: number;
+  hoursPerDay?: number;
 }
 
 export interface RescheduleJobRequest {

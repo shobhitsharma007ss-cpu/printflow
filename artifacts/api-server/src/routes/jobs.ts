@@ -958,6 +958,10 @@ router.get("/dispatches/:dispatchId", async (req, res): Promise<void> => {
 
 // ─── Reschedule a job ────────────────────────────────────────────────────────
 router.patch("/jobs/:id/schedule", async (req, res): Promise<void> => {
+  const user = req.session?.user;
+  if (!user || !["owner", "supervisor"].includes(user.role)) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
   const params = RescheduleJobParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = RescheduleJobBody.safeParse(req.body);

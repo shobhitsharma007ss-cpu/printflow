@@ -68,6 +68,9 @@ function genDayRange(start: string, count: number): string[] {
 router.get("/schedule", async (req, res): Promise<void> => {
   const parsed = GetScheduleQueryParams.safeParse(req.query);
   const weeks = parsed.success ? (parsed.data.weeks ?? 4) : 4;
+  const hoursPerDay = parsed.success && parsed.data.hoursPerDay != null
+    ? Math.min(24, Math.max(1, parsed.data.hoursPerDay))
+    : 8;
   const startDate = parsed.success && parsed.data.startDate
     ? parsed.data.startDate
     : new Date().toISOString().slice(0, 10);
@@ -158,8 +161,8 @@ router.get("/schedule", async (req, res): Promise<void> => {
       return {
         date,
         bookedHours: bh,
-        availableHours: AVAILABLE_HOURS_PER_DAY,
-        isOverloaded: bh > AVAILABLE_HOURS_PER_DAY,
+        availableHours: hoursPerDay,
+        isOverloaded: bh > hoursPerDay,
         jobs: d.jobs,
       };
     });
@@ -168,7 +171,7 @@ router.get("/schedule", async (req, res): Promise<void> => {
       machineId: machine.id,
       machineName: machine.machineName,
       machineType: machine.machineType,
-      availableHoursPerDay: AVAILABLE_HOURS_PER_DAY,
+      availableHoursPerDay: hoursPerDay,
       days: dayResults,
     });
   }

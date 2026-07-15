@@ -1239,8 +1239,9 @@ export const CreateDispatchBody = zod.object({
  * @summary Get production schedule
  */
 export const GetScheduleQueryParams = zod.object({
-  startDate: zod.string().optional(),
+  startDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   weeks: zod.coerce.number().int().min(1).max(12).optional(),
+  hoursPerDay: zod.coerce.number().min(1).max(24).optional(),
 });
 
 /**
@@ -1251,5 +1252,5 @@ export const RescheduleJobParams = zod.object({
 });
 
 export const RescheduleJobBody = zod.object({
-  scheduledDate: zod.string().nullable().optional(),
+  scheduledDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });

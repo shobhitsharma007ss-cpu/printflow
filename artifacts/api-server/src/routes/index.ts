@@ -34,7 +34,7 @@ router.use(templatesRouter);
 router.use(dashboardRouter);
 router.use(notificationsRouter);
 router.use(quotesRouter);
-router.use(scheduleRouter);
+router.use(requireRole("owner", "supervisor"), scheduleRouter);
 
 // Owner-only routes: Reports screen, user management, and destructive admin
 // actions must not be reachable by supervisor/operator sessions (e.g. the

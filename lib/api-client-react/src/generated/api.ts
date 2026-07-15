@@ -3852,6 +3852,7 @@ export const getGetScheduleUrl = (params?: GetScheduleParams): string => {
   const qs = new URLSearchParams();
   if (params?.startDate) qs.set("startDate", params.startDate);
   if (params?.weeks != null) qs.set("weeks", String(params.weeks));
+  if (params?.hoursPerDay != null) qs.set("hoursPerDay", String(params.hoursPerDay));
   const q = qs.toString();
   return `/api/schedule${q ? `?${q}` : ""}`;
 };
