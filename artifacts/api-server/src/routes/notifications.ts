@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 // alert-engine is imported dynamically inside createNotification to avoid circular deps
 import { eq, desc, lte, and, lt, sql } from "drizzle-orm";
-import { db, notificationsTable, materialsTable, jobsTable, jobRoutingTable } from "@workspace/db";
+import { db, notificationsTable, materialsTable, jobsTable, jobRoutingTable, alertLogTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -145,11 +145,33 @@ export async function createNotification(data: {
     .returning();
 
   // Fire-and-forget external alert; never let it crash the calling request.
-  import("../lib/alert-engine")
-    .then(({ dispatchExternalAlert }) =>
-      dispatchExternalAlert(data.type, data.message, data.meta)
-    )
-    .catch(() => undefined);
+  // Any error that occurs before per-recipient log writes (e.g. a DB error
+  // querying alert_config) is caught here and written to alert_log so it
+  // is never silently swallowed.
+  const EVENT_TYPE_MAP: Record<string, string> = {
+    "low-stock": "low_stock",
+    "job-completed": "job_completed",
+    "machine-paused": "machine_issue",
+    "job-overdue": "job_overdue",
+  };
+  const alertEventType = EVENT_TYPE_MAP[data.type];
+  if (alertEventType) {
+    import("../lib/alert-engine")
+      .then(({ dispatchExternalAlert }) =>
+        dispatchExternalAlert(data.type, data.message, data.meta)
+      )
+      .catch(err => {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        db.insert(alertLogTable).values({
+          eventType: alertEventType,
+          channel: "engine",
+          recipient: "(dispatch-error)",
+          status: "failed",
+          errorMessage,
+          messageBody: data.message,
+        }).catch(() => undefined); // best-effort — do not re-throw
+      });
+  }
 
   return row;
 }
