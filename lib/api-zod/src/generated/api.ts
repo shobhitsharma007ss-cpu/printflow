@@ -1254,3 +1254,16 @@ export const RescheduleJobParams = zod.object({
 export const RescheduleJobBody = zod.object({
   scheduledDate: zod.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
+
+export const AdjustMaterialParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdjustMaterialBody = zod.object({
+  countedQty: zod.number().min(0),
+  reason: zod.string().min(1),
+});
+
+export const GetMaterialMovementsParams = zod.object({
+  id: zod.coerce.number(),
+});

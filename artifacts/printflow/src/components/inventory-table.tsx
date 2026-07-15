@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Search, ArrowDownUp, PackagePlus } from "lucide-react";
+import { Search, ArrowDownUp, PackagePlus, SlidersHorizontal } from "lucide-react";
 import { useMaterials } from "@/hooks/use-inventory";
 import { useListStockInward } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -25,10 +25,12 @@ export function InventoryTable({
   stock,
   onSelect,
   onInward,
+  onAdjust,
 }: {
   stock: StockSummaryRow[];
   onSelect: (id: number) => void;
   onInward?: (id: number) => void;
+  onAdjust?: (id: number) => void;
 }) {
   const { data: materials } = useMaterials();
   const { data: inwards } = useListStockInward();
@@ -227,15 +229,26 @@ export function InventoryTable({
                   <AgeBadge days={r.ageDays} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {onInward && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onInward(r.s.id); }}
-                      title="Record inward"
-                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-                    >
-                      <PackagePlus size={16} />
-                    </button>
-                  )}
+                  <div className="flex items-center justify-end gap-1">
+                    {onAdjust && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onAdjust(r.s.id); }}
+                        title="Adjust stock"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                      >
+                        <SlidersHorizontal size={15} />
+                      </button>
+                    )}
+                    {onInward && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onInward(r.s.id); }}
+                        title="Record inward"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                      >
+                        <PackagePlus size={16} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

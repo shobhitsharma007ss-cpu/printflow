@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { useStockSummary } from "@/hooks/use-reports";
-import { useCreateStockInward, useMaterialVendors, useMaterialInwardHistory, useMaterials } from "@/hooks/use-inventory";
+import { useCreateStockInward, useMaterialVendors, useMaterialInwardHistory, useMaterials, useMaterialMovements, useAdjustMaterialStock } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor } from "@/hooks/use-vendors";
 import { Card, Button, Badge, Modal, Input, Label, Select } from "@/components/ui-elements";
-import { Package, AlertTriangle, Layers, X, Plus, ChevronLeft, Search, IndianRupee, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { Package, AlertTriangle, Layers, X, Plus, ChevronLeft, Search, IndianRupee, ChevronDown, ChevronUp, Check, SlidersHorizontal, ArrowUp, ArrowDown } from "lucide-react";
 import { cn, parseDim, formatDim, dimToCm } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StockSummaryRow } from "@workspace/api-client-react";
@@ -62,6 +62,7 @@ export default function Inventory() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
+  const [adjustMaterialId, setAdjustMaterialId] = useState<number | null>(null);
 
   // Clear stale selected material whenever stock data changes
   React.useEffect(() => {
@@ -135,11 +136,25 @@ export default function Inventory() {
         ))}
       </div>
 
+      {adjustMaterialId !== null && (() => {
+        const adjMat = stock?.find(s => s.id === adjustMaterialId);
+        return adjMat ? (
+          <AdjustStockModal
+            materialId={adjMat.id}
+            materialName={adjMat.materialName}
+            currentQty={adjMat.currentQty}
+            unit={adjMat.unit}
+            onClose={() => setAdjustMaterialId(null)}
+          />
+        ) : null;
+      })()}
+
       {viewMode === "table" && (
         <InventoryTable
           stock={activeTab === "boards" ? boards : consumables}
           onSelect={setSelectedMaterialId}
           onInward={() => setIsInwardOpen(true)}
+          onAdjust={setAdjustMaterialId}
         />
       )}
 
@@ -716,6 +731,94 @@ function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   );
 }
 
+// ─── Adjust Stock Modal ────────────────────────────────────────────────────
+
+const ADJUST_REASONS = [
+  { value: "physical_count", label: "Physical count correction" },
+  { value: "damage", label: "Damage / write-off" },
+  { value: "data_correction", label: "Data entry correction" },
+  { value: "other", label: "Other" },
+] as const;
+
+function AdjustStockModal({ materialId, materialName, currentQty, unit, onClose }: {
+  materialId: number;
+  materialName: string;
+  currentQty: number;
+  unit: string;
+  onClose: () => void;
+}) {
+  const [countedQty, setCountedQty] = useState(String(Math.round(currentQty)));
+  const [reason, setReason] = useState<string>("physical_count");
+  const adjust = useAdjustMaterialStock();
+
+  const counted = parseFloat(countedQty);
+  const delta = Number.isFinite(counted) ? counted - currentQty : null;
+
+  const handleSubmit = async () => {
+    if (!Number.isFinite(counted) || !reason) return;
+    await adjust.mutateAsync({ id: materialId, data: { countedQty: counted, reason } });
+    toast.success(`Stock adjusted to ${counted.toLocaleString("en-IN")} ${unit}`);
+    onClose();
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Adjust Stock — ${materialName}`}>
+      <div className="space-y-5">
+        <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">System qty</span>
+          <span className="font-bold">{Math.round(currentQty).toLocaleString("en-IN")} <span className="text-xs font-normal text-muted-foreground">{unit}</span></span>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Physical count <span className="text-destructive">*</span></Label>
+          <div className="relative">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={countedQty}
+              onChange={e => setCountedQty(e.target.value)}
+              className="pr-12"
+              autoFocus
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{unit}</span>
+          </div>
+          {delta !== null && delta !== 0 && (
+            <div className={cn(
+              "flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-2",
+              delta > 0 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400"
+                        : "bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400",
+            )}>
+              {delta > 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+              {delta > 0 ? "+" : ""}{Math.round(delta).toLocaleString("en-IN")} {unit} will be {delta > 0 ? "added" : "removed"}
+            </div>
+          )}
+          {delta === 0 && <p className="text-xs text-muted-foreground">No change — qty matches system</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Reason <span className="text-destructive">*</span></Label>
+          <Select value={reason} onChange={e => setReason(e.target.value)}>
+            {ADJUST_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+          </Select>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!Number.isFinite(counted) || counted < 0 || !reason || adjust.isPending}
+            isLoading={adjust.isPending}
+          >
+            <Check size={14} className="mr-1" />
+            Save Adjustment
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Material Detail Panel ─────────────────────────────────────────────────
 
 function MaterialDetailPanel({ materialId, material, onClose }: {
@@ -725,20 +828,41 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
 }) {
   const { data: vendorsForMat, isLoading: loadingVendors } = useMaterialVendors(materialId);
   const { data: history, isLoading: loadingHistory } = useMaterialInwardHistory(materialId);
+  const { data: movements } = useMaterialMovements(materialId);
+  const [showAdjust, setShowAdjust] = useState(false);
   const recentHistory = history?.slice(-5).reverse() ?? [];
+  const recentMovements = (movements ?? []).slice().reverse().slice(0, 12);
   const du = dualUnits(material);
 
   return (
     <div className="w-80 shrink-0">
-      <Card className="p-5 sticky top-0">
+      {showAdjust && (
+        <AdjustStockModal
+          materialId={materialId}
+          materialName={material.materialName}
+          currentQty={material.currentQty}
+          unit={material.unit}
+          onClose={() => setShowAdjust(false)}
+        />
+      )}
+      <Card className="p-5 sticky top-0 max-h-screen overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <h3 className="font-bold text-base leading-tight pr-2">{material.materialName}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowAdjust(true)}
+              title="Adjust stock"
+              className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <SlidersHorizontal size={15} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -854,7 +978,7 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
           ) : null;
         })()}
 
-        <div>
+        <div className="mb-5">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Recent Inward</h4>
           {loadingHistory ? (
             <p className="text-xs text-muted-foreground">Loading...</p>
@@ -878,6 +1002,42 @@ function MaterialDetailPanel({ materialId, material, onClose }: {
             </div>
           )}
         </div>
+
+        {recentMovements.length > 0 && (
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Movement History</h4>
+            <div className="space-y-1.5">
+              {recentMovements.map((mv: { id: number; movementType: string; qty: string; sourceRef?: string | null; reason?: string | null; createdAt: string }) => {
+                const qty = parseFloat(mv.qty);
+                const isPositive = qty >= 0;
+                const typeLabel: Record<string, string> = {
+                  inward: "Inward",
+                  deduction: "Job Use",
+                  reversal: "Reversal",
+                  adjustment: "Adjust",
+                };
+                const typeCls: Record<string, string> = {
+                  inward: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
+                  deduction: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400",
+                  reversal: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-400",
+                  adjustment: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
+                };
+                return (
+                  <div key={mv.id} className="flex items-center gap-2 text-xs">
+                    <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0", typeCls[mv.movementType] ?? "bg-muted text-muted-foreground")}>
+                      {typeLabel[mv.movementType] ?? mv.movementType}
+                    </span>
+                    <span className={cn("font-bold tabular-nums shrink-0", isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                      {isPositive ? "+" : ""}{Math.round(qty).toLocaleString("en-IN")}
+                    </span>
+                    <span className="text-muted-foreground truncate flex-1">{mv.reason ?? mv.sourceRef ?? "—"}</span>
+                    <span className="text-muted-foreground shrink-0">{format(new Date(mv.createdAt), "dd MMM")}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -104,6 +104,10 @@ async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise
 }
 
 async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
+  // Idempotency: skip if materials already deducted for this job
+  const [jobForDeduction] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+  if (!jobForDeduction || jobForDeduction.materialsDeducted) return [];
+
   const deductions: DeductionInfo[] = [];
 
   const jobMats = await db
@@ -120,6 +124,13 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     const currentQty = parseFloat(String(mat.currentQty));
     const newQty = Math.max(0, currentQty - plannedQty);
     await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+    await db.insert(stockMovementsTable).values({
+      materialId: mat.id,
+      movementType: "deduction",
+      qty: String(-plannedQty),
+      jobId,
+      sourceRef: jobForDeduction.jobCode,
+    });
     deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: plannedQty, unit: mat.unit });
     deductedMaterialIds.add(mat.id);
     if (newQty <= parseFloat(String(mat.minReorderQty))) {
@@ -132,14 +143,20 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     }
   }
 
-  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
-  if (job?.materialId && job.qtySheets > 0 && !deductedMaterialIds.has(job.materialId)) {
-    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId));
+  if (jobForDeduction.materialId && jobForDeduction.qtySheets > 0 && !deductedMaterialIds.has(jobForDeduction.materialId)) {
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, jobForDeduction.materialId));
     if (mat) {
       const currentQty = parseFloat(String(mat.currentQty));
-      const newQty = Math.max(0, currentQty - job.qtySheets);
+      const newQty = Math.max(0, currentQty - jobForDeduction.qtySheets);
       await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
-      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: job.qtySheets, unit: mat.unit });
+      await db.insert(stockMovementsTable).values({
+        materialId: mat.id,
+        movementType: "deduction",
+        qty: String(-jobForDeduction.qtySheets),
+        jobId,
+        sourceRef: jobForDeduction.jobCode,
+      });
+      deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: jobForDeduction.qtySheets, unit: mat.unit });
       if (newQty <= parseFloat(String(mat.minReorderQty))) {
         await createNotification({
           type: "low-stock",
@@ -151,7 +168,40 @@ async function deductJobMaterials(jobId: number): Promise<DeductionInfo[]> {
     }
   }
 
+  // Mark job as deducted (idempotency guard)
+  await db.update(jobsTable).set({ materialsDeducted: true }).where(eq(jobsTable.id, jobId));
+
   return deductions;
+}
+
+async function reverseJobMaterials(jobId: number): Promise<void> {
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+  if (!job || !job.materialsDeducted) return;
+
+  const deductionMovements = await db
+    .select()
+    .from(stockMovementsTable)
+    .where(and(eq(stockMovementsTable.jobId, jobId), eq(stockMovementsTable.movementType, "deduction")));
+
+  for (const mv of deductionMovements) {
+    const deductedQty = parseFloat(String(mv.qty)); // stored as negative
+    const returnQty = -deductedQty; // positive amount to return
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, mv.materialId));
+    if (!mat) continue;
+    const currentQty = parseFloat(String(mat.currentQty));
+    await db.update(materialsTable)
+      .set({ currentQty: String(currentQty + returnQty) })
+      .where(eq(materialsTable.id, mv.materialId));
+    await db.insert(stockMovementsTable).values({
+      materialId: mv.materialId,
+      movementType: "reversal",
+      qty: String(returnQty),
+      jobId,
+      sourceRef: job.jobCode,
+    });
+  }
+
+  await db.update(jobsTable).set({ materialsDeducted: false }).where(eq(jobsTable.id, jobId));
 }
 
 async function buildJobWithDetails(jobId: number) {
@@ -552,6 +602,10 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
     deductions = await deductJobMaterials(job.id);
   }
 
+  if (parsed.data.status === "pending" && currentJob.status === "in-progress") {
+    await reverseJobMaterials(job.id);
+  }
+
   const result = await buildJobWithDetails(job.id);
   res.json({ ...result, deductions: deductions.length > 0 ? deductions : null });
 });
@@ -645,6 +699,21 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
           }
         }
       }
+    }
+  }
+
+  if (
+    (parsed.data.status === "pending" || parsed.data.status === "ready") &&
+    (currentRouting.status === "in-progress" || currentRouting.status === "paused")
+  ) {
+    await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
+    const allStepsForJob = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, routing.jobId));
+    const hasOtherActiveSteps = allStepsForJob.some(
+      s => s.id !== routing.id && (s.status === "in-progress" || s.status === "paused"),
+    );
+    if (!hasOtherActiveSteps && job && job.status === "in-progress") {
+      await db.update(jobsTable).set({ status: "pending" }).where(eq(jobsTable.id, job.id));
+      await reverseJobMaterials(routing.jobId);
     }
   }
 

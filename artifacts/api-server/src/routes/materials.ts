@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, materialsTable, materialVendorsTable, vendorsTable, stockInwardTable } from "@workspace/db";
+import { db, materialsTable, materialVendorsTable, vendorsTable, stockInwardTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateMaterialBody,
   UpdateMaterialBody,
@@ -11,6 +11,9 @@ import {
   AddMaterialVendorParams,
   AddMaterialVendorBody,
   GetMaterialInwardHistoryParams,
+  AdjustMaterialParams,
+  AdjustMaterialBody,
+  GetMaterialMovementsParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -195,6 +198,56 @@ router.get("/materials/:id/inward-history", async (req, res): Promise<void> => {
     .leftJoin(vendorsTable, eq(stockInwardTable.vendorId, vendorsTable.id))
     .where(eq(stockInwardTable.materialId, params.data.id))
     .orderBy(stockInwardTable.id);
+  res.json(rows);
+});
+
+router.post("/materials/:id/adjust", async (req, res): Promise<void> => {
+  const params = AdjustMaterialParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = AdjustMaterialBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [material] = await db.select().from(materialsTable).where(eq(materialsTable.id, params.data.id));
+  if (!material) {
+    res.status(404).json({ error: "Material not found" });
+    return;
+  }
+
+  const currentQty = parseFloat(String(material.currentQty));
+  const delta = parsed.data.countedQty - currentQty;
+
+  await db.update(materialsTable)
+    .set({ currentQty: String(parsed.data.countedQty) })
+    .where(eq(materialsTable.id, params.data.id));
+
+  const [movement] = await db.insert(stockMovementsTable).values({
+    materialId: params.data.id,
+    movementType: "adjustment",
+    qty: String(delta),
+    reason: parsed.data.reason,
+    sourceRef: `Physical count (was ${Math.round(currentQty).toLocaleString("en-IN")})`,
+  }).returning();
+
+  res.status(201).json({ movement, newQty: parsed.data.countedQty });
+});
+
+router.get("/materials/:id/movements", async (req, res): Promise<void> => {
+  const params = GetMaterialMovementsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const rows = await db
+    .select()
+    .from(stockMovementsTable)
+    .where(eq(stockMovementsTable.materialId, params.data.id))
+    .orderBy(stockMovementsTable.createdAt);
   res.json(rows);
 });
 

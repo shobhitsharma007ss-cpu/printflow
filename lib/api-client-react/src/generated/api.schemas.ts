@@ -753,3 +753,35 @@ export interface GetScheduleParams {
 export interface RescheduleJobRequest {
   scheduledDate?: string | null;
 }
+
+export type StockMovementMovementType =
+  (typeof StockMovementMovementType)[keyof typeof StockMovementMovementType];
+
+export const StockMovementMovementType = {
+  inward: "inward",
+  deduction: "deduction",
+  reversal: "reversal",
+  adjustment: "adjustment",
+} as const;
+
+export interface StockMovement {
+  id: number;
+  materialId: number;
+  movementType: StockMovementMovementType;
+  qty: string;
+  jobId: number | null;
+  sourceRef: string | null;
+  reason: string | null;
+  performedBy: string | null;
+  createdAt: string;
+}
+
+export interface AdjustStockRequest {
+  countedQty: number;
+  reason: string;
+}
+
+export interface AdjustStockResponse {
+  movement: StockMovement;
+  newQty: number;
+}

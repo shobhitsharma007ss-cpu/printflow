@@ -7,11 +7,14 @@ import {
   useAddMaterialVendor as useGeneratedAddMaterialVendor,
   useGetMaterialVendors,
   useGetMaterialInwardHistory,
+  useGetMaterialMovements,
+  useAdjustMaterialStock as useGeneratedAdjustMaterialStock,
   getListMaterialsQueryKey,
   getGetStockSummaryQueryKey,
   useDeleteMaterial as useGeneratedDeleteMaterial,
   getGetMaterialInwardHistoryQueryKey,
   getGetMaterialVendorsQueryKey,
+  getGetMaterialMovementsQueryKey,
 } from "@workspace/api-client-react";
 
 export function useMaterials() {
@@ -84,6 +87,23 @@ export function useDeleteMaterial() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetStockSummaryQueryKey() });
+    },
+  });
+}
+
+export function useMaterialMovements(id: number) {
+  return useGetMaterialMovements(id, { query: { enabled: !!id } });
+}
+
+export function useAdjustMaterialStock() {
+  const queryClient = useQueryClient();
+  return useGeneratedAdjustMaterialStock({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        queryClient.invalidateQueries({ queryKey: getListMaterialsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetStockSummaryQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMaterialMovementsQueryKey(variables.id) });
+      },
     },
   });
 }

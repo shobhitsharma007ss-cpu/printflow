@@ -14,6 +14,36 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 15: stock_movements ledger + materials_deducted flag ───────
+  try {
+    await db.execute(sql`
+      ALTER TABLE jobs
+        ADD COLUMN IF NOT EXISTS materials_deducted BOOLEAN NOT NULL DEFAULT false;
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id            SERIAL PRIMARY KEY,
+        material_id   INTEGER NOT NULL REFERENCES materials(id),
+        movement_type TEXT NOT NULL,
+        qty           DECIMAL(12,3) NOT NULL,
+        job_id        INTEGER,
+        source_ref    TEXT,
+        reason        TEXT,
+        performed_by  TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS stock_movements_material_id_idx ON stock_movements (material_id);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS stock_movements_job_id_idx ON stock_movements (job_id) WHERE job_id IS NOT NULL;
+    `);
+    logger.info("Migration 15: stock_movements ledger + materials_deducted flag ensured.");
+  } catch (err) {
+    logger.error("Migration 15 failed:", err);
+  }
+
   // ─── MIGRATION 14: users table, session store table + seed owner account ─
   try {
     await db.execute(sql`

@@ -18,6 +18,8 @@ import type {
 
 import type {
   AddMaterialVendorBody,
+  AdjustStockRequest,
+  AdjustStockResponse,
   ConvertJobQuoteRequest,
   ConvertJobQuoteResponse,
   CreateDispatchRequest,
@@ -53,6 +55,7 @@ import type {
   RescheduleJobRequest,
   ScheduleResponse,
   StockInward,
+  StockMovement,
   StockSummaryRow,
   UpdateJobRequest,
   UpdateJobRoutingNotesBody,
@@ -3950,4 +3953,118 @@ export const useRescheduleJob = <
   TContext
 > => {
   return useMutation(getRescheduleJobMutationOptions(options));
+};
+
+// ─── Adjust Material Stock ────────────────────────────────────────────────────
+
+export const getAdjustMaterialStockUrl = (id: number) => `/api/materials/${id}/adjust`;
+
+export const adjustMaterialStock = async (
+  id: number,
+  data: BodyType<AdjustStockRequest>,
+  options?: RequestInit,
+): Promise<AdjustStockResponse> => {
+  return customFetch<AdjustStockResponse>(
+    getAdjustMaterialStockUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+      body: JSON.stringify(data),
+    },
+  );
+};
+
+export const getAdjustMaterialStockMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustMaterialStock>>,
+    TError,
+    { id: number; data: BodyType<AdjustStockRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adjustMaterialStock>>,
+  TError,
+  { id: number; data: BodyType<AdjustStockRequest> },
+  TContext
+> => {
+  const { mutation: mutationOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adjustMaterialStock>>,
+    { id: number; data: BodyType<AdjustStockRequest> }
+  > = ({ id, data }) => adjustMaterialStock(id, data);
+  return { mutationFn, ...mutationOptions };
+};
+
+export const useAdjustMaterialStock = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustMaterialStock>>,
+    TError,
+    { id: number; data: BodyType<AdjustStockRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adjustMaterialStock>>,
+  TError,
+  { id: number; data: BodyType<AdjustStockRequest> },
+  TContext
+> => {
+  return useMutation(getAdjustMaterialStockMutationOptions(options));
+};
+
+// ─── Get Material Stock Movements ─────────────────────────────────────────────
+
+export const getGetMaterialMovementsUrl = (id: number) => `/api/materials/${id}/movements`;
+
+export const getMaterialMovements = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StockMovement[]> => {
+  return customFetch<StockMovement[]>(getGetMaterialMovementsUrl(id), { ...options });
+};
+
+export const getGetMaterialMovementsQueryKey = (id: number) =>
+  [`/api/materials/${id}/movements`] as const;
+
+export const getGetMaterialMovementsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMaterialMovements>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMaterialMovements>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryOptions<Awaited<ReturnType<typeof getMaterialMovements>>, TError, TData> => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetMaterialMovementsQueryKey(id);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaterialMovements>>> = ({ signal }) =>
+    getMaterialMovements(id, { signal, ...requestOptions });
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions };
+};
+
+export const useGetMaterialMovements = <
+  TData = Awaited<ReturnType<typeof getMaterialMovements>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMaterialMovements>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetMaterialMovementsQueryKey(id);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaterialMovements>>> = ({ signal }) =>
+    getMaterialMovements(id, { signal, ...requestOptions });
+  const query = useQuery({ queryKey, queryFn, enabled: !!id, ...queryOptions });
+  return { ...query, queryKey } as UseQueryResult<TData, TError> & { queryKey: QueryKey };
 };

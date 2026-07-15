@@ -38,6 +38,7 @@ export const jobsTable = pgTable("jobs", {
   upsPerSheet: integer("ups_per_sheet"),
   coatingApplication: text("coating_application").default("inline"),
   quoteBudgetId: integer("quote_budget_id"),
+  materialsDeducted: boolean("materials_deducted").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

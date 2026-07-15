@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, stockInwardTable, materialsTable, vendorsTable } from "@workspace/db";
+import { db, stockInwardTable, materialsTable, vendorsTable, stockMovementsTable } from "@workspace/db";
 import { CreateStockInwardBody } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
 
@@ -76,6 +76,13 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
     }
 
     await db.update(materialsTable).set(materialUpdate).where(eq(materialsTable.id, parsed.data.materialId));
+
+    await db.insert(stockMovementsTable).values({
+      materialId: parsed.data.materialId,
+      movementType: "inward",
+      qty: String(sheetsToAdd),
+      sourceRef: parsed.data.batchRef || parsed.data.brand || null,
+    });
 
     await createNotification({
       type: "stock-inward",
