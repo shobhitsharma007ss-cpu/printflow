@@ -32,6 +32,8 @@ function n(val: string | undefined, fallback = 0): number {
 }
 
 interface CostForm {
+  jobName: string;
+  clientName: string;
   linkedJobId: string;
   qtyRequired: string;
   cartonLengthMm: string;
@@ -69,6 +71,8 @@ interface CostForm {
 }
 
 const DEFAULTS: CostForm = {
+  jobName: "",
+  clientName: "",
   linkedJobId: "",
   qtyRequired: "25000",
   cartonLengthMm: "100",
@@ -620,7 +624,13 @@ export default function CostingPage() {
                             setExpandedQuoteId(null);
                           } else {
                             setExpandedQuoteId(q.id);
-                            setConvertForm({ jobName: "", clientName: "" });
+                            const snap = q.costingSnapshot as Record<string, unknown> | undefined | null;
+                            const snapInputs = (snap?.inputs ?? {}) as Record<string, unknown>;
+                            const linkedJob = q.jobId ? (jobs ?? []).find(j => j.id === q.jobId) : null;
+                            setConvertForm({
+                              jobName:    (typeof snapInputs.jobName    === "string" ? snapInputs.jobName.trim()    : "") || `Quote v${q.version}`,
+                              clientName: (typeof snapInputs.clientName === "string" ? snapInputs.clientName.trim() : "") || linkedJob?.clientName || "",
+                            });
                           }
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors whitespace-nowrap shrink-0"
@@ -685,6 +695,34 @@ export default function CostingPage() {
 
           {/* ════ LEFT: INPUTS ════ */}
           <div className="space-y-4 no-print">
+
+            {/* Job / Client Details */}
+            <Card className="p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <FileText size={12} />
+                Job Details (saved with quote)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs mb-1 block">Job Name</Label>
+                  <Input
+                    value={form.jobName}
+                    onChange={field("jobName")}
+                    placeholder="e.g. Pharma Carton – Batch 3"
+                    className="text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Client Name</Label>
+                  <Input
+                    value={form.clientName}
+                    onChange={field("clientName")}
+                    placeholder="e.g. Sun Pharma Ltd."
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </Card>
 
             {/* Link to Job */}
             <Card className="p-4 space-y-3">

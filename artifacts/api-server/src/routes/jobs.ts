@@ -278,11 +278,22 @@ async function buildJobWithDetails(jobId: number) {
   }
 
   // ─── Actual cost summary — per-category breakdown ─────────────────────────
-  const paperActualCost = materials.reduce((sum, m) => {
+  let paperActualCost = materials.reduce((sum, m) => {
     const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
     const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
     return sum + qty * rate;
   }, 0);
+
+  // Fallback: no job_materials rows but job has a material linked directly
+  // (e.g. standard jobs created via wizard; also covers pre-conversion state).
+  // Use material.ratePerSheet × plannedSheets to give an estimated paper cost.
+  if (paperActualCost === 0 && materials.length === 0 && material) {
+    const ratePerSheet = material.ratePerSheet != null ? parseFloat(String(material.ratePerSheet)) : 0;
+    if (ratePerSheet > 0) {
+      const sheets = job.plannedSheets ?? job.qtySheets;
+      paperActualCost = ratePerSheet * sheets;
+    }
+  }
 
   let pressActualCost = 0, dieCutActualCost = 0, gluerActualCost = 0, otherMachineActualCost = 0;
 

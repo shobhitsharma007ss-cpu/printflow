@@ -640,6 +640,7 @@ export interface JobQuoteSummary {
   isConverted: boolean;
   convertedJobId: number | null;
   createdAt: string;
+  costingSnapshot?: Record<string, unknown> | null;
 }
 
 export interface ConvertJobQuoteRequest {
