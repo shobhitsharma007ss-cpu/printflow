@@ -698,3 +698,57 @@ export interface DispatchWithJobInfo extends JobDispatch {
   clientName: string;
   qtySheets: number;
 }
+
+export interface ScheduleJobBlock {
+  jobId: number;
+  jobCode: string;
+  jobName: string;
+  clientName: string;
+  scheduledDate: string;
+  status: string;
+  estimatedHours: number;
+  stepCode: string;
+  stepNumber: number;
+}
+
+export interface ScheduleDayLoad {
+  date: string;
+  bookedHours: number;
+  availableHours: number;
+  isOverloaded: boolean;
+  jobs: ScheduleJobBlock[];
+}
+
+export interface ScheduleMachineRow {
+  machineId: number;
+  machineName: string;
+  machineType: string;
+  availableHoursPerDay: number;
+  days: ScheduleDayLoad[];
+}
+
+export interface UnscheduledJob {
+  jobId: number;
+  jobCode: string;
+  jobName: string;
+  clientName: string;
+  status: string;
+  qtySheets: number;
+}
+
+export interface ScheduleResponse {
+  startDate: string;
+  endDate: string;
+  days: string[];
+  machines: ScheduleMachineRow[];
+  unscheduledJobs: UnscheduledJob[];
+}
+
+export interface GetScheduleParams {
+  startDate?: string;
+  weeks?: number;
+}
+
+export interface RescheduleJobRequest {
+  scheduledDate?: string | null;
+}

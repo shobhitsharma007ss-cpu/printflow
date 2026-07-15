@@ -22,6 +22,8 @@ import {
   GetDispatchParams,
   CreateDispatchJobParams,
   CreateDispatchBody,
+  RescheduleJobParams,
+  RescheduleJobBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
 
@@ -952,6 +954,23 @@ router.get("/dispatches/:dispatchId", async (req, res): Promise<void> => {
   const totalDispatched = allDispatches.reduce((sum, d) => sum + d.dispatchQty, 0);
 
   res.json({ ...dispatch, ...(job ?? {}), totalDispatched });
+});
+
+// ─── Reschedule a job ────────────────────────────────────────────────────────
+router.patch("/jobs/:id/schedule", async (req, res): Promise<void> => {
+  const params = RescheduleJobParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = RescheduleJobBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [job] = await db
+    .update(jobsTable)
+    .set({ scheduledDate: parsed.data.scheduledDate ?? null })
+    .where(eq(jobsTable.id, params.data.id))
+    .returning();
+
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+  res.json({ id: job.id, jobCode: job.jobCode, scheduledDate: job.scheduledDate });
 });
 
 router.post("/wastage-log", async (req, res): Promise<void> => {

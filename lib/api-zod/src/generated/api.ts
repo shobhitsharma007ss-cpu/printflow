@@ -1234,3 +1234,22 @@ export const CreateDispatchBody = zod.object({
   transporterName: zod.string().optional(),
   notes: zod.string().optional(),
 });
+
+/**
+ * @summary Get production schedule
+ */
+export const GetScheduleQueryParams = zod.object({
+  startDate: zod.string().optional(),
+  weeks: zod.coerce.number().int().min(1).max(12).optional(),
+});
+
+/**
+ * @summary Reschedule a job to a new date
+ */
+export const RescheduleJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RescheduleJobBody = zod.object({
+  scheduledDate: zod.string().nullable().optional(),
+});

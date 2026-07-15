@@ -33,6 +33,7 @@ import type {
   DashboardMetrics,
   DispatchSummary,
   DispatchWithJobInfo,
+  GetScheduleParams,
   HealthStatus,
   JobCostReport,
   JobMaterial,
@@ -49,6 +50,8 @@ import type {
   Notification,
   PatchMachineStatusBody,
   PlantAlerts,
+  RescheduleJobRequest,
+  ScheduleResponse,
   StockInward,
   StockSummaryRow,
   UpdateJobRequest,
@@ -3843,4 +3846,107 @@ export const useGetDispatch = <
     getDispatch(dispatchId, { signal, ...requestOptions });
   const query = useQuery({ queryKey, queryFn, enabled: !!dispatchId, ...queryOptions });
   return { ...query, queryKey } as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+};
+
+export const getGetScheduleUrl = (params?: GetScheduleParams): string => {
+  const qs = new URLSearchParams();
+  if (params?.startDate) qs.set("startDate", params.startDate);
+  if (params?.weeks != null) qs.set("weeks", String(params.weeks));
+  const q = qs.toString();
+  return `/api/schedule${q ? `?${q}` : ""}`;
+};
+
+export const getSchedule = async (
+  params?: GetScheduleParams,
+  options?: RequestInit,
+): Promise<ScheduleResponse> => {
+  return customFetch<ScheduleResponse>(getGetScheduleUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScheduleQueryKey = (params?: GetScheduleParams): QueryKey => [
+  getGetScheduleUrl(params),
+];
+
+export const useGetSchedule = <
+  TData = Awaited<ReturnType<typeof getSchedule>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetScheduleParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSchedule>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetScheduleQueryKey(params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchedule>>> = ({ signal }) =>
+    getSchedule(params, { signal, ...requestOptions });
+  const query = useQuery({ queryKey, queryFn, ...queryOptions });
+  return { ...query, queryKey } as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+};
+
+export const getRescheduleJobUrl = (id: number) => `/api/jobs/${id}/schedule`;
+
+export const rescheduleJob = async (
+  id: number,
+  data: BodyType<RescheduleJobRequest>,
+  options?: RequestInit,
+): Promise<{ id: number; jobCode: string; scheduledDate: string | null }> => {
+  return customFetch<{ id: number; jobCode: string; scheduledDate: string | null }>(
+    getRescheduleJobUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+      body: JSON.stringify(data),
+    },
+  );
+};
+
+export const getRescheduleJobMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rescheduleJob>>,
+    TError,
+    { id: number; data: BodyType<RescheduleJobRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rescheduleJob>>,
+  TError,
+  { id: number; data: BodyType<RescheduleJobRequest> },
+  TContext
+> => {
+  const { mutation: mutationOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rescheduleJob>>,
+    { id: number; data: BodyType<RescheduleJobRequest> }
+  > = ({ id, data }) => rescheduleJob(id, data);
+  return { mutationFn, ...mutationOptions };
+};
+
+export const useRescheduleJob = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rescheduleJob>>,
+    TError,
+    { id: number; data: BodyType<RescheduleJobRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rescheduleJob>>,
+  TError,
+  { id: number; data: BodyType<RescheduleJobRequest> },
+  TContext
+> => {
+  return useMutation(getRescheduleJobMutationOptions(options));
 };

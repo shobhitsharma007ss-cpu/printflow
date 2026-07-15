@@ -17,6 +17,7 @@ import OperatorStation, { StationsPicker } from "@/pages/operator-station";
 import JobCard from "@/pages/job-card";
 import DeliveryChallan from "@/pages/delivery-challan";
 import Reports from "@/pages/reports";
+import Schedule from "@/pages/schedule";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -87,6 +88,7 @@ function AuthedRouter() {
         <RoleRoute path="/floor-monitor" allowed={["owner", "supervisor", "operator"]} role={role} component={FloorMonitor} />
         <RoleRoute path="/inventory" allowed={["owner", "supervisor"]} role={role} component={Inventory} />
         <RoleRoute path="/jobs" allowed={["owner", "supervisor"]} role={role} component={Jobs} />
+        <RoleRoute path="/schedule" allowed={["owner", "supervisor"]} role={role} component={Schedule} />
         <RoleRoute path="/layout" allowed={["owner", "supervisor"]} role={role} component={LayoutPlanner} />
         <RoleRoute path="/costing" allowed={["owner"]} role={role} component={Costing} />
         <RoleRoute path="/reports" allowed={["owner"]} role={role} component={Reports} />

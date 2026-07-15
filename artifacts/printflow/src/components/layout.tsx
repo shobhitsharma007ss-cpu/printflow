@@ -18,7 +18,8 @@ import {
   Calculator,
   LayoutGrid,
   TabletSmartphone,
-  LogOut
+  LogOut,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlantAlerts } from "@/hooks/use-notifications";
@@ -30,6 +31,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/floor-monitor", label: "Floor Monitor", icon: MonitorPlay, roles: ["owner", "supervisor", "operator"] },
   { href: "/floor/stations", label: "Operator Mode", icon: TabletSmartphone, roles: ["owner", "supervisor", "operator"] },
   { href: "/jobs", label: "Jobs", icon: Briefcase, roles: ["owner", "supervisor"] },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays, roles: ["owner", "supervisor"] },
   { href: "/layout", label: "Layout Planner", icon: LayoutGrid, roles: ["owner", "supervisor"] },
   { href: "/costing", label: "Costing", icon: Calculator, roles: ["owner"] },
   { href: "/inventory", label: "Inventory", icon: Package, roles: ["owner", "supervisor"] },
