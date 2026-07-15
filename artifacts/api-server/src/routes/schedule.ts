@@ -35,17 +35,21 @@ const MAKEREADY_HOURS = 0.5;
 const AVAILABLE_HOURS_PER_DAY = 8;
 
 function calcEtaHours(
-  sheets: number,
+  qtySheets: number,
+  upsPerSheet: number | null,
   machineName: string,
   ratedSph: number | null,
   oeeDefault: string | null,
 ): number {
+  const ups = Math.max(1, upsPerSheet ?? 1);
+  const sheetsToRun = Math.ceil(qtySheets / ups);
   const sph = ratedSph ?? MACHINE_SPEEDS[machineName] ?? 8000;
   const oee = oeeDefault != null
     ? parseFloat(String(oeeDefault))
     : (OEE_DEFAULTS[machineName] ?? 0.65);
   const effectiveSph = sph * oee;
-  const runHours = sheets / effectiveSph;
+  if (effectiveSph <= 0) return MAKEREADY_HOURS;
+  const runHours = sheetsToRun / effectiveSph;
   return runHours + MAKEREADY_HOURS;
 }
 
@@ -132,7 +136,7 @@ router.get("/schedule", async (req, res): Promise<void> => {
       if (!dayData) continue;
 
       const estHours = calcEtaHours(
-        job.qtySheets, machine.machineName, machine.ratedSph, machine.oeeDefault,
+        job.qtySheets, job.upsPerSheet, machine.machineName, machine.ratedSph, machine.oeeDefault,
       );
       dayData.bookedHours += estHours;
       dayData.jobs.push({
