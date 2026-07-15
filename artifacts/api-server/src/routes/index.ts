@@ -12,6 +12,7 @@ import notificationsRouter from "./notifications";
 import quotesRouter from "./quotes";
 import adminRouter from "./admin";
 import authRouter from "./auth";
+import usersRouter from "./users";
 import { requireAuth, requireRole } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
@@ -33,10 +34,11 @@ router.use(dashboardRouter);
 router.use(notificationsRouter);
 router.use(quotesRouter);
 
-// Owner-only routes: Reports screen and destructive admin actions must not be
-// reachable by supervisor/operator sessions (e.g. the shared operator tablet),
-// even though the frontend already hides these screens from those roles.
+// Owner-only routes: Reports screen, user management, and destructive admin
+// actions must not be reachable by supervisor/operator sessions (e.g. the
+// shared operator tablet), even though the frontend already hides them.
 router.use(requireRole("owner"), reportsRouter);
+router.use(requireRole("owner"), usersRouter);
 router.use(requireRole("owner"), adminRouter);
 
 export default router;

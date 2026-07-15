@@ -3,15 +3,17 @@ import { useMachines, usePatchMachineStatus, useUpdateMachine } from "@/hooks/us
 import { useMaterials, useUpdateMaterial, useCreateMaterial, useDeleteMaterial } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor, useDeleteVendor } from "@/hooks/use-vendors";
 import { useJobTemplates } from "@/hooks/use-templates";
+import { useUsers, useCreateUser, useUpdateUser, useResetUserPassword } from "@/hooks/use-users";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
-import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle, UserCog, ShieldCheck, Eye, EyeOff, KeyRound } from "lucide-react";
 import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
-import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate } from "@workspace/api-client-react";
+import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate, StaffUser, StaffUserRole } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-type Section = "machines" | "materials" | "vendors" | "templates";
+type Section = "machines" | "materials" | "vendors" | "templates" | "staff";
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>("machines");
@@ -21,6 +23,7 @@ export default function Settings() {
     { key: "materials" as Section, label: "Materials", icon: Package },
     { key: "vendors" as Section, label: "Vendors", icon: Users },
     { key: "templates" as Section, label: "Job Templates", icon: Briefcase },
+    { key: "staff" as Section, label: "Staff", icon: UserCog },
   ];
 
   return (
@@ -55,6 +58,7 @@ export default function Settings() {
       {activeSection === "materials" && <MaterialsSection />}
       {activeSection === "vendors" && <VendorsSection />}
       {activeSection === "templates" && <TemplatesSection />}
+      {activeSection === "staff" && <StaffSection />}
 
       <DangerZone />
     </div>
@@ -1229,6 +1233,281 @@ function DangerZone() {
         </div>
       </Modal>
     </>
+  );
+}
+
+const ROLE_LABELS: Record<StaffUserRole, string> = {
+  owner: "Owner",
+  supervisor: "Supervisor",
+  operator: "Operator",
+};
+
+const ROLE_COLORS: Record<StaffUserRole, string> = {
+  owner: "bg-violet-100 text-violet-700",
+  supervisor: "bg-blue-100 text-blue-700",
+  operator: "bg-emerald-100 text-emerald-700",
+};
+
+function StaffSection() {
+  const { user: currentUser } = useAuth();
+  const { data: users, isLoading } = useUsers();
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const resetPassword = useResetUserPassword();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [resetModal, setResetModal] = useState<StaffUser | null>(null);
+  const [roleModal, setRoleModal] = useState<StaffUser | null>(null);
+
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [newRole, setNewRole] = useState<StaffUserRole>("operator");
+  const [createError, setCreateError] = useState("");
+
+  const [resetPwd, setResetPwd] = useState("");
+  const [showResetPwd, setShowResetPwd] = useState(false);
+  const [resetError, setResetError] = useState("");
+
+  const [roleTarget, setRoleTarget] = useState<StaffUserRole>("operator");
+
+  const resetCreateForm = () => {
+    setNewName(""); setNewEmail(""); setNewPassword(""); setNewRole("operator");
+    setCreateError(""); setShowNewPwd(false);
+  };
+
+  const handleCreate = () => {
+    if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
+      setCreateError("All fields are required."); return;
+    }
+    if (newPassword.length < 6) {
+      setCreateError("Password must be at least 6 characters."); return;
+    }
+    setCreateError("");
+    createUser.mutate(
+      { name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, role: newRole },
+      {
+        onSuccess: () => { toast.success("Staff account created"); resetCreateForm(); setShowCreate(false); },
+        onError: (e) => setCreateError(e.message),
+      },
+    );
+  };
+
+  const handleToggleActive = (u: StaffUser) => {
+    const action = u.isActive ? "deactivate" : "reactivate";
+    if (!confirm(`${u.isActive ? "Deactivate" : "Reactivate"} ${u.name}?`)) return;
+    updateUser.mutate(
+      { id: u.id, data: { isActive: !u.isActive } },
+      {
+        onSuccess: () => toast.success(`${u.name} ${action}d`),
+        onError: (e) => toast.error(e.message),
+      },
+    );
+  };
+
+  const handleRoleChange = () => {
+    if (!roleModal) return;
+    updateUser.mutate(
+      { id: roleModal.id, data: { role: roleTarget } },
+      {
+        onSuccess: () => { toast.success(`Role updated to ${ROLE_LABELS[roleTarget]}`); setRoleModal(null); },
+        onError: (e) => toast.error(e.message),
+      },
+    );
+  };
+
+  const handleResetPassword = () => {
+    if (!resetModal) return;
+    if (resetPwd.length < 6) { setResetError("Password must be at least 6 characters."); return; }
+    setResetError("");
+    resetPassword.mutate(
+      { id: resetModal.id, data: { password: resetPwd } },
+      {
+        onSuccess: () => { toast.success(`Password reset for ${resetModal.name}`); setResetModal(null); setResetPwd(""); setShowResetPwd(false); },
+        onError: (e) => setResetError(e.message),
+      },
+    );
+  };
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden">
+        <div className="p-5 border-b border-border bg-muted/30 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">Staff Accounts</h2>
+            <p className="text-sm text-muted-foreground">Manage who can log in and what they can access</p>
+          </div>
+          <Button onClick={() => { resetCreateForm(); setShowCreate(true); }} className="flex items-center gap-2">
+            <Plus size={16} /> Add Staff
+          </Button>
+        </div>
+
+        <div className="divide-y divide-border">
+          {(users ?? []).map(u => {
+            const isMe = u.id === currentUser?.id;
+            return (
+              <div key={u.id} className={cn("p-4 flex flex-col sm:flex-row sm:items-center gap-3", !u.isActive && "bg-muted/20 opacity-60")}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm">{u.name}</p>
+                    {isMe && (
+                      <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">You</span>
+                    )}
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", ROLE_COLORS[u.role])}>
+                      {ROLE_LABELS[u.role]}
+                    </span>
+                    {!u.isActive && (
+                      <span className="text-xs bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-medium">Deactivated</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{u.email}</p>
+                </div>
+
+                {!isMe && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => { setRoleModal(u); setRoleTarget(u.role); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors border border-border"
+                    >
+                      <ShieldCheck size={13} /> Change Role
+                    </button>
+                    <button
+                      onClick={() => { setResetModal(u); setResetPwd(""); setResetError(""); setShowResetPwd(false); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors border border-border"
+                    >
+                      <KeyRound size={13} /> Reset Password
+                    </button>
+                    <button
+                      onClick={() => handleToggleActive(u)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
+                        u.isActive
+                          ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                      )}
+                    >
+                      {u.isActive ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {(users ?? []).length === 0 && (
+            <div className="p-8 text-center text-sm text-muted-foreground">No staff accounts yet.</div>
+          )}
+        </div>
+      </Card>
+
+      {/* Create user modal */}
+      <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Add Staff Account">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Full Name</Label>
+            <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ramesh Kumar" autoFocus />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="ramesh@printflow.in" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Initial Password</Label>
+            <div className="relative">
+              <Input
+                type={showNewPwd ? "text" : "password"}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                className="pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPwd(p => !p)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNewPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Role</Label>
+            <Select value={newRole} onChange={e => setNewRole(e.target.value as StaffUserRole)}>
+              <option value="operator">Operator — floor station access</option>
+              <option value="supervisor">Supervisor — jobs, inventory, floor</option>
+              <option value="owner">Owner — full access</option>
+            </Select>
+          </div>
+          {createError && (
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />{createError}
+            </div>
+          )}
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button size="sm" isLoading={createUser.isPending} onClick={handleCreate}>Create Account</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Change role modal */}
+      <Modal isOpen={!!roleModal} onClose={() => setRoleModal(null)} title={`Change Role — ${roleModal?.name}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Current role: <span className={cn("font-semibold px-1.5 py-0.5 rounded text-xs", roleModal && ROLE_COLORS[roleModal.role])}>{roleModal && ROLE_LABELS[roleModal.role]}</span></p>
+          <div className="space-y-1.5">
+            <Label>New Role</Label>
+            <Select value={roleTarget} onChange={e => setRoleTarget(e.target.value as StaffUserRole)}>
+              <option value="operator">Operator — floor station access</option>
+              <option value="supervisor">Supervisor — jobs, inventory, floor</option>
+              <option value="owner">Owner — full access</option>
+            </Select>
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={() => setRoleModal(null)}>Cancel</Button>
+            <Button size="sm" isLoading={updateUser.isPending} onClick={handleRoleChange} disabled={roleTarget === roleModal?.role}>Update Role</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reset password modal */}
+      <Modal isOpen={!!resetModal} onClose={() => setResetModal(null)} title={`Reset Password — ${resetModal?.name}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Set a new password for this account. Any active sessions will be signed out.</p>
+          <div className="space-y-1.5">
+            <Label>New Password</Label>
+            <div className="relative">
+              <Input
+                type={showResetPwd ? "text" : "password"}
+                value={resetPwd}
+                onChange={e => setResetPwd(e.target.value)}
+                placeholder="Min. 6 characters"
+                className="pr-9"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowResetPwd(p => !p)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showResetPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+          {resetError && (
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />{resetError}
+            </div>
+          )}
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="ghost" size="sm" onClick={() => setResetModal(null)}>Cancel</Button>
+            <Button size="sm" isLoading={resetPassword.isPending} onClick={handleResetPassword}>Reset Password</Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   );
 }
 

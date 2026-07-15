@@ -28,6 +28,11 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
+  if (user.isActive === false) {
+    res.status(403).json({ error: "Your account has been deactivated. Contact your owner." });
+    return;
+  }
+
   const sessionUser: SessionUser = {
     id: user.id,
     name: user.name,

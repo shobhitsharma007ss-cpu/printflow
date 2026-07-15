@@ -586,3 +586,30 @@ export type ListWastageLogsParams = {
 export type MarkAllNotificationsRead200 = {
   count?: number;
 };
+
+export type StaffUserRole = "owner" | "supervisor" | "operator";
+
+export interface StaffUser {
+  id: number;
+  name: string;
+  email: string;
+  role: StaffUserRole;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateUserRequest {
+  name: string;
+  email: string;
+  password: string;
+  role: StaffUserRole;
+}
+
+export interface UpdateUserRequest {
+  role?: StaffUserRole;
+  isActive?: boolean;
+}
+
+export interface ResetUserPasswordRequest {
+  password: string;
+}
