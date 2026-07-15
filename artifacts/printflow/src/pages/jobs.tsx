@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import {
   Plus, Search, Filter, ChevronRight, X,
   CheckCircle, Play, AlertTriangle,
-  Clock, User, TrendingDown, Check, Loader2, Timer
+  Clock, User, TrendingDown, Check, Loader2, Timer, BarChart2
 } from "lucide-react";
 import { cn, getStatusColor } from "@/lib/utils";
 import {
@@ -426,6 +426,99 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                   </div>
                 </div>
               )}
+
+              {/* Budget vs Actual */}
+              {job.quoteBudget && (() => {
+                const snap = job.quoteBudget.costingSnapshot as Record<string, unknown>;
+                const out = (snap?.outputs ?? {}) as Record<string, number>;
+                const budgetPaper = out.paperCost ?? 0;
+                const budgetMachine = (out.pressCost ?? 0) + (out.dieCutCost ?? 0) + (out.gluerCost ?? 0);
+                const budgetTotal = Number(job.quoteBudget.preGstTotal ?? 0);
+                const budgetPer1k = Number(job.quoteBudget.per1000Rate ?? 0);
+                const actual = job.actualCostSummary;
+                const hasActual = actual && actual.totalCost > 0;
+                const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+                const fmtAmt = (v: number) => INR.format(Math.round(v));
+                const VarCell = ({ budget, actual: act }: { budget: number; actual: number }) => {
+                  if (!hasActual || act === 0) return <td className="px-3 py-2 text-right font-mono text-muted-foreground">—</td>;
+                  const diff = act - budget;
+                  const pct = budget > 0 ? (diff / budget) * 100 : 0;
+                  const over = diff > 0;
+                  return (
+                    <td className={cn("px-3 py-2 text-right font-mono text-xs font-bold", over ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400")}>
+                      {over ? "+" : ""}{fmtAmt(diff)}<br />
+                      <span className="font-normal opacity-70">({over ? "+" : ""}{pct.toFixed(1)}%)</span>
+                    </td>
+                  );
+                };
+                return (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <BarChart2 size={13} className="text-muted-foreground" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Budget vs Actual
+                      </h4>
+                      <span className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">
+                        Quote v{job.quoteBudget.version}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-border overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-bold text-muted-foreground">Category</th>
+                            <th className="px-3 py-2 text-right font-bold text-muted-foreground">Budget</th>
+                            <th className="px-3 py-2 text-right font-bold text-muted-foreground">Actual</th>
+                            <th className="px-3 py-2 text-right font-bold text-muted-foreground">Variance</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t border-border bg-background">
+                            <td className="px-3 py-2 font-semibold">Paper / Board</td>
+                            <td className="px-3 py-2 text-right font-mono">{fmtAmt(budgetPaper)}</td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              {hasActual ? fmtAmt(actual!.materialCost) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <VarCell budget={budgetPaper} actual={actual?.materialCost ?? 0} />
+                          </tr>
+                          <tr className="border-t border-border bg-muted/20">
+                            <td className="px-3 py-2 font-semibold">Machine Time</td>
+                            <td className="px-3 py-2 text-right font-mono">{fmtAmt(budgetMachine)}</td>
+                            <td className="px-3 py-2 text-right font-mono">
+                              {hasActual ? fmtAmt(actual!.machineCost) : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <VarCell budget={budgetMachine} actual={actual?.machineCost ?? 0} />
+                          </tr>
+                        </tbody>
+                        <tfoot className="bg-muted/50">
+                          <tr className="border-t-2 border-border">
+                            <td className="px-3 py-2 font-black">Total (pre-GST)</td>
+                            <td className="px-3 py-2 text-right font-black text-primary">{fmtAmt(budgetTotal)}</td>
+                            <td className="px-3 py-2 text-right font-black">
+                              {hasActual ? fmtAmt(actual!.totalCost) : <span className="text-muted-foreground font-normal">—</span>}
+                            </td>
+                            <VarCell budget={budgetTotal} actual={actual?.totalCost ?? 0} />
+                          </tr>
+                          {budgetPer1k > 0 && (
+                            <tr className="border-t border-border">
+                              <td className="px-3 py-2 text-muted-foreground">Rate / 1k cartons</td>
+                              <td className="px-3 py-2 text-right font-semibold font-mono">{fmtAmt(budgetPer1k)}</td>
+                              <td colSpan={2} className="px-3 py-2 text-right text-muted-foreground text-[10px]">
+                                {!hasActual && "Production not started"}
+                              </td>
+                            </tr>
+                          )}
+                        </tfoot>
+                      </table>
+                    </div>
+                    {!hasActual && (
+                      <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                        Actual costs will populate as production starts and materials are logged.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Wastage Logs */}
               <div>

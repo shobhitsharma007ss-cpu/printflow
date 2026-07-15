@@ -1,11 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Calculator, Save, Copy, Info, Printer, Link2 } from "lucide-react";
+import { Calculator, Save, Copy, Info, Printer, Link2, FileText, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMachines } from "@/hooks/use-machines";
 import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
+import { useListJobQuotes, useConvertJobQuote, getListJobQuotesQueryKey } from "@workspace/api-client-react";
 import type { Machine } from "@workspace/api-client-react";
 
 type MachineRow = Machine;
@@ -272,6 +275,12 @@ export default function CostingPage() {
   const [view, setView]     = useState<"detailed" | "customer">("detailed");
   const [saving, setSaving] = useState(false);
   const [linkSummary, setLinkSummary] = useState("");
+  const [expandedQuoteId, setExpandedQuoteId] = useState<number | null>(null);
+  const [convertForm, setConvertForm] = useState({ jobName: "", clientName: "" });
+
+  const queryClient = useQueryClient();
+  const { data: savedQuotes } = useListJobQuotes();
+  const convertMutation = useConvertJobQuote();
 
   const { data: machines }  = useMachines();
   const { data: materials } = useMaterials();
@@ -462,6 +471,30 @@ export default function CostingPage() {
     }
   }
 
+  function handleConvert(quoteId: number) {
+    if (!convertForm.jobName.trim() || !convertForm.clientName.trim()) {
+      toast.error("Job name and client name are required");
+      return;
+    }
+    convertMutation.mutate(
+      { id: quoteId, data: { jobName: convertForm.jobName.trim(), clientName: convertForm.clientName.trim() } },
+      {
+        onSuccess: (data) => {
+          toast.success(`Job ${data.jobCode} created from quote!`, {
+            description: "Go to the Jobs section to manage it.",
+            duration: 6000,
+          });
+          setExpandedQuoteId(null);
+          setConvertForm({ jobName: "", clientName: "" });
+          queryClient.invalidateQueries({ queryKey: getListJobQuotesQueryKey() });
+        },
+        onError: () => {
+          toast.error("Failed to convert quote. Please try again.");
+        },
+      }
+    );
+  }
+
   function copyCustomer() {
     const coatingLine = form.coatingType !== "none"
       ? `\nCoating:         ${coatingLabel(form.coatingType)}`
@@ -536,6 +569,113 @@ export default function CostingPage() {
             </Button>
           </div>
         </div>
+
+        {/* ── Saved Quotes ── */}
+        {savedQuotes && savedQuotes.length > 0 && (
+          <Card className="overflow-hidden no-print">
+            <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FileText size={14} className="text-primary" />
+                Saved Quotes
+              </h3>
+              <span className="text-xs text-muted-foreground">{savedQuotes.length} quote{savedQuotes.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="divide-y divide-border">
+              {savedQuotes.map(q => (
+                <div key={q.id}>
+                  <div className="px-4 py-3 flex items-center gap-3 hover:bg-muted/20 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-muted-foreground font-mono">v{q.version}</span>
+                        {q.jobId && (
+                          <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">Job linked</span>
+                        )}
+                        {q.isConverted && (
+                          <span className="text-xs bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Converted
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                        <span>{format(new Date(q.createdAt), "dd MMM yyyy, HH:mm")}</span>
+                        {q.preGstTotal && (
+                          <span className="font-semibold text-foreground">
+                            ₹{Number(q.preGstTotal).toLocaleString("en-IN", { maximumFractionDigits: 0 })} pre-GST
+                          </span>
+                        )}
+                        {q.per1000Rate && (
+                          <span>
+                            ₹{Number(q.per1000Rate).toLocaleString("en-IN", { maximumFractionDigits: 0 })}/1k
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {!q.isConverted && (
+                      <button
+                        onClick={() => {
+                          if (expandedQuoteId === q.id) {
+                            setExpandedQuoteId(null);
+                          } else {
+                            setExpandedQuoteId(q.id);
+                            setConvertForm({ jobName: "", clientName: "" });
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <ArrowRight size={12} />
+                        Convert to Job
+                      </button>
+                    )}
+                  </div>
+                  {expandedQuoteId === q.id && (
+                    <div className="px-4 py-4 bg-primary/5 border-t border-primary/20 space-y-3">
+                      <p className="text-xs text-muted-foreground">
+                        Creates a new pending job pre-filled from this quote. The quote will be locked once converted.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="flex-1">
+                          <Label className="text-xs mb-1 block">Job Name <span className="text-rose-500">*</span></Label>
+                          <Input
+                            value={convertForm.jobName}
+                            onChange={e => setConvertForm(p => ({ ...p, jobName: e.target.value }))}
+                            placeholder="e.g. Pharma Carton – Batch 3"
+                            className="text-sm"
+                            onKeyDown={e => e.key === "Enter" && handleConvert(q.id)}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Label className="text-xs mb-1 block">Client Name <span className="text-rose-500">*</span></Label>
+                          <Input
+                            value={convertForm.clientName}
+                            onChange={e => setConvertForm(p => ({ ...p, clientName: e.target.value }))}
+                            placeholder="e.g. Sun Pharma Ltd."
+                            className="text-sm"
+                            onKeyDown={e => e.key === "Enter" && handleConvert(q.id)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => handleConvert(q.id)}
+                          disabled={convertMutation.isPending || !convertForm.jobName.trim() || !convertForm.clientName.trim()}
+                          className="text-sm"
+                        >
+                          {convertMutation.isPending ? "Converting…" : "Confirm Convert"}
+                        </Button>
+                        <button
+                          onClick={() => setExpandedQuoteId(null)}
+                          className="text-sm text-muted-foreground hover:text-foreground px-2 py-1.5 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         {/* ── Two-column layout ── */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">

@@ -37,6 +37,7 @@ export const jobsTable = pgTable("jobs", {
   dieCost: numeric("die_cost", { precision: 10, scale: 2 }),
   upsPerSheet: integer("ups_per_sheet"),
   coatingApplication: text("coating_application").default("inline"),
+  quoteBudgetId: integer("quote_budget_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -100,6 +101,8 @@ export const jobQuotesTable = pgTable("job_quotes", {
   preGstTotal: numeric("pre_gst_total", { precision: 12, scale: 2 }),
   finalTotal: numeric("final_total", { precision: 12, scale: 2 }),
   per1000Rate: numeric("per_1000_rate", { precision: 10, scale: 2 }),
+  isConverted: boolean("is_converted").notNull().default(false),
+  convertedJobId: integer("converted_job_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   unique("job_quotes_job_version_unique").on(table.jobId, table.version),

@@ -18,6 +18,8 @@ import type {
 
 import type {
   AddMaterialVendorBody,
+  ConvertJobQuoteRequest,
+  ConvertJobQuoteResponse,
   CreateJobMaterialRequest,
   CreateJobRequest,
   CreateJobTemplateRequest,
@@ -30,6 +32,7 @@ import type {
   HealthStatus,
   JobCostReport,
   JobMaterial,
+  JobQuoteSummary,
   JobRouting,
   JobTemplate,
   JobWithDetails,
@@ -3563,4 +3566,137 @@ export const useMarkAllNotificationsRead = <
   TContext
 > => {
   return useMutation(getMarkAllNotificationsReadMutationOptions(options));
+};
+
+// ─── List Job Quotes ──────────────────────────────────────────────────────────
+export const getListJobQuotesUrl = () => `/api/job-quotes`;
+
+export const listJobQuotes = async (
+  options?: RequestInit,
+): Promise<JobQuoteSummary[]> => {
+  return customFetch<JobQuoteSummary[]>(getListJobQuotesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListJobQuotesQueryKey = (): QueryKey =>
+  [getListJobQuotesUrl()] as const;
+
+export const getListJobQuotesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listJobQuotes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listJobQuotes>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListJobQuotesQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listJobQuotes>>> = ({
+    signal,
+  }) => listJobQuotes({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listJobQuotes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListJobQuotesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listJobQuotes>>
+>;
+export type ListJobQuotesQueryError = ErrorType<unknown>;
+
+export function useListJobQuotes<
+  TData = Awaited<ReturnType<typeof listJobQuotes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listJobQuotes>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListJobQuotesQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+// ─── Convert Job Quote to Job ─────────────────────────────────────────────────
+export const getConvertJobQuoteUrl = (id: number) =>
+  `/api/job-quotes/${id}/convert`;
+
+export const convertJobQuote = async (
+  id: number,
+  convertJobQuoteRequest: ConvertJobQuoteRequest,
+  options?: RequestInit,
+): Promise<ConvertJobQuoteResponse> => {
+  return customFetch<ConvertJobQuoteResponse>(getConvertJobQuoteUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(convertJobQuoteRequest),
+  });
+};
+
+export const getConvertJobQuoteMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertJobQuote>>,
+    TError,
+    { id: number; data: BodyType<ConvertJobQuoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof convertJobQuote>>,
+  TError,
+  { id: number; data: BodyType<ConvertJobQuoteRequest> },
+  TContext
+> => {
+  const mutationKey = ["convertJobQuote"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof convertJobQuote>>,
+    { id: number; data: BodyType<ConvertJobQuoteRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+    return convertJobQuote(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConvertJobQuoteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof convertJobQuote>>
+>;
+export type ConvertJobQuoteMutationBody = BodyType<ConvertJobQuoteRequest>;
+export type ConvertJobQuoteMutationError = ErrorType<unknown>;
+
+export const useConvertJobQuote = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertJobQuote>>,
+    TError,
+    { id: number; data: BodyType<ConvertJobQuoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof convertJobQuote>>,
+  TError,
+  { id: number; data: BodyType<ConvertJobQuoteRequest> },
+  TContext
+> => {
+  return useMutation(getConvertJobQuoteMutationOptions(options));
 };

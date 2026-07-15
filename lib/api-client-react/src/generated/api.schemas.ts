@@ -331,6 +331,19 @@ export interface JobWithDetails {
   materials: JobMaterial[];
   wastageLogs: WastageLog[];
   deductions?: JobWithDetailsDeductionsItem[] | null;
+  quoteBudget?: {
+    id: number;
+    version: number;
+    preGstTotal: string | null;
+    finalTotal: string | null;
+    per1000Rate: string | null;
+    costingSnapshot: Record<string, unknown>;
+  } | null;
+  actualCostSummary?: {
+    materialCost: number;
+    machineCost: number;
+    totalCost: number;
+  } | null;
 }
 
 export interface CreateJobRequest {
@@ -612,4 +625,27 @@ export interface UpdateUserRequest {
 
 export interface ResetUserPasswordRequest {
   password: string;
+}
+
+export interface JobQuoteSummary {
+  id: number;
+  jobId: number | null;
+  version: number;
+  preGstTotal: string | null;
+  finalTotal: string | null;
+  per1000Rate: string | null;
+  isConverted: boolean;
+  convertedJobId: number | null;
+  createdAt: string;
+}
+
+export interface ConvertJobQuoteRequest {
+  jobName: string;
+  clientName: string;
+}
+
+export interface ConvertJobQuoteResponse {
+  jobId: number;
+  jobCode: string;
+  quoteId: number;
 }

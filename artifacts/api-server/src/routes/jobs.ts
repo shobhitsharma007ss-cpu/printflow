@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -171,6 +171,7 @@ async function buildJobWithDetails(jobId: number) {
       estimatedMinutes: jobRoutingTable.estimatedMinutes,
       notes: jobRoutingTable.notes,
       speedPerHour: machinesTable.speedPerHour,
+      hourRate: machinesTable.hourRate,
     })
     .from(jobRoutingTable)
     .leftJoin(machinesTable, eq(jobRoutingTable.machineId, machinesTable.id))
@@ -247,6 +248,48 @@ async function buildJobWithDetails(jobId: number) {
     ? await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId)).then(r => r[0])
     : null;
 
+  // ─── Actual cost summary from live production data ────────────────────────
+  const materialActualCost = materials.reduce((sum, m) => {
+    const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
+    const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
+    return sum + qty * rate;
+  }, 0);
+
+  const machineActualCost = routingWithEta.reduce((sum, step) => {
+    if (!step.startedAt || !step.completedAt) return sum;
+    const started = new Date(step.startedAt).getTime();
+    const completed = new Date(step.completedAt).getTime();
+    const pausedSecs = step.totalPausedSeconds ?? 0;
+    const netSecs = Math.max(0, (completed - started) / 1000 - pausedSecs);
+    const rate = step.hourRate != null ? parseFloat(String(step.hourRate)) : 0;
+    return sum + (netSecs / 3600) * rate;
+  }, 0);
+
+  const actualCostSummary = {
+    materialCost: Math.round(materialActualCost * 100) / 100,
+    machineCost: Math.round(machineActualCost * 100) / 100,
+    totalCost: Math.round((materialActualCost + machineActualCost) * 100) / 100,
+  };
+
+  // ─── Quote budget (if this job was created from a quote) ─────────────────
+  let quoteBudget = null;
+  if (job.quoteBudgetId) {
+    const [qb] = await db
+      .select()
+      .from(jobQuotesTable)
+      .where(eq(jobQuotesTable.id, job.quoteBudgetId));
+    if (qb) {
+      quoteBudget = {
+        id: qb.id,
+        version: qb.version,
+        preGstTotal: qb.preGstTotal,
+        finalTotal: qb.finalTotal,
+        per1000Rate: qb.per1000Rate,
+        costingSnapshot: qb.costingSnapshot,
+      };
+    }
+  }
+
   return {
     ...job,
     materialName: material?.materialName ?? null,
@@ -255,6 +298,8 @@ async function buildJobWithDetails(jobId: number) {
     routing: routingWithEta,
     materials,
     wastageLogs,
+    quoteBudget,
+    actualCostSummary,
   };
 }
 
