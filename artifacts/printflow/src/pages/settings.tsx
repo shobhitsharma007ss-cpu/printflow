@@ -1271,6 +1271,7 @@ function StaffSection() {
   const [resetError, setResetError] = useState("");
 
   const [roleTarget, setRoleTarget] = useState<StaffUserRole>("operator");
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
   const resetCreateForm = () => {
     setNewName(""); setNewEmail(""); setNewPassword(""); setNewRole("operator");
@@ -1296,12 +1297,11 @@ function StaffSection() {
 
   const handleToggleActive = (u: StaffUser) => {
     const action = u.isActive ? "deactivate" : "reactivate";
-    if (!confirm(`${u.isActive ? "Deactivate" : "Reactivate"} ${u.name}?`)) return;
     updateUser.mutate(
       { id: u.id, data: { isActive: !u.isActive } },
       {
-        onSuccess: () => toast.success(`${u.name} ${action}d`),
-        onError: (e) => toast.error(e.message),
+        onSuccess: () => { setConfirmingId(null); toast.success(`${u.name} ${action}d`); },
+        onError: (e) => { setConfirmingId(null); toast.error(e.message); },
       },
     );
   };
@@ -1380,17 +1380,44 @@ function StaffSection() {
                     >
                       <KeyRound size={13} /> Reset Password
                     </button>
-                    <button
-                      onClick={() => handleToggleActive(u)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
-                        u.isActive
-                          ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
-                      )}
-                    >
-                      {u.isActive ? "Deactivate" : "Reactivate"}
-                    </button>
+                    {confirmingId === u.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          {u.isActive ? "Deactivate?" : "Reactivate?"}
+                        </span>
+                        <button
+                          onClick={() => handleToggleActive(u)}
+                          disabled={updateUser.isPending}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-bold border transition-all disabled:opacity-50",
+                            u.isActive
+                              ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                          )}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setConfirmingId(null)}
+                          disabled={updateUser.isPending}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold border border-border bg-muted text-muted-foreground hover:text-foreground transition-all disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingId(u.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
+                          u.isActive
+                            ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+                        )}
+                      >
+                        {u.isActive ? "Deactivate" : "Reactivate"}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
