@@ -97,30 +97,48 @@ router.post("/job-quotes/:id/convert", async (req, res): Promise<void> => {
   const qtySheets = Math.max(1, Math.round(Number(inputs.qtyRequired) || 0));
   const plannedSheets = Math.max(1, Math.round(Number(outputs.planSheets) || qtySheets));
 
-  const [newJob] = await db.insert(jobsTable).values({
-    jobCode,
-    jobName: jobName.trim(),
-    clientName: clientName.trim(),
-    qtySheets,
-    plannedSheets,
-    materialId: inputs.materialId ? Number(inputs.materialId) : null,
-    materialGsm: inputs.gsm ? parseInt(String(inputs.gsm)) : null,
-    processColors: inputs.processColors ? parseInt(String(inputs.processColors)) : 4,
-    spotColors: inputs.spotColors ? parseInt(String(inputs.spotColors)) : 0,
-    printPassCount: inputs.printPassCount ? parseInt(String(inputs.printPassCount)) : 1,
-    coatingType: inputs.coatingType ? String(inputs.coatingType) : null,
-    cartonStyle: inputs.cartonStyle ? String(inputs.cartonStyle) : "straight_tuck",
-    isNewDie: inputs.isNewDie === true || inputs.isNewDie === "true",
-    dieCost: inputs.dieFabCost && Number(inputs.dieFabCost) > 0 ? String(Number(inputs.dieFabCost)) : null,
-    upsPerSheet: inputs.upsPerSheet ? parseInt(String(inputs.upsPerSheet)) : null,
-    quoteBudgetId: quote.id,
-    status: "pending",
-  }).returning();
+  let newJob: typeof jobsTable.$inferSelect;
+  try {
+    newJob = await db.transaction(async (tx) => {
+      const [fresh] = await tx.select({ isConverted: jobQuotesTable.isConverted })
+        .from(jobQuotesTable).where(eq(jobQuotesTable.id, id));
+      if (!fresh || fresh.isConverted) throw Object.assign(new Error("ALREADY_CONVERTED"), { code: 409 });
 
-  await db
-    .update(jobQuotesTable)
-    .set({ isConverted: true, convertedJobId: newJob.id })
-    .where(eq(jobQuotesTable.id, id));
+      const [inserted] = await tx.insert(jobsTable).values({
+        jobCode,
+        jobName: jobName.trim(),
+        clientName: clientName.trim(),
+        qtySheets,
+        plannedSheets,
+        materialId: inputs.materialId ? Number(inputs.materialId) : null,
+        materialGsm: inputs.gsm ? parseInt(String(inputs.gsm)) : null,
+        processColors: inputs.processColors ? parseInt(String(inputs.processColors)) : 4,
+        spotColors: inputs.spotColors ? parseInt(String(inputs.spotColors)) : 0,
+        printPassCount: inputs.printPassCount ? parseInt(String(inputs.printPassCount)) : 1,
+        coatingType: inputs.coatingType ? String(inputs.coatingType) : null,
+        cartonStyle: inputs.cartonStyle ? String(inputs.cartonStyle) : "straight_tuck",
+        isNewDie: inputs.isNewDie === true || inputs.isNewDie === "true",
+        dieCost: inputs.dieFabCost && Number(inputs.dieFabCost) > 0 ? String(Number(inputs.dieFabCost)) : null,
+        upsPerSheet: inputs.upsPerSheet ? parseInt(String(inputs.upsPerSheet)) : null,
+        quoteBudgetId: quote.id,
+        status: "pending",
+      }).returning();
+
+      await tx.update(jobQuotesTable)
+        .set({ isConverted: true, convertedJobId: inserted.id })
+        .where(eq(jobQuotesTable.id, id));
+
+      return inserted;
+    });
+  } catch (err: unknown) {
+    const code = (err as { code?: number }).code;
+    if (code === 409) {
+      res.status(409).json({ error: "Quote has already been converted to a job" });
+    } else {
+      res.status(500).json({ error: "Conversion failed" });
+    }
+    return;
+  }
 
   res.status(201).json({ jobId: newJob.id, jobCode: newJob.jobCode, quoteId: quote.id });
 });

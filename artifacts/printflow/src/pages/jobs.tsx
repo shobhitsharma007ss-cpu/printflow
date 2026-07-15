@@ -431,18 +431,22 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
               {job.quoteBudget && (() => {
                 const snap = job.quoteBudget.costingSnapshot as Record<string, unknown>;
                 const out = (snap?.outputs ?? {}) as Record<string, number>;
-                const budgetPaper = out.paperCost ?? 0;
-                const budgetMachine = (out.pressCost ?? 0) + (out.dieCutCost ?? 0) + (out.gluerCost ?? 0);
-                const budgetTotal = Number(job.quoteBudget.preGstTotal ?? 0);
-                const budgetPer1k = Number(job.quoteBudget.per1000Rate ?? 0);
+                const budgetPaper  = out.paperCost   ?? 0;
+                const budgetPress  = out.pressCost   ?? 0;
+                const budgetDie    = out.dieCutCost  ?? 0;
+                const budgetGluer  = out.gluerCost   ?? 0;
+                const budgetTotal  = Number(job.quoteBudget.preGstTotal ?? 0);
+                const budgetFinal  = Number(job.quoteBudget.finalTotal  ?? 0);
+                const budgetPer1k  = Number(job.quoteBudget.per1000Rate ?? 0);
                 const actual = job.actualCostSummary;
                 const hasActual = actual && actual.totalCost > 0;
                 const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
                 const fmtAmt = (v: number) => INR.format(Math.round(v));
-                const VarCell = ({ budget, actual: act }: { budget: number; actual: number }) => {
-                  if (!hasActual || act === 0) return <td className="px-3 py-2 text-right font-mono text-muted-foreground">—</td>;
+
+                const VarCell = ({ budget, act }: { budget: number; act: number }) => {
+                  if (!hasActual || act === 0) return <td className="px-3 py-2 text-right font-mono text-muted-foreground text-xs">—</td>;
                   const diff = act - budget;
-                  const pct = budget > 0 ? (diff / budget) * 100 : 0;
+                  const pct  = budget > 0 ? (diff / budget) * 100 : 0;
                   const over = diff > 0;
                   return (
                     <td className={cn("px-3 py-2 text-right font-mono text-xs font-bold", over ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400")}>
@@ -451,9 +455,18 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                     </td>
                   );
                 };
+
+                const rows: { label: string; budget: number; act: number; alt?: boolean }[] = [
+                  { label: "Paper / Board",  budget: budgetPaper,  act: actual?.paperCost   ?? 0 },
+                  { label: "Press / Print",  budget: budgetPress,  act: actual?.pressCost   ?? 0, alt: true },
+                  { label: "Die Cut",        budget: budgetDie,    act: actual?.dieCutCost  ?? 0 },
+                  { label: "Folder Gluer",   budget: budgetGluer,  act: actual?.gluerCost   ?? 0, alt: true },
+                ];
+                const hasOther = (actual?.otherMachineCost ?? 0) > 0;
+
                 return (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
                       <BarChart2 size={13} className="text-muted-foreground" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Budget vs Actual
@@ -462,6 +475,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                         Quote v{job.quoteBudget.version}
                       </span>
                     </div>
+
                     <div className="rounded-xl border border-border overflow-hidden">
                       <table className="w-full text-xs">
                         <thead className="bg-muted/50">
@@ -473,22 +487,24 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                           </tr>
                         </thead>
                         <tbody>
-                          <tr className="border-t border-border bg-background">
-                            <td className="px-3 py-2 font-semibold">Paper / Board</td>
-                            <td className="px-3 py-2 text-right font-mono">{fmtAmt(budgetPaper)}</td>
-                            <td className="px-3 py-2 text-right font-mono">
-                              {hasActual ? fmtAmt(actual!.materialCost) : <span className="text-muted-foreground">—</span>}
-                            </td>
-                            <VarCell budget={budgetPaper} actual={actual?.materialCost ?? 0} />
-                          </tr>
-                          <tr className="border-t border-border bg-muted/20">
-                            <td className="px-3 py-2 font-semibold">Machine Time</td>
-                            <td className="px-3 py-2 text-right font-mono">{fmtAmt(budgetMachine)}</td>
-                            <td className="px-3 py-2 text-right font-mono">
-                              {hasActual ? fmtAmt(actual!.machineCost) : <span className="text-muted-foreground">—</span>}
-                            </td>
-                            <VarCell budget={budgetMachine} actual={actual?.machineCost ?? 0} />
-                          </tr>
+                          {rows.map(({ label, budget, act, alt }) => (
+                            <tr key={label} className={cn("border-t border-border", alt ? "bg-muted/20" : "bg-background")}>
+                              <td className="px-3 py-2 font-semibold">{label}</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmtAmt(budget)}</td>
+                              <td className="px-3 py-2 text-right font-mono">
+                                {hasActual && act > 0 ? fmtAmt(act) : <span className="text-muted-foreground">—</span>}
+                              </td>
+                              <VarCell budget={budget} act={act} />
+                            </tr>
+                          ))}
+                          {hasOther && (
+                            <tr className="border-t border-border bg-background">
+                              <td className="px-3 py-2 font-semibold text-muted-foreground">Other Machine</td>
+                              <td className="px-3 py-2 text-right font-mono text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-right font-mono">{fmtAmt(actual!.otherMachineCost)}</td>
+                              <td className="px-3 py-2 text-right font-mono text-amber-600 dark:text-amber-400 text-xs font-bold">unbudgeted</td>
+                            </tr>
+                          )}
                         </tbody>
                         <tfoot className="bg-muted/50">
                           <tr className="border-t-2 border-border">
@@ -497,7 +513,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                             <td className="px-3 py-2 text-right font-black">
                               {hasActual ? fmtAmt(actual!.totalCost) : <span className="text-muted-foreground font-normal">—</span>}
                             </td>
-                            <VarCell budget={budgetTotal} actual={actual?.totalCost ?? 0} />
+                            <VarCell budget={budgetTotal} act={actual?.totalCost ?? 0} />
                           </tr>
                           {budgetPer1k > 0 && (
                             <tr className="border-t border-border">
@@ -511,10 +527,45 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                         </tfoot>
                       </table>
                     </div>
+
                     {!hasActual && (
-                      <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                        Actual costs will populate as production starts and materials are logged.
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        Actual costs populate as production starts and materials are logged.
                       </p>
+                    )}
+
+                    {/* Completed-job margin summary */}
+                    {job.status === "completed" && hasActual && budgetFinal > 0 && (
+                      <div className="rounded-xl border-2 border-primary/20 bg-primary/5 overflow-hidden">
+                        <div className="px-3 py-2 bg-primary/10 border-b border-primary/20">
+                          <h5 className="text-xs font-black uppercase tracking-wider text-primary">Job Margin Summary</h5>
+                        </div>
+                        <div className="p-3 space-y-2">
+                          {(() => {
+                            const revenue = budgetFinal;
+                            const cost    = actual!.totalCost;
+                            const profit  = revenue - cost;
+                            const margin  = revenue > 0 ? (profit / revenue) * 100 : 0;
+                            const positive = profit >= 0;
+                            return (
+                              <>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">Quoted selling price</span>
+                                  <span className="font-semibold font-mono">{fmtAmt(revenue)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-muted-foreground">Actual production cost</span>
+                                  <span className="font-semibold font-mono">{fmtAmt(cost)}</span>
+                                </div>
+                                <div className={cn("flex justify-between text-sm font-black border-t border-primary/20 pt-2 mt-1", positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500")}>
+                                  <span>{positive ? "Profit" : "Loss"}</span>
+                                  <span className="font-mono">{positive ? "+" : ""}{fmtAmt(profit)} ({positive ? "+" : ""}{margin.toFixed(1)}%)</span>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
                     )}
                   </div>
                 );

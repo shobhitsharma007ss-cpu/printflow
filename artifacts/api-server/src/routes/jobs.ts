@@ -248,31 +248,11 @@ async function buildJobWithDetails(jobId: number) {
     ? await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId)).then(r => r[0])
     : null;
 
-  // ─── Actual cost summary from live production data ────────────────────────
-  const materialActualCost = materials.reduce((sum, m) => {
-    const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
-    const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
-    return sum + qty * rate;
-  }, 0);
-
-  const machineActualCost = routingWithEta.reduce((sum, step) => {
-    if (!step.startedAt || !step.completedAt) return sum;
-    const started = new Date(step.startedAt).getTime();
-    const completed = new Date(step.completedAt).getTime();
-    const pausedSecs = step.totalPausedSeconds ?? 0;
-    const netSecs = Math.max(0, (completed - started) / 1000 - pausedSecs);
-    const rate = step.hourRate != null ? parseFloat(String(step.hourRate)) : 0;
-    return sum + (netSecs / 3600) * rate;
-  }, 0);
-
-  const actualCostSummary = {
-    materialCost: Math.round(materialActualCost * 100) / 100,
-    machineCost: Math.round(machineActualCost * 100) / 100,
-    totalCost: Math.round((materialActualCost + machineActualCost) * 100) / 100,
-  };
-
-  // ─── Quote budget (if this job was created from a quote) ─────────────────
+  // ─── Quote budget — fetched first so we can use snapshot machine IDs for cost categorization ──
   let quoteBudget = null;
+  let snapshotMachines: { pressId: number | null; dieCutterId: number | null; gluerId: number | null } = {
+    pressId: null, dieCutterId: null, gluerId: null,
+  };
   if (job.quoteBudgetId) {
     const [qb] = await db
       .select()
@@ -287,8 +267,62 @@ async function buildJobWithDetails(jobId: number) {
         per1000Rate: qb.per1000Rate,
         costingSnapshot: qb.costingSnapshot,
       };
+      const snap = qb.costingSnapshot as Record<string, unknown>;
+      const mach = (snap?.machines ?? {}) as Record<string, unknown>;
+      snapshotMachines = {
+        pressId: mach.pressId != null ? Number(mach.pressId) : null,
+        dieCutterId: mach.dieCutterId != null ? Number(mach.dieCutterId) : null,
+        gluerId: mach.gluerId != null ? Number(mach.gluerId) : null,
+      };
     }
   }
+
+  // ─── Actual cost summary — per-category breakdown ─────────────────────────
+  const paperActualCost = materials.reduce((sum, m) => {
+    const qty = m.actualQty != null ? parseFloat(String(m.actualQty)) : parseFloat(String(m.plannedQty));
+    const rate = m.costPerUnit != null ? parseFloat(String(m.costPerUnit)) : 0;
+    return sum + qty * rate;
+  }, 0);
+
+  let pressActualCost = 0, dieCutActualCost = 0, gluerActualCost = 0, otherMachineActualCost = 0;
+
+  for (const step of routingWithEta) {
+    if (!step.startedAt || !step.completedAt) continue;
+    const started = new Date(step.startedAt).getTime();
+    const completed = new Date(step.completedAt).getTime();
+    const pausedSecs = step.totalPausedSeconds ?? 0;
+    const netSecs = Math.max(0, (completed - started) / 1000 - pausedSecs);
+    const rate = step.hourRate != null ? parseFloat(String(step.hourRate)) : 0;
+    const stepCost = (netSecs / 3600) * rate;
+    const mid = step.machineId;
+    const mt = (step.machineType ?? "").toLowerCase();
+
+    if (snapshotMachines.pressId && mid === snapshotMachines.pressId) {
+      pressActualCost += stepCost;
+    } else if (snapshotMachines.dieCutterId && mid === snapshotMachines.dieCutterId) {
+      dieCutActualCost += stepCost;
+    } else if (snapshotMachines.gluerId && mid === snapshotMachines.gluerId) {
+      gluerActualCost += stepCost;
+    } else if (mt.includes("press") || mt.includes("print")) {
+      pressActualCost += stepCost;
+    } else if (mt.includes("die")) {
+      dieCutActualCost += stepCost;
+    } else if (mt.includes("gluer") || mt.includes("folder")) {
+      gluerActualCost += stepCost;
+    } else {
+      otherMachineActualCost += stepCost;
+    }
+  }
+
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const actualCostSummary = {
+    paperCost: r2(paperActualCost),
+    pressCost: r2(pressActualCost),
+    dieCutCost: r2(dieCutActualCost),
+    gluerCost: r2(gluerActualCost),
+    otherMachineCost: r2(otherMachineActualCost),
+    totalCost: r2(paperActualCost + pressActualCost + dieCutActualCost + gluerActualCost + otherMachineActualCost),
+  };
 
   return {
     ...job,

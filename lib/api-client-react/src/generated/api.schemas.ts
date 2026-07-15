@@ -340,8 +340,11 @@ export interface JobWithDetails {
     costingSnapshot: Record<string, unknown>;
   } | null;
   actualCostSummary?: {
-    materialCost: number;
-    machineCost: number;
+    paperCost: number;
+    pressCost: number;
+    dieCutCost: number;
+    gluerCost: number;
+    otherMachineCost: number;
     totalCost: number;
   } | null;
 }

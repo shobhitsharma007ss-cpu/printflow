@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListJobQuotes, useConvertJobQuote, getListJobQuotesQueryKey } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 import type { Machine } from "@workspace/api-client-react";
 
 type MachineRow = Machine;
@@ -279,6 +280,7 @@ export default function CostingPage() {
   const [convertForm, setConvertForm] = useState({ jobName: "", clientName: "" });
 
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const { data: savedQuotes } = useListJobQuotes();
   const convertMutation = useConvertJobQuote();
 
@@ -481,12 +483,13 @@ export default function CostingPage() {
       {
         onSuccess: (data) => {
           toast.success(`Job ${data.jobCode} created from quote!`, {
-            description: "Go to the Jobs section to manage it.",
-            duration: 6000,
+            description: "Opening the Jobs page…",
+            duration: 4000,
           });
           setExpandedQuoteId(null);
           setConvertForm({ jobName: "", clientName: "" });
           queryClient.invalidateQueries({ queryKey: getListJobQuotesQueryKey() });
+          setTimeout(() => navigate("/jobs"), 800);
         },
         onError: () => {
           toast.error("Failed to convert quote. Please try again.");
