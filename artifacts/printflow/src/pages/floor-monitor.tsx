@@ -3,7 +3,7 @@ import { useMachines } from "@/hooks/use-machines";
 import { useJobs, useUpdateJobRoutingStatus, useUpdateJobRoutingNotes } from "@/hooks/use-jobs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui-elements";
-import { PlantPulse } from "@/components/plant-pulse";
+import { MachineMotion } from "@/components/machine-motion";
 import { getStatusColor, getStatusDotColor, cn } from "@/lib/utils";
 import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap, Wrench } from "lucide-react";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
@@ -209,7 +209,6 @@ export default function FloorMonitor() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500" /> Maintenance</span>
           </div>
 
-      <PlantPulse machines={machines} />
           <button className="p-3 bg-muted rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
             <Maximize2 size={20} />
           </button>
@@ -290,6 +289,14 @@ export default function FloorMonitor() {
                             </div>
                           </div>
                         </div>
+
+                        <MachineMotion
+                          machineType={machine.machineType}
+                          machineName={machine.machineName}
+                          status={machine.status}
+                          isPaused={isPaused}
+                          sph={machine.speedPerHour}
+                        />
 
                         {/* Maintenance banner */}
                         {machine.status === "maintenance" && (
