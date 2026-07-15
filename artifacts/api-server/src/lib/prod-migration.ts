@@ -14,6 +14,61 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 16: external alert tables ──────────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS alert_config (
+        id               SERIAL PRIMARY KEY,
+        event_type       TEXT NOT NULL UNIQUE,
+        whatsapp_enabled BOOLEAN NOT NULL DEFAULT false,
+        email_enabled    BOOLEAN NOT NULL DEFAULT false,
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS alert_providers (
+        id           SERIAL PRIMARY KEY,
+        channel      TEXT NOT NULL UNIQUE,
+        provider     TEXT,
+        api_key      TEXT,
+        api_sid      TEXT,
+        from_address TEXT,
+        enabled      BOOLEAN NOT NULL DEFAULT false,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS alert_recipients (
+        id         SERIAL PRIMARY KEY,
+        channel    TEXT NOT NULL,
+        address    TEXT NOT NULL,
+        label      TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS alert_log (
+        id            SERIAL PRIMARY KEY,
+        event_type    TEXT NOT NULL,
+        channel       TEXT NOT NULL,
+        recipient     TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        error_message TEXT,
+        message_body  TEXT,
+        sent_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS alert_suppression (
+        key             TEXT PRIMARY KEY,
+        last_alerted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    logger.info("Migration 16 complete — alert tables ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 16 error");
+  }
+
   // ─── MIGRATION 15: stock_movements ledger + materials_deducted flag ───────
   try {
     await db.execute(sql`

@@ -141,6 +141,7 @@ async function deductJobMaterials(jobId: number, performedBy = "system"): Promis
         title: "Low Stock Alert",
         message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
         relatedId: mat.id,
+        meta: { materialId: mat.id },
       });
     }
   }
@@ -167,6 +168,7 @@ async function deductJobMaterials(jobId: number, performedBy = "system"): Promis
           title: "Low Stock Alert",
           message: `${mat.materialName} is at ${newQty} ${mat.unit} (reorder level: ${mat.minReorderQty})`,
           relatedId: mat.id,
+          meta: { materialId: mat.id },
         });
       }
     }
@@ -788,7 +790,7 @@ router.patch("/job-routing/:id/pause", async (req, res): Promise<void> => {
   const [machine] = await db.select().from(machinesTable).where(eq(machinesTable.id, routing.machineId));
 
   await createNotification({
-    type: "step-started",
+    type: "machine-paused",
     title: "Machine Paused",
     message: `${machine?.machineName ?? 'Machine'} paused — ${reason.replace(/-/g, ' ')}`,
     relatedId: routing.jobId,

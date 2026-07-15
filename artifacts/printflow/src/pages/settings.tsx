@@ -6,14 +6,20 @@ import { useJobTemplates } from "@/hooks/use-templates";
 import { useUsers, useCreateUser, useUpdateUser, useResetUserPassword } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
-import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle, UserCog, ShieldCheck, Eye, EyeOff, KeyRound } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle, UserCog, ShieldCheck, Eye, EyeOff, KeyRound, Bell, MessageCircle, Mail, CheckCircle2, XCircle, Send, Smartphone } from "lucide-react";
 import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
 import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate, StaffUser, StaffUserRole } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  useAlertConfig, useUpdateAlertConfig,
+  useAlertProviders, useUpdateAlertProvider,
+  useAlertRecipients, useAddAlertRecipient, useDeleteAlertRecipient,
+  useAlertLog, useSendTestAlert,
+} from "@/hooks/use-alerts";
 
-type Section = "machines" | "materials" | "vendors" | "templates" | "staff";
+type Section = "machines" | "materials" | "vendors" | "templates" | "staff" | "alerts";
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>("machines");
@@ -24,6 +30,7 @@ export default function Settings() {
     { key: "vendors" as Section, label: "Vendors", icon: Users },
     { key: "templates" as Section, label: "Job Templates", icon: Briefcase },
     { key: "staff" as Section, label: "Staff", icon: UserCog },
+    { key: "alerts" as Section, label: "Alerts", icon: Bell },
   ];
 
   return (
@@ -59,6 +66,7 @@ export default function Settings() {
       {activeSection === "vendors" && <VendorsSection />}
       {activeSection === "templates" && <TemplatesSection />}
       {activeSection === "staff" && <StaffSection />}
+      {activeSection === "alerts" && <AlertsSection />}
 
       <DangerZone />
     </div>
@@ -1534,6 +1542,353 @@ function StaffSection() {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ─── Alerts Section ──────────────────────────────────────────────────────────
+
+const EVENT_LABELS: Record<string, { label: string; desc: string }> = {
+  low_stock: { label: "Low Stock", desc: "When a material falls below its reorder level" },
+  job_completed: { label: "Job Completed", desc: "When a job is fully finished" },
+  machine_issue: { label: "Machine Issue", desc: "When a machine step is paused due to breakdown" },
+  job_overdue: { label: "Job Overdue", desc: "When a job is still pending after 2+ days" },
+};
+
+function AlertsSection() {
+  const { data: configs = [], isLoading: configLoading } = useAlertConfig();
+  const { data: providers = [], isLoading: providerLoading } = useAlertProviders();
+  const { data: recipients = [] } = useAlertRecipients();
+  const { data: log = [] } = useAlertLog();
+  const updateConfig = useUpdateAlertConfig();
+  const updateProvider = useUpdateAlertProvider();
+  const addRecipient = useAddAlertRecipient();
+  const deleteRecipient = useDeleteAlertRecipient();
+  const sendTest = useSendTestAlert();
+
+  const [waForm, setWaForm] = useState({ apiSid: "", apiKey: "", fromAddress: "", enabled: false });
+  const [emailForm, setEmailForm] = useState({ apiKey: "", fromAddress: "", enabled: false });
+  const [waLoaded, setWaLoaded] = useState(false);
+  const [emailLoaded, setEmailLoaded] = useState(false);
+  const [newWaPhone, setNewWaPhone] = useState("");
+  const [newEmailAddr, setNewEmailAddr] = useState("");
+  const [showWaKey, setShowWaKey] = useState(false);
+  const [showEmailKey, setShowEmailKey] = useState(false);
+  const [testingEvent, setTestingEvent] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const wa = providers.find(p => p.channel === "whatsapp");
+    if (wa && !waLoaded) {
+      setWaForm({ apiSid: wa.apiSid ?? "", apiKey: wa.apiKey ?? "", fromAddress: wa.fromAddress ?? "", enabled: wa.enabled });
+      setWaLoaded(true);
+    }
+    const em = providers.find(p => p.channel === "email");
+    if (em && !emailLoaded) {
+      setEmailForm({ apiKey: em.apiKey ?? "", fromAddress: em.fromAddress ?? "", enabled: em.enabled });
+      setEmailLoaded(true);
+    }
+  }, [providers]);
+
+  const configByEvent = Object.fromEntries(configs.map(c => [c.eventType, c]));
+  const waRecipients = recipients.filter(r => r.channel === "whatsapp");
+  const emailRecipients = recipients.filter(r => r.channel === "email");
+
+  const handleToggle = (eventType: string, channel: "whatsapp" | "email", current: boolean) => {
+    const c = configByEvent[eventType];
+    updateConfig.mutate({
+      eventType,
+      whatsappEnabled: channel === "whatsapp" ? !current : (c?.whatsappEnabled ?? false),
+      emailEnabled: channel === "email" ? !current : (c?.emailEnabled ?? false),
+    }, {
+      onError: () => toast.error("Failed to update alert setting"),
+    });
+  };
+
+  const saveWaProvider = () => {
+    updateProvider.mutate({ channel: "whatsapp", data: { provider: "twilio", apiSid: waForm.apiSid, apiKey: waForm.apiKey || undefined, fromAddress: waForm.fromAddress, enabled: waForm.enabled } }, {
+      onSuccess: () => toast.success("WhatsApp provider saved"),
+      onError: () => toast.error("Failed to save WhatsApp provider"),
+    });
+  };
+
+  const saveEmailProvider = () => {
+    updateProvider.mutate({ channel: "email", data: { provider: "resend", apiKey: emailForm.apiKey || undefined, fromAddress: emailForm.fromAddress, enabled: emailForm.enabled } }, {
+      onSuccess: () => toast.success("Email provider saved"),
+      onError: () => toast.error("Failed to save email provider"),
+    });
+  };
+
+  const handleTest = (channel: string, eventType: string) => {
+    setTestingEvent(`${channel}-${eventType}`);
+    sendTest.mutate({ channel, eventType }, {
+      onSuccess: () => toast.success(`Test ${channel} sent for ${EVENT_LABELS[eventType]?.label ?? eventType}!`),
+      onError: (err) => toast.error(`Test failed: ${err.message}`),
+      onSettled: () => setTestingEvent(null),
+    });
+  };
+
+  if (configLoading || providerLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="space-y-6">
+
+      {/* Event toggle grid */}
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="bg-muted/40 px-5 py-3 border-b border-border flex items-center gap-2">
+          <Bell size={16} className="text-primary" />
+          <h2 className="font-bold text-sm">Alert Events</h2>
+          <span className="text-xs text-muted-foreground ml-1">— choose which events trigger external alerts</span>
+        </div>
+        <div className="divide-y divide-border">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-4 px-5 py-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            <span>Event</span>
+            <span className="w-24 text-center flex items-center justify-center gap-1.5"><Smartphone size={12} /> WhatsApp</span>
+            <span className="w-20 text-center flex items-center justify-center gap-1.5"><Mail size={12} /> Email</span>
+          </div>
+          {Object.entries(EVENT_LABELS).map(([eventType, meta]) => {
+            const c = configByEvent[eventType];
+            return (
+              <div key={eventType} className="grid grid-cols-[1fr_auto_auto] gap-4 px-5 py-3.5 items-center hover:bg-muted/20 transition-colors">
+                <div>
+                  <p className="font-semibold text-sm">{meta.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{meta.desc}</p>
+                </div>
+                <div className="w-24 flex justify-center">
+                  <button
+                    onClick={() => handleToggle(eventType, "whatsapp", c?.whatsappEnabled ?? false)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                      c?.whatsappEnabled ? "bg-emerald-500" : "bg-gray-200"
+                    )}
+                  >
+                    <span className={cn("inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform", c?.whatsappEnabled ? "translate-x-4.5" : "translate-x-0.5")} />
+                  </button>
+                </div>
+                <div className="w-20 flex justify-center">
+                  <button
+                    onClick={() => handleToggle(eventType, "email", c?.emailEnabled ?? false)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none",
+                      c?.emailEnabled ? "bg-blue-500" : "bg-gray-200"
+                    )}
+                  >
+                    <span className={cn("inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform", c?.emailEnabled ? "translate-x-4.5" : "translate-x-0.5")} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Provider Config */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* WhatsApp via Twilio */}
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="bg-emerald-50 px-4 py-3 border-b border-emerald-100 flex items-center gap-2">
+            <Smartphone size={15} className="text-emerald-700" />
+            <h3 className="font-bold text-sm text-emerald-900">WhatsApp (Twilio)</h3>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Account SID</Label>
+              <Input value={waForm.apiSid} onChange={e => setWaForm(f => ({ ...f, apiSid: e.target.value }))} placeholder="ACxxxxxxxxxxxxxxxx" className="text-sm font-mono" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Auth Token</Label>
+              <div className="relative">
+                <Input
+                  type={showWaKey ? "text" : "password"}
+                  value={waForm.apiKey}
+                  onChange={e => setWaForm(f => ({ ...f, apiKey: e.target.value }))}
+                  placeholder={waLoaded ? "Leave blank to keep existing" : "Auth token"}
+                  className="text-sm font-mono pr-9"
+                />
+                <button type="button" onClick={() => setShowWaKey(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  {showWaKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">From Number (with country code, e.g. +14155238886)</Label>
+              <Input value={waForm.fromAddress} onChange={e => setWaForm(f => ({ ...f, fromAddress: e.target.value }))} placeholder="+14155238886" className="text-sm" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={waForm.enabled} onChange={e => setWaForm(f => ({ ...f, enabled: e.target.checked }))} className="rounded" />
+              <span className="text-sm font-medium">Enabled</span>
+            </label>
+            <Button size="sm" onClick={saveWaProvider} isLoading={updateProvider.isPending} className="w-full">
+              <Save size={13} className="mr-1.5" /> Save WhatsApp Config
+            </Button>
+          </div>
+
+          <div className="border-t border-border px-4 py-3 space-y-2 bg-muted/20">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">WhatsApp Recipients</p>
+            {waRecipients.length === 0 && <p className="text-xs text-muted-foreground">No recipients added yet.</p>}
+            {waRecipients.map(r => (
+              <div key={r.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm font-mono">{r.address}</span>
+                {r.label && <span className="text-xs text-muted-foreground">{r.label}</span>}
+                <button onClick={() => deleteRecipient.mutate(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Input value={newWaPhone} onChange={e => setNewWaPhone(e.target.value)} placeholder="+91XXXXXXXXXX" className="text-sm flex-1" />
+              <Button size="sm" variant="outline" onClick={() => {
+                if (!newWaPhone.trim()) return;
+                addRecipient.mutate({ channel: "whatsapp", address: newWaPhone.trim() }, {
+                  onSuccess: () => { setNewWaPhone(""); toast.success("Recipient added"); },
+                  onError: () => toast.error("Failed to add recipient"),
+                });
+              }}>
+                <Plus size={13} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-border px-4 py-3 bg-muted/10">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Test Send</p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(EVENT_LABELS).map(([et, meta]) => (
+                <button
+                  key={et}
+                  onClick={() => handleTest("whatsapp", et)}
+                  disabled={sendTest.isPending && testingEvent === `whatsapp-${et}`}
+                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                >
+                  {sendTest.isPending && testingEvent === `whatsapp-${et}` ? "Sending…" : meta.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Email via Resend */}
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="bg-blue-50 px-4 py-3 border-b border-blue-100 flex items-center gap-2">
+            <Mail size={15} className="text-blue-700" />
+            <h3 className="font-bold text-sm text-blue-900">Email (Resend)</h3>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Resend API Key</Label>
+              <div className="relative">
+                <Input
+                  type={showEmailKey ? "text" : "password"}
+                  value={emailForm.apiKey}
+                  onChange={e => setEmailForm(f => ({ ...f, apiKey: e.target.value }))}
+                  placeholder={emailLoaded ? "Leave blank to keep existing" : "re_xxxxxxxxxxxxxxxx"}
+                  className="text-sm font-mono pr-9"
+                />
+                <button type="button" onClick={() => setShowEmailKey(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  {showEmailKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">Get a free API key at <span className="font-mono">resend.com</span> — 100 emails/day free</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">From Address (e.g. PrintFlow &lt;alerts@yourdomain.com&gt;)</Label>
+              <Input value={emailForm.fromAddress} onChange={e => setEmailForm(f => ({ ...f, fromAddress: e.target.value }))} placeholder="PrintFlow <alerts@yourdomain.com>" className="text-sm" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={emailForm.enabled} onChange={e => setEmailForm(f => ({ ...f, enabled: e.target.checked }))} className="rounded" />
+              <span className="text-sm font-medium">Enabled</span>
+            </label>
+            <Button size="sm" onClick={saveEmailProvider} isLoading={updateProvider.isPending} className="w-full">
+              <Save size={13} className="mr-1.5" /> Save Email Config
+            </Button>
+          </div>
+
+          <div className="border-t border-border px-4 py-3 space-y-2 bg-muted/20">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Email Recipients</p>
+            {emailRecipients.length === 0 && <p className="text-xs text-muted-foreground">No recipients added yet.</p>}
+            {emailRecipients.map(r => (
+              <div key={r.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm">{r.address}</span>
+                {r.label && <span className="text-xs text-muted-foreground">{r.label}</span>}
+                <button onClick={() => deleteRecipient.mutate(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={13} /></button>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Input value={newEmailAddr} onChange={e => setNewEmailAddr(e.target.value)} placeholder="owner@example.com" className="text-sm flex-1" />
+              <Button size="sm" variant="outline" onClick={() => {
+                if (!newEmailAddr.trim()) return;
+                addRecipient.mutate({ channel: "email", address: newEmailAddr.trim() }, {
+                  onSuccess: () => { setNewEmailAddr(""); toast.success("Recipient added"); },
+                  onError: () => toast.error("Failed to add recipient"),
+                });
+              }}>
+                <Plus size={13} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-border px-4 py-3 bg-muted/10">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Test Send</p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(EVENT_LABELS).map(([et, meta]) => (
+                <button
+                  key={et}
+                  onClick={() => handleTest("email", et)}
+                  disabled={sendTest.isPending && testingEvent === `email-${et}`}
+                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                >
+                  {sendTest.isPending && testingEvent === `email-${et}` ? "Sending…" : meta.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Delivery Log */}
+      {log.length > 0 && (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="bg-muted/40 px-5 py-3 border-b border-border flex items-center gap-2">
+            <Send size={15} className="text-primary" />
+            <h2 className="font-bold text-sm">Recent Delivery Log</h2>
+            <span className="text-xs text-muted-foreground ml-1">— last {log.length} events</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/20">
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">When</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Event</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Channel</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Recipient</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Status</th>
+                  <th className="text-left px-4 py-2 text-xs font-bold text-muted-foreground uppercase">Message / Error</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {log.slice(0, 20).map(entry => (
+                  <tr key={entry.id} className="hover:bg-muted/10">
+                    <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(entry.sentAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                    <td className="px-4 py-2 text-xs font-medium">{EVENT_LABELS[entry.eventType]?.label ?? entry.eventType}</td>
+                    <td className="px-4 py-2">
+                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-bold", entry.channel === "whatsapp" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700")}>
+                        {entry.channel === "whatsapp" ? "WhatsApp" : "Email"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{entry.recipient}</td>
+                    <td className="px-4 py-2">
+                      {entry.status === "sent"
+                        ? <span className="flex items-center gap-1 text-emerald-600 text-xs font-bold"><CheckCircle2 size={12} /> Sent</span>
+                        : <span className="flex items-center gap-1 text-destructive text-xs font-bold"><XCircle size={12} /> Failed</span>}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-muted-foreground max-w-xs truncate">
+                      {entry.status === "failed" ? entry.errorMessage : entry.messageBody}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

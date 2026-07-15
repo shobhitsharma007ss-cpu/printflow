@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+// alert-engine is imported dynamically inside createNotification to avoid circular deps
 import { eq, desc, lte, and, lt, sql } from "drizzle-orm";
 import { db, notificationsTable, materialsTable, jobsTable, jobRoutingTable } from "@workspace/db";
 
@@ -131,6 +132,7 @@ export async function createNotification(data: {
   title: string;
   message: string;
   relatedId?: number;
+  meta?: { materialId?: number };
 }) {
   const [row] = await db
     .insert(notificationsTable)
@@ -141,5 +143,13 @@ export async function createNotification(data: {
       relatedId: data.relatedId ?? null,
     })
     .returning();
+
+  // Fire-and-forget external alert; never let it crash the calling request.
+  import("../lib/alert-engine")
+    .then(({ dispatchExternalAlert }) =>
+      dispatchExternalAlert(data.type, data.message, data.meta)
+    )
+    .catch(() => undefined);
+
   return row;
 }

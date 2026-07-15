@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { autoSeedIfEmpty } from "./lib/auto-seed";
 import { runProdMigration } from "./lib/prod-migration";
+import { checkAndAlertOverdueJobs } from "./lib/alert-engine";
 
 const rawPort = process.env["PORT"];
 
@@ -32,6 +33,13 @@ async function start() {
     }
     logger.info({ port }, "Server listening");
   });
+
+  // Check for overdue jobs every hour and send external alerts if configured.
+  setInterval(() => {
+    checkAndAlertOverdueJobs().catch(err =>
+      logger.warn({ err }, "Overdue job alert check failed")
+    );
+  }, 60 * 60 * 1000);
 }
 
 start();

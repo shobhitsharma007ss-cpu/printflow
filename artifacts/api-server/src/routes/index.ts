@@ -14,6 +14,7 @@ import scheduleRouter from "./schedule";
 import adminRouter from "./admin";
 import authRouter from "./auth";
 import usersRouter from "./users";
+import alertsRouter from "./alerts";
 import { requireAuth, requireRole } from "../middlewares/require-auth";
 
 const router: IRouter = Router();
@@ -36,11 +37,12 @@ router.use(notificationsRouter);
 router.use(quotesRouter);
 router.use(requireRole("owner", "supervisor"), scheduleRouter);
 
-// Owner-only routes: Reports screen, user management, and destructive admin
+// Owner-only routes: Reports screen, user management, alert config, and destructive admin
 // actions must not be reachable by supervisor/operator sessions (e.g. the
 // shared operator tablet), even though the frontend already hides them.
 router.use(requireRole("owner"), reportsRouter);
 router.use(requireRole("owner"), usersRouter);
+router.use(requireRole("owner"), alertsRouter);
 router.use(requireRole("owner"), adminRouter);
 
 export default router;
