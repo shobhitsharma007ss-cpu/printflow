@@ -20,6 +20,8 @@ import type {
   AddMaterialVendorBody,
   ConvertJobQuoteRequest,
   ConvertJobQuoteResponse,
+  CreateDispatchRequest,
+  CreateDispatchResponse,
   CreateJobMaterialRequest,
   CreateJobRequest,
   CreateJobTemplateRequest,
@@ -29,6 +31,8 @@ import type {
   CreateVendorRequest,
   CreateWastageLogRequest,
   DashboardMetrics,
+  DispatchSummary,
+  DispatchWithJobInfo,
   HealthStatus,
   JobCostReport,
   JobMaterial,
@@ -3699,4 +3703,144 @@ export const useConvertJobQuote = <
   TContext
 > => {
   return useMutation(getConvertJobQuoteMutationOptions(options));
+};
+
+// ─── Dispatch API ─────────────────────────────────────────────────────────────
+
+export const getListJobDispatchesUrl = (id: number) => `/api/jobs/${id}/dispatches`;
+
+export const listJobDispatches = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DispatchSummary> => {
+  return customFetch<DispatchSummary>(getListJobDispatchesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListJobDispatchesQueryKey = (id: number): QueryKey => [
+  getListJobDispatchesUrl(id),
+];
+
+export const useListJobDispatches = <
+  TData = Awaited<ReturnType<typeof listJobDispatches>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listJobDispatches>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListJobDispatchesQueryKey(id);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listJobDispatches>>> = ({ signal }) =>
+    listJobDispatches(id, { signal, ...requestOptions });
+  const query = useQuery({ queryKey, queryFn, enabled: !!id, ...queryOptions });
+  return { ...query, queryKey } as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+};
+
+export const getCreateJobDispatchUrl = (id: number) => `/api/jobs/${id}/dispatches`;
+
+export const createJobDispatch = async (
+  id: number,
+  createDispatchRequest: BodyType<CreateDispatchRequest>,
+  options?: RequestInit,
+): Promise<CreateDispatchResponse> => {
+  return customFetch<CreateDispatchResponse>(getCreateJobDispatchUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createDispatchRequest),
+  });
+};
+
+export const getCreateJobDispatchMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createJobDispatch>>,
+    TError,
+    { id: number; data: BodyType<CreateDispatchRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createJobDispatch>>,
+  TError,
+  { id: number; data: BodyType<CreateDispatchRequest> },
+  TContext
+> => {
+  const mutationKey = ["createJobDispatch"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createJobDispatch>>,
+    { id: number; data: BodyType<CreateDispatchRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+    return createJobDispatch(id, data, requestOptions);
+  };
+  return { mutationFn, ...mutationOptions };
+};
+
+export const useCreateJobDispatch = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createJobDispatch>>,
+    TError,
+    { id: number; data: BodyType<CreateDispatchRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createJobDispatch>>,
+  TError,
+  { id: number; data: BodyType<CreateDispatchRequest> },
+  TContext
+> => {
+  return useMutation(getCreateJobDispatchMutationOptions(options));
+};
+
+export const getGetDispatchUrl = (dispatchId: number) => `/api/dispatches/${dispatchId}`;
+
+export const getDispatch = async (
+  dispatchId: number,
+  options?: RequestInit,
+): Promise<DispatchWithJobInfo & { totalDispatched: number }> => {
+  return customFetch<DispatchWithJobInfo & { totalDispatched: number }>(getGetDispatchUrl(dispatchId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDispatchQueryKey = (dispatchId: number): QueryKey => [
+  getGetDispatchUrl(dispatchId),
+];
+
+export const useGetDispatch = <
+  TData = Awaited<ReturnType<typeof getDispatch>>,
+  TError = ErrorType<unknown>,
+>(
+  dispatchId: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDispatch>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetDispatchQueryKey(dispatchId);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDispatch>>> = ({ signal }) =>
+    getDispatch(dispatchId, { signal, ...requestOptions });
+  const query = useQuery({ queryKey, queryFn, enabled: !!dispatchId, ...queryOptions });
+  return { ...query, queryKey } as UseQueryResult<TData, TError> & { queryKey: QueryKey };
 };

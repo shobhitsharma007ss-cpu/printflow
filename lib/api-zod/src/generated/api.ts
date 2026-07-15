@@ -1204,3 +1204,33 @@ export const MarkNotificationReadResponse = zod.object({
 export const MarkAllNotificationsReadResponse = zod.object({
   count: zod.number().optional(),
 });
+
+/**
+ * @summary List dispatches for a job
+ */
+export const GetJobDispatchesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get a single dispatch (for challan)
+ */
+export const GetDispatchParams = zod.object({
+  dispatchId: zod.coerce.number(),
+});
+
+/**
+ * @summary Create a dispatch entry for a job
+ */
+export const CreateDispatchJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateDispatchBody = zod.object({
+  dispatchQty: zod.number().int().positive(),
+  dispatchDate: zod.string().min(1),
+  vehicleNumber: zod.string().optional(),
+  lrNumber: zod.string().optional(),
+  transporterName: zod.string().optional(),
+  notes: zod.string().optional(),
+});

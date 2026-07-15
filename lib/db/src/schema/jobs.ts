@@ -108,6 +108,18 @@ export const jobQuotesTable = pgTable("job_quotes", {
   unique("job_quotes_job_version_unique").on(table.jobId, table.version),
 ]);
 
+export const jobDispatchesTable = pgTable("job_dispatches", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull().references(() => jobsTable.id),
+  dispatchQty: integer("dispatch_qty").notNull(),
+  dispatchDate: text("dispatch_date").notNull(),
+  vehicleNumber: text("vehicle_number"),
+  lrNumber: text("lr_number"),
+  transporterName: text("transporter_name"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertJobSchema = createInsertSchema(jobsTable).omit({ id: true, createdAt: true });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobsTable.$inferSelect;
@@ -117,3 +129,4 @@ export type JobMaterial = typeof jobMaterialsTable.$inferSelect;
 export type WastageLog = typeof wastageLogTable.$inferSelect;
 export type JobInterruption = typeof jobInterruptionsTable.$inferSelect;
 export type JobQuote = typeof jobQuotesTable.$inferSelect;
+export type JobDispatch = typeof jobDispatchesTable.$inferSelect;

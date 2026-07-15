@@ -347,6 +347,11 @@ export interface JobWithDetails {
     otherMachineCost: number;
     totalCost: number;
   } | null;
+  dispatchSummary?: {
+    dispatches: JobDispatch[];
+    totalDispatched: number;
+    remaining: number;
+  } | null;
 }
 
 export interface CreateJobRequest {
@@ -652,4 +657,44 @@ export interface ConvertJobQuoteResponse {
   jobId: number;
   jobCode: string;
   quoteId: number;
+}
+
+export interface JobDispatch {
+  id: number;
+  jobId: number;
+  dispatchQty: number;
+  dispatchDate: string;
+  vehicleNumber?: string | null;
+  lrNumber?: string | null;
+  transporterName?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateDispatchRequest {
+  dispatchQty: number;
+  dispatchDate: string;
+  vehicleNumber?: string;
+  lrNumber?: string;
+  transporterName?: string;
+  notes?: string;
+}
+
+export interface DispatchSummary {
+  dispatches: JobDispatch[];
+  totalDispatched: number;
+  remaining: number;
+}
+
+export interface CreateDispatchResponse extends JobDispatch {
+  totalDispatched: number;
+  remaining: number;
+  jobStatus: string;
+}
+
+export interface DispatchWithJobInfo extends JobDispatch {
+  jobCode: string;
+  jobName: string;
+  clientName: string;
+  qtySheets: number;
 }

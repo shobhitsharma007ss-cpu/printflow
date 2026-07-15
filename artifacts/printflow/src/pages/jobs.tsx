@@ -6,13 +6,16 @@ import { format } from "date-fns";
 import {
   Plus, Search, Filter, ChevronRight, X,
   CheckCircle, Play, AlertTriangle,
-  Clock, User, TrendingDown, Check, Loader2, Timer, BarChart2
+  Clock, User, TrendingDown, Check, Loader2, Timer, BarChart2,
+  Truck, ExternalLink, PackageCheck
 } from "lucide-react";
 import { cn, getStatusColor } from "@/lib/utils";
 import {
   useCreateWastageLog,
+  useCreateJobDispatch,
   getGetJobQueryKey,
   getListJobsQueryKey,
+  getListJobDispatchesQueryKey,
 } from "@workspace/api-client-react";
 import type { JobMaterial, CreateWastageLogRequestReason } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,6 +60,7 @@ export default function Jobs() {
               <option value="in-progress">In Progress</option>
               <option value="completed">Completed</option>
               <option value="on-hold">On Hold</option>
+              <option value="dispatched">Dispatched</option>
             </Select>
           </div>
         </div>
@@ -571,6 +575,11 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                 );
               })()}
 
+              {/* Dispatch Section */}
+              {(job.status === "completed" || job.status === "dispatched") && (
+                <DispatchSection job={job} />
+              )}
+
               {/* Wastage Logs */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -621,7 +630,7 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
               >
                 🖨 Print Job Card (QR)
               </a>
-              {job.status === "completed" && (
+              {(job.status === "completed" || job.status === "dispatched") && (
                 <Button
                   onClick={() => setIsWastageOpen(true)}
                   className="w-full bg-amber-500 hover:bg-amber-600 text-white border-0"
@@ -677,6 +686,226 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
         jobMaterials={materials ?? []}
       />
     </>
+  );
+}
+
+function DispatchSection({ job }: { job: NonNullable<ReturnType<typeof useJob>["data"]> }) {
+  const queryClient = useQueryClient();
+  const summary = job.dispatchSummary ?? { dispatches: [], totalDispatched: 0, remaining: job.qtySheets };
+  const { dispatches, totalDispatched, remaining } = summary;
+  const dispatchedPct = job.qtySheets > 0 ? Math.min(100, (totalDispatched / job.qtySheets) * 100) : 0;
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    dispatchQty: '',
+    dispatchDate: new Date().toISOString().split('T')[0],
+    vehicleNumber: '',
+    lrNumber: '',
+    transporterName: '',
+    notes: '',
+  });
+
+  const createDispatch = useCreateJobDispatch({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getGetJobQueryKey(job.id) });
+        queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListJobDispatchesQueryKey(job.id) });
+        toast.success("Dispatch recorded", {
+          description: `${data.dispatchQty.toLocaleString("en-IN")} sheets dispatched. ${data.remaining} remaining.`,
+        });
+        setShowForm(false);
+        setForm({ dispatchQty: '', dispatchDate: new Date().toISOString().split('T')[0], vehicleNumber: '', lrNumber: '', transporterName: '', notes: '' });
+      },
+      onError: (err: any) => {
+        const msg = err?.message ?? "Failed to record dispatch.";
+        toast.error(msg);
+      },
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const qty = parseInt(form.dispatchQty, 10);
+    if (!qty || qty <= 0) return;
+    createDispatch.mutate({
+      id: job.id,
+      data: {
+        dispatchQty: qty,
+        dispatchDate: form.dispatchDate,
+        vehicleNumber: form.vehicleNumber.trim() || undefined,
+        lrNumber: form.lrNumber.trim() || undefined,
+        transporterName: form.transporterName.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+      },
+    });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Truck size={12} /> Dispatch & Delivery
+        </h4>
+        {remaining > 0 && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-colors"
+          >
+            <Truck size={11} /> {showForm ? "Cancel" : "Record Dispatch"}
+          </button>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-3">
+        <div className="flex justify-between text-xs mb-1.5">
+          <span className="text-muted-foreground">Dispatched</span>
+          <span className="font-bold font-mono">
+            {totalDispatched.toLocaleString("en-IN")} / {job.qtySheets.toLocaleString("en-IN")} sheets
+          </span>
+        </div>
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className={cn("h-full rounded-full transition-all duration-500", dispatchedPct >= 100 ? "bg-emerald-500" : "bg-blue-500")}
+            style={{ width: `${dispatchedPct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] mt-1">
+          <span className={cn("font-medium", remaining === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+            {remaining === 0 ? (
+              <span className="flex items-center gap-1"><PackageCheck size={10} /> Fully dispatched</span>
+            ) : (
+              `${remaining.toLocaleString("en-IN")} sheets remaining`
+            )}
+          </span>
+          <span className="text-muted-foreground">{dispatchedPct.toFixed(0)}%</span>
+        </div>
+      </div>
+
+      {/* Dispatch form */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-3 mb-3 space-y-3">
+          <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">New Dispatch Entry</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-[11px]">Qty (sheets) <span className="text-destructive">*</span></Label>
+              <Input
+                type="number"
+                required
+                min="1"
+                max={remaining}
+                value={form.dispatchQty}
+                onChange={e => setForm({ ...form, dispatchQty: e.target.value })}
+                placeholder={`max ${remaining.toLocaleString("en-IN")}`}
+                className="text-sm h-8"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">Date <span className="text-destructive">*</span></Label>
+              <Input
+                type="date"
+                required
+                value={form.dispatchDate}
+                onChange={e => setForm({ ...form, dispatchDate: e.target.value })}
+                className="text-sm h-8"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-[11px]">Vehicle No.</Label>
+              <Input
+                value={form.vehicleNumber}
+                onChange={e => setForm({ ...form, vehicleNumber: e.target.value })}
+                placeholder="e.g. MH-12-AB-1234"
+                className="text-sm h-8"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px]">LR No.</Label>
+              <Input
+                value={form.lrNumber}
+                onChange={e => setForm({ ...form, lrNumber: e.target.value })}
+                placeholder="e.g. LR-2024-0001"
+                className="text-sm h-8"
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">Transporter</Label>
+            <Input
+              value={form.transporterName}
+              onChange={e => setForm({ ...form, transporterName: e.target.value })}
+              placeholder="e.g. Shree Transport"
+              className="text-sm h-8"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px]">Notes</Label>
+            <Input
+              value={form.notes}
+              onChange={e => setForm({ ...form, notes: e.target.value })}
+              placeholder="Optional note..."
+              className="text-sm h-8"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" className="h-8 text-xs" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 border-0 text-white"
+              isLoading={createDispatch.isPending}
+              disabled={!form.dispatchQty || createDispatch.isPending}
+            >
+              <Truck size={11} className="mr-1" /> Confirm Dispatch
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* Dispatch history */}
+      {dispatches.length > 0 && (
+        <div className="space-y-2">
+          {dispatches.map((d, idx) => (
+            <div key={d.id} className="rounded-xl border border-border bg-muted/20 p-3 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-black text-sm font-mono">{d.dispatchQty.toLocaleString("en-IN")}</span>
+                    <span className="text-muted-foreground">sheets</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground">{d.dispatchDate}</span>
+                  </div>
+                  {(d.vehicleNumber || d.lrNumber || d.transporterName) && (
+                    <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
+                      {d.vehicleNumber && <span>🚛 {d.vehicleNumber}</span>}
+                      {d.lrNumber && <span>LR: {d.lrNumber}</span>}
+                      {d.transporterName && <span>{d.transporterName}</span>}
+                    </div>
+                  )}
+                  {d.notes && <p className="text-muted-foreground italic mt-1">{d.notes}</p>}
+                </div>
+                <a
+                  href={`/delivery-challan/${d.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <ExternalLink size={9} /> Challan
+                </a>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {dispatches.length === 0 && !showForm && (
+        <div className="text-center py-5 text-muted-foreground text-xs bg-muted/20 rounded-xl border border-dashed border-border">
+          No dispatches recorded yet
+        </div>
+      )}
+    </div>
   );
 }
 

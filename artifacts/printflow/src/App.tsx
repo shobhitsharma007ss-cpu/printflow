@@ -15,6 +15,7 @@ import Costing from "@/pages/costing";
 import LayoutPlanner from "@/pages/layout-planner";
 import OperatorStation, { StationsPicker } from "@/pages/operator-station";
 import JobCard from "@/pages/job-card";
+import DeliveryChallan from "@/pages/delivery-challan";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -68,12 +69,13 @@ function AuthedRouter() {
   const role = user.role;
 
   // Full-screen operator & job-card views (available to every authenticated role).
-  if (location.startsWith("/floor/station") || location.startsWith("/job-card")) {
+  if (location.startsWith("/floor/station") || location.startsWith("/job-card") || location.startsWith("/delivery-challan")) {
     return (
       <Switch>
         <Route path="/floor/stations" component={StationsPicker} />
         <Route path="/floor/station/:machineId" component={OperatorStation} />
         <Route path="/job-card/:id" component={JobCard} />
+        <Route path="/delivery-challan/:dispatchId" component={DeliveryChallan} />
       </Switch>
     );
   }

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -18,6 +18,10 @@ import {
   ListJobsQueryParams,
   ListWastageLogsQueryParams,
   CreateWastageLogBody,
+  GetJobDispatchesParams,
+  GetDispatchParams,
+  CreateDispatchJobParams,
+  CreateDispatchBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
 
@@ -370,6 +374,17 @@ async function buildJobWithDetails(jobId: number) {
     totalCost: r2(paperActualCost + pressActualCost + dieCutActualCost + gluerActualCost + otherMachineActualCost),
   };
 
+  // ─── Dispatch summary ─────────────────────────────────────────────────────
+  const dispatches = await db
+    .select()
+    .from(jobDispatchesTable)
+    .where(eq(jobDispatchesTable.jobId, jobId))
+    .orderBy(jobDispatchesTable.createdAt);
+
+  const totalDispatched = dispatches.reduce((sum, d) => sum + d.dispatchQty, 0);
+  const remaining = Math.max(0, job.qtySheets - totalDispatched);
+  const dispatchSummary = { dispatches, totalDispatched, remaining };
+
   return {
     ...job,
     materialName: material?.materialName ?? null,
@@ -380,6 +395,7 @@ async function buildJobWithDetails(jobId: number) {
     wastageLogs,
     quoteBudget,
     actualCostSummary,
+    dispatchSummary,
   };
 }
 
@@ -846,6 +862,96 @@ router.get("/wastage-log", async (req, res): Promise<void> => {
     ? rows.filter(r => r.jobId === queryParams.data.jobId)
     : rows;
   res.json(filtered);
+});
+
+// ─── Dispatch routes ──────────────────────────────────────────────────────────
+
+router.get("/jobs/:id/dispatches", async (req, res): Promise<void> => {
+  const params = GetJobDispatchesParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [job] = await db.select({ id: jobsTable.id, qtySheets: jobsTable.qtySheets })
+    .from(jobsTable).where(eq(jobsTable.id, params.data.id));
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+
+  const dispatches = await db.select().from(jobDispatchesTable)
+    .where(eq(jobDispatchesTable.jobId, params.data.id))
+    .orderBy(jobDispatchesTable.createdAt);
+
+  const totalDispatched = dispatches.reduce((sum, d) => sum + d.dispatchQty, 0);
+  const remaining = Math.max(0, job.qtySheets - totalDispatched);
+  res.json({ dispatches, totalDispatched, remaining });
+});
+
+router.post("/jobs/:id/dispatches", async (req, res): Promise<void> => {
+  const params = CreateDispatchJobParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = CreateDispatchBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, params.data.id));
+  if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+
+  if (job.status !== "completed" && job.status !== "dispatched") {
+    res.status(409).json({ error: "Dispatch can only be recorded for completed or dispatched jobs" });
+    return;
+  }
+
+  const existingDispatches = await db.select({ dispatchQty: jobDispatchesTable.dispatchQty })
+    .from(jobDispatchesTable).where(eq(jobDispatchesTable.jobId, params.data.id));
+  const alreadyDispatched = existingDispatches.reduce((sum, d) => sum + d.dispatchQty, 0);
+
+  const TOLERANCE = 1.02;
+  const maxAllowed = Math.ceil(job.qtySheets * TOLERANCE);
+  if (alreadyDispatched + parsed.data.dispatchQty > maxAllowed) {
+    res.status(409).json({
+      error: `Over-dispatch blocked: ${alreadyDispatched} already dispatched, ${parsed.data.dispatchQty} requested, max allowed is ${maxAllowed} (2% over ordered qty of ${job.qtySheets}).`,
+    });
+    return;
+  }
+
+  const [dispatch] = await db.insert(jobDispatchesTable).values({
+    jobId: params.data.id,
+    dispatchQty: parsed.data.dispatchQty,
+    dispatchDate: parsed.data.dispatchDate,
+    vehicleNumber: parsed.data.vehicleNumber ?? null,
+    lrNumber: parsed.data.lrNumber ?? null,
+    transporterName: parsed.data.transporterName ?? null,
+    notes: parsed.data.notes ?? null,
+  }).returning();
+
+  const newTotal = alreadyDispatched + dispatch.dispatchQty;
+  const remaining = Math.max(0, job.qtySheets - newTotal);
+
+  let jobStatus = job.status;
+  if (newTotal >= job.qtySheets && job.status !== "dispatched") {
+    await db.update(jobsTable).set({ status: "dispatched" }).where(eq(jobsTable.id, params.data.id));
+    jobStatus = "dispatched";
+  }
+
+  res.status(201).json({ ...dispatch, totalDispatched: newTotal, remaining, jobStatus });
+});
+
+router.get("/dispatches/:dispatchId", async (req, res): Promise<void> => {
+  const params = GetDispatchParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [dispatch] = await db.select().from(jobDispatchesTable)
+    .where(eq(jobDispatchesTable.id, params.data.dispatchId));
+  if (!dispatch) { res.status(404).json({ error: "Dispatch not found" }); return; }
+
+  const [job] = await db.select({
+    jobCode: jobsTable.jobCode,
+    jobName: jobsTable.jobName,
+    clientName: jobsTable.clientName,
+    qtySheets: jobsTable.qtySheets,
+  }).from(jobsTable).where(eq(jobsTable.id, dispatch.jobId));
+
+  const allDispatches = await db.select({ dispatchQty: jobDispatchesTable.dispatchQty })
+    .from(jobDispatchesTable).where(eq(jobDispatchesTable.jobId, dispatch.jobId));
+  const totalDispatched = allDispatches.reduce((sum, d) => sum + d.dispatchQty, 0);
+
+  res.json({ ...dispatch, ...(job ?? {}), totalDispatched });
 });
 
 router.post("/wastage-log", async (req, res): Promise<void> => {
