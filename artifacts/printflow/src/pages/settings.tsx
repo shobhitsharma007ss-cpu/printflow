@@ -18,8 +18,9 @@ import {
   useAlertRecipients, useAddAlertRecipient, useDeleteAlertRecipient,
   useAlertLog, useSendTestAlert,
 } from "@/hooks/use-alerts";
+import { useCostingSettings, useUpdateCostingSetting, COSTING_SETTINGS_DEFAULTS } from "@/hooks/use-costing-settings";
 
-type Section = "machines" | "materials" | "vendors" | "templates" | "staff" | "alerts";
+type Section = "machines" | "materials" | "vendors" | "templates" | "staff" | "alerts" | "costing";
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>("machines");
@@ -31,6 +32,7 @@ export default function Settings() {
     { key: "templates" as Section, label: "Job Templates", icon: Briefcase },
     { key: "staff" as Section, label: "Staff", icon: UserCog },
     { key: "alerts" as Section, label: "Alerts", icon: Bell },
+    { key: "costing" as Section, label: "Costing", icon: IndianRupee },
   ];
 
   return (
@@ -67,6 +69,7 @@ export default function Settings() {
       {activeSection === "templates" && <TemplatesSection />}
       {activeSection === "staff" && <StaffSection />}
       {activeSection === "alerts" && <AlertsSection />}
+      {activeSection === "costing" && <CostingSection />}
 
       <DangerZone />
     </div>
@@ -1889,6 +1892,264 @@ function AlertsSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CostingSection() {
+  const { data: rawSettings, isLoading } = useCostingSettings();
+  const updateSetting = useUpdateCostingSetting();
+  const settings = rawSettings ?? COSTING_SETTINGS_DEFAULTS;
+
+  const [inkCov, setInkCov] = useState(settings.ink_coverage);
+  const [mkBases, setMkBases] = useState(settings.makeready_bases);
+  const [dieWaste, setDieWaste] = useState(settings.die_setup_waste_sheets);
+  const [gluerWaste, setGluerWaste] = useState(settings.gluer_setup_waste_cartons);
+  const [glueGrams, setGlueGrams] = useState(settings.glue_grams);
+  const [glueRate, setGlueRate] = useState(settings.glue_rate_per_kg);
+  const [finRates, setFinRates] = useState(settings.finishing_rates);
+  const [freightDef, setFreightDef] = useState(settings.freight_packing_default);
+
+  React.useEffect(() => {
+    if (rawSettings) {
+      setInkCov(rawSettings.ink_coverage);
+      setMkBases(rawSettings.makeready_bases);
+      setDieWaste(rawSettings.die_setup_waste_sheets);
+      setGluerWaste(rawSettings.gluer_setup_waste_cartons);
+      setGlueGrams(rawSettings.glue_grams);
+      setGlueRate(rawSettings.glue_rate_per_kg);
+      setFinRates(rawSettings.finishing_rates);
+      setFreightDef(rawSettings.freight_packing_default);
+    }
+  }, [rawSettings]);
+
+  function save(key: string, value: unknown) {
+    updateSetting.mutate({ key, value }, {
+      onSuccess: () => toast.success(`Costing setting "${key}" saved`),
+      onError:   () => toast.error(`Failed to save "${key}"`),
+    });
+  }
+
+  if (isLoading) return <LoadingSpinner />;
+
+  const CARTON_STYLES = [
+    { key: "straight_tuck", label: "Straight Tuck" },
+    { key: "reverse_tuck",  label: "Reverse Tuck"  },
+    { key: "auto_bottom",   label: "Auto Bottom"   },
+    { key: "crash_lock",    label: "Crash Lock"    },
+  ];
+
+  const FINISHING_LABELS: Record<string, string> = {
+    lamination_bopp_gloss: "Lamination — BOPP Gloss",
+    lamination_bopp_matt:  "Lamination — BOPP Matt",
+    foil_stamping:         "Foil Stamping",
+    embossing:             "Embossing",
+    spot_uv:               "Spot UV",
+    window_patching:       "Window Patching",
+  };
+  const FINISHING_UNITS: Record<string, string> = {
+    lamination_bopp_gloss: "₹ per m²",
+    lamination_bopp_matt:  "₹ per m²",
+    foil_stamping:         "₹ per m² (foil area)",
+    embossing:             "₹ per m²",
+    spot_uv:               "₹ per m² (effect area)",
+    window_patching:       "₹ per carton",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold">Costing Defaults</h2>
+        <p className="text-sm text-muted-foreground">These values are used as defaults in the Costing Calculator. Individual quotes can override ink rates.</p>
+      </div>
+
+      {/* Ink Coverage */}
+      <Card className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-sm">Ink Coverage (kg/m²)</h3>
+          <Button size="sm" onClick={() => save("ink_coverage", inkCov)} disabled={updateSetting.isPending}>
+            <Save size={13} className="mr-1" /> Save
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-1.5 text-xs text-muted-foreground font-semibold">Preset</th>
+                <th className="text-right py-1.5 text-xs text-muted-foreground font-semibold pr-2">CMYK (kg/m²)</th>
+                <th className="text-right py-1.5 text-xs text-muted-foreground font-semibold">Spot (kg/m²)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {(["light", "medium", "heavy"] as const).map(tier => (
+                <tr key={tier}>
+                  <td className="py-2 pr-3 capitalize font-medium text-xs w-24">{tier}</td>
+                  <td className="py-2 pr-2">
+                    <Input
+                      type="number" step={0.01} min={0} className="w-24 h-8 text-xs text-right ml-auto"
+                      value={inkCov[tier].cmykKg}
+                      onChange={e => setInkCov(p => ({ ...p, [tier]: { ...p[tier], cmykKg: parseFloat(e.target.value) || 0 } }))}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      type="number" step={0.01} min={0} className="w-24 h-8 text-xs text-right ml-auto"
+                      value={inkCov[tier].spotKg}
+                      onChange={e => setInkCov(p => ({ ...p, [tier]: { ...p[tier], spotKg: parseFloat(e.target.value) || 0 } }))}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Makeready bases */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-sm">Press Makeready Bases (sheets)</h3>
+            <p className="text-xs text-muted-foreground">Applied automatically based on total colour count.</p>
+          </div>
+          <Button size="sm" onClick={() => save("makeready_bases", mkBases)} disabled={updateSetting.isPending}>
+            <Save size={13} className="mr-1" /> Save
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs mb-1 block">1–4 total colours</Label>
+            <Input type="number" min={0} className="h-9" value={mkBases.lt5c}
+              onChange={e => setMkBases(p => ({ ...p, lt5c: parseInt(e.target.value) || 0 }))} />
+          </div>
+          <div>
+            <Label className="text-xs mb-1 block">5+ total colours</Label>
+            <Input type="number" min={0} className="h-9" value={mkBases.ge5c}
+              onChange={e => setMkBases(p => ({ ...p, ge5c: parseInt(e.target.value) || 0 }))} />
+          </div>
+        </div>
+      </Card>
+
+      {/* Die + Gluer setup waste */}
+      <Card className="p-4 space-y-3">
+        <h3 className="font-bold text-sm">Machine Setup Waste</h3>
+        <p className="text-xs text-muted-foreground">Sheets consumed during machine changeover — added to the sheet plan.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase">Die-Cutter (sheets)</h4>
+            <div>
+              <Label className="text-xs mb-1 block">Existing die</Label>
+              <div className="flex gap-2">
+                <Input type="number" min={0} className="h-9 flex-1" value={dieWaste.existing}
+                  onChange={e => setDieWaste(p => ({ ...p, existing: parseInt(e.target.value) || 0 }))} />
+                <Button size="sm" onClick={() => save("die_setup_waste_sheets", dieWaste)} disabled={updateSetting.isPending}>
+                  <Save size={13} />
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">New die</Label>
+              <div className="flex gap-2">
+                <Input type="number" min={0} className="h-9 flex-1" value={dieWaste.new_die}
+                  onChange={e => setDieWaste(p => ({ ...p, new_die: parseInt(e.target.value) || 0 }))} />
+                <Button size="sm" onClick={() => save("die_setup_waste_sheets", dieWaste)} disabled={updateSetting.isPending}>
+                  <Save size={13} />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase">Folder-Gluer (cartons)</h4>
+            <div>
+              <Label className="text-xs mb-1 block">Setup waste cartons</Label>
+              <div className="flex gap-2">
+                <Input type="number" min={0} className="h-9 flex-1" value={gluerWaste.value}
+                  onChange={e => setGluerWaste({ value: parseInt(e.target.value) || 0 })} />
+                <Button size="sm" onClick={() => save("gluer_setup_waste_cartons", gluerWaste)} disabled={updateSetting.isPending}>
+                  <Save size={13} />
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Converted to sheets by dividing by ups per sheet.</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Glue */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-sm">Glue Usage &amp; Rate</h3>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => save("glue_grams", glueGrams)} disabled={updateSetting.isPending}>
+              <Save size={13} className="mr-1" /> Save grams
+            </Button>
+            <Button size="sm" onClick={() => save("glue_rate_per_kg", glueRate)} disabled={updateSetting.isPending}>
+              <Save size={13} className="mr-1" /> Save rate
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {CARTON_STYLES.map(s => (
+            <div key={s.key}>
+              <Label className="text-xs mb-1 block">{s.label} (g/carton)</Label>
+              <Input type="number" step={0.05} min={0} className="h-9"
+                value={glueGrams[s.key] ?? 0.4}
+                onChange={e => setGlueGrams(p => ({ ...p, [s.key]: parseFloat(e.target.value) || 0 }))} />
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-border pt-3">
+          <Label className="text-xs mb-1 block">Glue Rate (₹/kg)</Label>
+          <Input type="number" min={0} className="h-9 max-w-[160px]" value={glueRate.value}
+            onChange={e => setGlueRate({ value: parseFloat(e.target.value) || 0 })} />
+        </div>
+      </Card>
+
+      {/* Finishing process rates */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-sm">Finishing Process Rates</h3>
+            <p className="text-xs text-muted-foreground">Applied when toggled on in the Costing Calculator.</p>
+          </div>
+          <Button size="sm" onClick={() => save("finishing_rates", finRates)} disabled={updateSetting.isPending}>
+            <Save size={13} className="mr-1" /> Save all
+          </Button>
+        </div>
+        <div className="divide-y divide-border/60">
+          {Object.entries(finRates).map(([key, fr]) => (
+            <div key={key} className="py-2.5 flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-xs font-medium">{FINISHING_LABELS[key] ?? key}</p>
+                <p className="text-xs text-muted-foreground">{FINISHING_UNITS[key]}</p>
+              </div>
+              <Input
+                type="number" step={0.01} min={0} className="w-28 h-8 text-xs text-right"
+                value={fr.rate}
+                onChange={e => setFinRates(p => ({
+                  ...p,
+                  [key]: { ...p[key], rate: parseFloat(e.target.value) || 0 },
+                }))}
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Freight / packing default */}
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-sm">Freight &amp; Packing Default (₹)</h3>
+            <p className="text-xs text-muted-foreground">Pre-fills the freight field in new quotes. Override per-quote as needed.</p>
+          </div>
+          <Button size="sm" onClick={() => save("freight_packing_default", freightDef)} disabled={updateSetting.isPending}>
+            <Save size={13} className="mr-1" /> Save
+          </Button>
+        </div>
+        <Input type="number" min={0} className="h-9 max-w-[200px]" value={freightDef.value}
+          onChange={e => setFreightDef({ value: parseFloat(e.target.value) || 0 })} />
+      </Card>
     </div>
   );
 }

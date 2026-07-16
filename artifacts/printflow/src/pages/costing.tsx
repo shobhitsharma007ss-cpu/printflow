@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Calculator, Save, Copy, Info, Printer, Link2, FileText, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Calculator, Save, Copy, Info, Printer, Link2, FileText, ArrowRight, CheckCircle2, AlertTriangle, TrendingUp, Layers } from "lucide-react";
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMachines } from "@/hooks/use-machines";
 import { useMaterials } from "@/hooks/use-inventory";
@@ -11,6 +11,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useListJobQuotes, useConvertJobQuote, getListJobQuotesQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import type { Machine } from "@workspace/api-client-react";
+import { flatBlank, upsOnSheet } from "@/lib/imposition";
+import { useCostingSettings, COSTING_SETTINGS_DEFAULTS, type CostingSettingsMap } from "@/hooks/use-costing-settings";
 
 type MachineRow = Machine;
 
@@ -68,6 +70,17 @@ interface CostForm {
   aqueousRate: string;
   uvRate: string;
   varnishRate: string;
+  // ── New fields ─────────────────────────────────────────────
+  inkCoveragePreset: string;
+  laminationBoppGloss: boolean;
+  laminationBoppMatt: boolean;
+  foilStamping: boolean;
+  foilAreaPct: string;
+  embossing: boolean;
+  spotUvFinish: boolean;
+  spotUvAreaPct: string;
+  windowPatching: boolean;
+  freightPacking: string;
 }
 
 const DEFAULTS: CostForm = {
@@ -100,13 +113,23 @@ const DEFAULTS: CostForm = {
   ohPct: "10",
   adminOhPct: "5",
   profitPct: "0",
-  gstPct: "12",
+  gstPct: "18",
   plateRate: "1200",
   cmykInkRate: "420",
   spotInkRate: "650",
   aqueousRate: "230",
   uvRate: "380",
   varnishRate: "180",
+  inkCoveragePreset: "medium",
+  laminationBoppGloss: false,
+  laminationBoppMatt: false,
+  foilStamping: false,
+  foilAreaPct: "100",
+  embossing: false,
+  spotUvFinish: false,
+  spotUvAreaPct: "100",
+  windowPatching: false,
+  freightPacking: "0",
 };
 
 function coatingLabel(type: string) {
@@ -116,11 +139,18 @@ function coatingLabel(type: string) {
   return "Coating";
 }
 
+const INK_COVERAGE = {
+  light:  { cmykKg: 0.28, spotKg: 0.48 },
+  medium: { cmykKg: 0.35, spotKg: 0.60 },
+  heavy:  { cmykKg: 0.45, spotKg: 0.75 },
+};
+
 function compute(
   form: CostForm,
   machine: MachineRow | null,
   dieMachine: MachineRow | null,
   gluerMachine: MachineRow | null,
+  settings: CostingSettingsMap = COSTING_SETTINGS_DEFAULTS,
 ) {
   const qty        = n(form.qtyRequired);
   const L_cm       = n(form.sheetLengthIn) * 2.54;
@@ -141,7 +171,7 @@ function compute(
   const ohPct      = n(form.ohPct, 10);
   const adminOhPct = n(form.adminOhPct, 5);
   const profitPct  = n(form.profitPct);
-  const gstPct     = n(form.gstPct, 12);
+  const gstPct     = n(form.gstPct, 18);
   const plateEach  = n(form.plateRate, 1200);
   const cmykRate   = n(form.cmykInkRate, 420);
   const spotRate   = n(form.spotInkRate, 650);
@@ -150,7 +180,7 @@ function compute(
   const varnishRate = n(form.varnishRate, 180);
   const clMm       = Math.max(1, n(form.cartonLengthMm, 100));
 
-  // Press params from machine row (DB seeded values)
+  // Press params from machine row
   const ratedSph = machine?.ratedSph ?? 12000;
   const oee      = machine?.oeeDefault != null ? parseFloat(String(machine.oeeDefault)) : 0.70;
   const setupMin = machine?.setupMinRepeat ?? 30;
@@ -161,12 +191,23 @@ function compute(
   const sheetCostEa = sheetWtKg * ratePerKg;
   const sheetAreaM2 = (L_cm * B_cm) / 10_000;
 
-  // Quantities — makeready doubles when passes >= 2
-  const reqSheets    = Math.ceil(qty / ups);
-  const baseReady    = totalC >= 5 ? 500 : 400;
-  const makeready    = mkOverride > 0 ? mkOverride : passes >= 2 ? baseReady * 2 : baseReady;
-  const planSheets   = Math.ceil((reqSheets + makeready) * (1 + wastePct / 100));
+  // Makeready from settings
+  const mb = settings.makeready_bases;
+  const baseReady = totalC >= 5 ? mb.ge5c : mb.lt5c;
+  const makeready = mkOverride > 0 ? mkOverride : passes >= 2 ? baseReady * 2 : baseReady;
   const makereadyAuto = passes >= 2 ? baseReady * 2 : baseReady;
+
+  // Setup waste from settings
+  const dieSetupWaste = settings.die_setup_waste_sheets;
+  const dieSetupWasteSheets = isNewDie ? dieSetupWaste.new_die : dieSetupWaste.existing;
+  const gluerSetupWasteCartons = settings.gluer_setup_waste_cartons.value;
+  const gluerSetupWasteSheets = Math.ceil(gluerSetupWasteCartons / ups);
+
+  // Quantities — makeready + die/gluer setup waste all feed into plan
+  const reqSheets  = Math.ceil(qty / ups);
+  const planSheets = Math.ceil(
+    (reqSheets + makeready + dieSetupWasteSheets + gluerSetupWasteSheets) * (1 + wastePct / 100),
+  );
 
   // Paper
   const paperCost = planSheets * sheetCostEa;
@@ -180,10 +221,11 @@ function compute(
   const pressRunMin = effSph > 0 ? (planSheets / effSph) * 60 * passes : 0;
   const pressCost   = ((setupMin + pressRunMin) / 60) * hrRate;
 
-  // Ink
+  // Ink — coverage from preset
+  const cov = INK_COVERAGE[form.inkCoveragePreset as keyof typeof INK_COVERAGE] ?? INK_COVERAGE.medium;
   const imgAreaM2      = sheetAreaM2 * 0.75;
-  const cmykKgPerColor = (imgAreaM2 * 0.35 * planSheets * 1.3) / 1000;
-  const spotKgPerColor = (imgAreaM2 * 0.60 * planSheets * 1.5) / 1000;
+  const cmykKgPerColor = (imgAreaM2 * cov.cmykKg * planSheets * 1.3) / 1000;
+  const spotKgPerColor = (imgAreaM2 * cov.spotKg * planSheets * 1.5) / 1000;
   const cmykCost       = procC * cmykKgPerColor * cmykRate;
   const spotCostAmt    = spotC * spotKgPerColor * spotRate;
   const inkCost        = cmykCost + spotCostAmt;
@@ -206,7 +248,7 @@ function compute(
     coatingCost = coatingKg * varnishRate;
   }
 
-  // Die cutter — params from selected machine row, fallbacks = legacy hardcodes
+  // Die cutter
   const dieRunSph   = dieMachine?.peakRunningSph ?? 5200;
   const dieSetupMin = isNewDie
     ? (dieMachine?.setupMinNew ?? 105)
@@ -216,7 +258,7 @@ function compute(
   let dieCutCost    = ((dieSetupMin + dieRunMin) / 60) * dieHrRate;
   if (isNewDie) dieCutCost += dieFab;
 
-  // Folder-gluer (carton units) — params from selected machine row, fallbacks = legacy hardcodes
+  // Folder-gluer
   const styleFact  = STYLE_FACTORS[form.cartonStyle] ?? 1.0;
   const glFeedM    = gluerMachine?.ratedSpeedMPerMin ?? 350;
   const glEff      = gluerMachine?.oeeDefault != null ? parseFloat(String(gluerMachine.oeeDefault)) : 0.65;
@@ -226,14 +268,31 @@ function compute(
   const effCph     = ratedCph * glEff * styleFact;
   const glueRunMin = qty > 0 && effCph > 0 ? (qty / effCph) * 60 : 0;
   const gluerCost  = ((glSetupMin + glueRunMin) / 60) * glHrRate;
-  const glueCost   = (qty * 0.4 / 1000) * 150;
+
+  // Glue — per-style grams from settings
+  const glueGramsPerCarton = (settings.glue_grams[form.cartonStyle] ?? 0.4);
+  const glueRatePerKg = settings.glue_rate_per_kg.value;
+  const glueCost = (qty * glueGramsPerCarton / 1000) * glueRatePerKg;
 
   // Handwork
   const hwCost = (qty / 1000) * hwPer1k;
 
+  // Finishing processes
+  const fr = settings.finishing_rates;
+  const laminGlossCost   = form.laminationBoppGloss ? planSheets * sheetAreaM2 * fr.lamination_bopp_gloss.rate : 0;
+  const laminMattCost    = form.laminationBoppMatt  ? planSheets * sheetAreaM2 * fr.lamination_bopp_matt.rate  : 0;
+  const foilCost         = form.foilStamping        ? planSheets * sheetAreaM2 * (n(form.foilAreaPct, 100) / 100) * fr.foil_stamping.rate : 0;
+  const embossingCostAmt = form.embossing           ? planSheets * sheetAreaM2 * fr.embossing.rate : 0;
+  const spotUvFinishCost = form.spotUvFinish        ? planSheets * sheetAreaM2 * (n(form.spotUvAreaPct, 100) / 100) * fr.spot_uv.rate : 0;
+  const windowPatchCost  = form.windowPatching      ? qty * fr.window_patching.rate : 0;
+  const finishingCost    = laminGlossCost + laminMattCost + foilCost + embossingCostAmt + spotUvFinishCost + windowPatchCost;
+
+  // Freight / packing
+  const freightPackingCost = n(form.freightPacking);
+
   // Totals
   const directCost = paperCost + plateCost + pressCost + inkCost + coatingCost
-    + dieCutCost + gluerCost + glueCost + hwCost;
+    + dieCutCost + gluerCost + glueCost + hwCost + finishingCost + freightPackingCost;
   const factoryOh  = directCost * (ohPct / 100);
   const adminOh    = directCost * (adminOhPct / 100);
   const subtotal   = directCost + factoryOh + adminOh;
@@ -246,13 +305,17 @@ function compute(
   return {
     qty, sheetWtKg, sheetCostEa, sheetAreaM2,
     reqSheets, makeready, makereadyAuto, planSheets,
+    dieSetupWasteSheets, gluerSetupWasteSheets,
     paperCost, plateCnt, plateCost,
     ratedSph, oee, setupMin, hrRate, pressRunMin, pressCost,
     cmykCost, spotCostAmt, inkCost,
     coatingCost, coatingKg, coatingRate,
     dieRunSph, dieSetupMin, dieHrRate, dieRunMin, dieCutCost,
     glFeedM, glEff, glSetupMin, glHrRate, ratedCph, effCph, glueRunMin, gluerCost, glueCost,
-    hwCost, directCost, factoryOh, adminOh,
+    hwCost,
+    laminGlossCost, laminMattCost, foilCost, embossingCostAmt, spotUvFinishCost, windowPatchCost, finishingCost,
+    freightPackingCost,
+    directCost, factoryOh, adminOh,
     subtotal, profit, preGst, gstAmt, finalTotal, per1kRate,
     procC, spotC, totalC, passes,
   };
@@ -275,6 +338,19 @@ function Row({
   );
 }
 
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn("w-10 h-6 rounded-full relative transition-colors shrink-0",
+        on ? "bg-primary" : "bg-muted-foreground/30")}
+    >
+      <span className={cn("absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all",
+        on ? "left-[18px]" : "left-0.5")} />
+    </button>
+  );
+}
+
 export default function CostingPage() {
   const [form, setForm]     = useState<CostForm>(DEFAULTS);
   const [view, setView]     = useState<"detailed" | "customer">("detailed");
@@ -291,6 +367,9 @@ export default function CostingPage() {
   const { data: machines }  = useMachines();
   const { data: materials } = useMaterials();
   const { data: jobs }      = useJobs();
+  const { data: costSettings } = useCostingSettings();
+
+  const settings = costSettings ?? COSTING_SETTINGS_DEFAULTS;
 
   const field = (k: keyof CostForm) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -348,9 +427,32 @@ export default function CostingPage() {
   }, [dieOptions, gluerOptions]);
 
   const c = useMemo(
-    () => compute(form, selMachine, selDieMachine, selGluerMachine),
-    [form, selMachine, selDieMachine, selGluerMachine],
+    () => compute(form, selMachine, selDieMachine, selGluerMachine, settings),
+    [form, selMachine, selDieMachine, selGluerMachine, settings],
   );
+
+  // Slab comparison — same params, three quantities
+  const slabs = useMemo(() => {
+    return [10000, 25000, 50000].map(qty => ({
+      qty,
+      result: compute({ ...form, qtyRequired: String(qty) }, selMachine, selDieMachine, selGluerMachine, settings),
+    }));
+  }, [form, selMachine, selDieMachine, selGluerMachine, settings]);
+
+  // Ups cross-check via imposition engine
+  const impositionCheck = useMemo(() => {
+    const L = n(form.cartonLengthMm);
+    const W = n(form.cartonWidthMm);
+    const H = n(form.cartonHeightMm);
+    if (!L || !W || !H) return null;
+    const blank = flatBlank(L, W, H, form.cartonStyle);
+    const longMm  = n(form.sheetLengthIn)  * 25.4;
+    const shortMm = n(form.sheetBreadthIn) * 25.4;
+    if (!longMm || !shortMm) return null;
+    const res = upsOnSheet(blank.blankW, blank.blankH, longMm, shortMm);
+    const entered = Math.max(1, n(form.upsPerSheet, 1));
+    return { maxUps: res.ups, entered, overLimit: entered > res.ups, blankW: blank.blankW, blankH: blank.blankH };
+  }, [form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm, form.cartonStyle, form.sheetLengthIn, form.sheetBreadthIn, form.upsPerSheet]);
 
   // Receive a layout handed off from the Layout Planner (sessionStorage, one-shot).
   useEffect(() => {
@@ -391,8 +493,6 @@ export default function CostingPage() {
     }
     const mat = boardMats.find(m => m.id === job.materialId);
 
-    // Sheet dimensions live on the material as a string like "23x36".
-    // Values are treated as inches unless the string explicitly carries a cm/mm unit.
     let sheetDims: { sheetLengthIn: string; sheetBreadthIn: string } | undefined;
     if (mat?.dimensions) {
       const raw = mat.dimensions.toLowerCase();
@@ -538,6 +638,8 @@ export default function CostingPage() {
     : form.coatingType === "varnish"
     ? `₹${n(form.varnishRate)}/kg varnish`
     : "";
+
+  const profitIsZero = n(form.profitPct) === 0;
 
   return (
     <>
@@ -706,21 +808,11 @@ export default function CostingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs mb-1 block">Job Name</Label>
-                  <Input
-                    value={form.jobName}
-                    onChange={field("jobName")}
-                    placeholder="e.g. Pharma Carton – Batch 3"
-                    className="text-sm"
-                  />
+                  <Input value={form.jobName} onChange={field("jobName")} placeholder="e.g. Pharma Carton – Batch 3" className="text-sm" />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Client Name</Label>
-                  <Input
-                    value={form.clientName}
-                    onChange={field("clientName")}
-                    placeholder="e.g. Sun Pharma Ltd."
-                    className="text-sm"
-                  />
+                  <Input value={form.clientName} onChange={field("clientName")} placeholder="e.g. Sun Pharma Ltd." className="text-sm" />
                 </div>
               </div>
             </Card>
@@ -731,16 +823,10 @@ export default function CostingPage() {
                 <Link2 size={12} />
                 Link to Job (optional)
               </h3>
-              <Select
-                value={form.linkedJobId}
-                onChange={e => handleJobLink(e.target.value)}
-                className="w-full"
-              >
+              <Select value={form.linkedJobId} onChange={e => handleJobLink(e.target.value)} className="w-full">
                 <option value="">— Standalone quote —</option>
                 {activeJobs.map(j => (
-                  <option key={j.id} value={j.id}>
-                    {j.jobCode} · {j.jobName} ({j.clientName})
-                  </option>
+                  <option key={j.id} value={j.id}>{j.jobCode} · {j.jobName} ({j.clientName})</option>
                 ))}
               </Select>
               {form.linkedJobId && (
@@ -751,7 +837,7 @@ export default function CostingPage() {
               )}
             </Card>
 
-            {/* Job Quantity */}
+            {/* Job Quantity + Ups */}
             <Card className="p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Job Details</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -761,7 +847,22 @@ export default function CostingPage() {
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Ups per Sheet</Label>
-                  <Input type="number" value={form.upsPerSheet} onChange={field("upsPerSheet")} min={1} />
+                  <Input
+                    type="number"
+                    value={form.upsPerSheet}
+                    onChange={field("upsPerSheet")}
+                    min={1}
+                    className={cn(impositionCheck?.overLimit && "border-rose-500 focus:ring-rose-500")}
+                  />
+                  {impositionCheck && (
+                    <p className={cn("mt-1 text-xs flex items-center gap-1",
+                      impositionCheck.overLimit ? "text-rose-600 font-semibold" : "text-muted-foreground")}>
+                      {impositionCheck.overLimit
+                        ? <><AlertTriangle size={11} className="shrink-0" /> {impositionCheck.entered} ups entered but max computed is {impositionCheck.maxUps} for this blank ({Math.round(impositionCheck.blankW)}×{Math.round(impositionCheck.blankH)} mm) on this sheet — check layout</>
+                        : <><CheckCircle2 size={11} className="shrink-0 text-emerald-500" /> Max computed: {impositionCheck.maxUps} ups — entered is within limit</>
+                      }
+                    </p>
+                  )}
                 </div>
               </div>
             </Card>
@@ -813,9 +914,7 @@ export default function CostingPage() {
                 >
                   <option value="">— Manual entry —</option>
                   {boardMats.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.materialName}{m.ratePerUnit ? ` · ₹${m.ratePerUnit}/kg` : ""}
-                    </option>
+                    <option key={m.id} value={m.id}>{m.materialName}{m.ratePerUnit ? ` · ₹${m.ratePerUnit}/kg` : ""}</option>
                   ))}
                 </Select>
               </div>
@@ -848,9 +947,31 @@ export default function CostingPage() {
                   <span className="text-muted-foreground">Sheet cost</span>
                   <span className="font-medium">₹{dec(c.sheetCostEa, 4)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Planned sheets</span>
-                  <span className="font-medium">{c.planSheets.toLocaleString("en-IN")}</span>
+                <div className="flex justify-between font-semibold">
+                  <span>Planned sheets</span>
+                  <span>{c.planSheets.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="pl-2">↳ for qty</span>
+                  <span>{c.reqSheets.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="pl-2">↳ press makeready</span>
+                  <span className={cn(form.makereadyOverride ? "text-amber-500 font-medium" : "")}>
+                    {form.makereadyOverride ? `${n(form.makereadyOverride)} (override)` : `${c.makereadyAuto}${c.passes >= 2 ? " ×2" : ""}`}
+                  </span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="pl-2">↳ die setup waste</span>
+                  <span>{c.dieSetupWasteSheets}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="pl-2">↳ gluer setup waste</span>
+                  <span>{c.gluerSetupWasteSheets}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="pl-2">↳ running waste {form.runningWastePct}%</span>
+                  <span>{(c.planSheets - Math.ceil((c.reqSheets + c.makeready + c.dieSetupWasteSheets + c.gluerSetupWasteSheets))).toLocaleString("en-IN")}</span>
                 </div>
               </div>
             </Card>
@@ -882,9 +1003,7 @@ export default function CostingPage() {
                 <Label className="text-xs mb-1 block">Press Machine</Label>
                 <Select value={form.selectedMachineId} onChange={field("selectedMachineId")} className="w-full">
                   <option value="">— Default (Komori LA37 params) —</option>
-                  {pressOptions.map(m => (
-                    <option key={m.id} value={m.id}>{m.machineName}</option>
-                  ))}
+                  {pressOptions.map(m => <option key={m.id} value={m.id}>{m.machineName}</option>)}
                 </Select>
               </div>
               <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs space-y-0.5">
@@ -900,18 +1019,12 @@ export default function CostingPage() {
                   <span className="text-muted-foreground">Press hour rate</span>
                   <span className="font-medium">₹{c.hrRate.toLocaleString("en-IN")}/hr</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Makeready sheets</span>
-                  <span className={cn("font-medium", form.makereadyOverride ? "text-amber-500" : "")}>
-                    {form.makereadyOverride ? `${n(form.makereadyOverride)} (override)` : `${c.makereadyAuto}${c.passes >= 2 ? " (×2 for 2-pass)" : ""}`}
-                  </span>
-                </div>
               </div>
             </Card>
 
-            {/* Coating & Die */}
+            {/* Inline Coating & Die */}
             <Card className="p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Coating & Finishing</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Inline Coating & Die</h3>
               <div>
                 <Label className="text-xs mb-1 block">Coating Type</Label>
                 <Select value={form.coatingType} onChange={field("coatingType")} className="w-full">
@@ -925,30 +1038,19 @@ export default function CostingPage() {
                 <Label className="text-xs mb-1 block">Die Cutter</Label>
                 <Select value={form.selectedDieCutterId} onChange={field("selectedDieCutterId")} className="w-full">
                   <option value="">— Default die-cutter params —</option>
-                  {dieOptions.map(m => (
-                    <option key={m.id} value={m.id}>{m.machineName}</option>
-                  ))}
+                  {dieOptions.map(m => <option key={m.id} value={m.id}>{m.machineName}</option>)}
                 </Select>
               </div>
               <div>
                 <Label className="text-xs mb-1 block">Folder Gluer</Label>
                 <Select value={form.selectedGluerId} onChange={field("selectedGluerId")} className="w-full">
                   <option value="">— Default folder-gluer params —</option>
-                  {gluerOptions.map(m => (
-                    <option key={m.id} value={m.id}>{m.machineName}</option>
-                  ))}
+                  {gluerOptions.map(m => <option key={m.id} value={m.id}>{m.machineName}</option>)}
                 </Select>
               </div>
               <div className="flex items-center justify-between py-1">
                 <Label className="text-xs font-medium">New Die Required?</Label>
-                <button
-                  onClick={() => setForm(p => ({ ...p, isNewDie: !p.isNewDie }))}
-                  className={cn("w-10 h-6 rounded-full relative transition-colors",
-                    form.isNewDie ? "bg-primary" : "bg-muted-foreground/30")}
-                >
-                  <span className={cn("absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all",
-                    form.isNewDie ? "left-[18px]" : "left-0.5")} />
-                </button>
+                <Toggle on={form.isNewDie} onToggle={() => setForm(p => ({ ...p, isNewDie: !p.isNewDie }))} />
               </div>
               {form.isNewDie && (
                 <div>
@@ -956,6 +1058,67 @@ export default function CostingPage() {
                   <Input type="number" value={form.dieFabCost} onChange={field("dieFabCost")} min={0} />
                 </div>
               )}
+            </Card>
+
+            {/* Finishing Processes */}
+            <Card className="p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Layers size={12} />
+                Finishing Processes
+              </h3>
+              <p className="text-xs text-muted-foreground">Rates are configured in Settings → Costing. Toggle to include in cost.</p>
+              <div className="space-y-2.5">
+                {([
+                  { key: "laminationBoppGloss" as const, label: "BOPP Lamination — Gloss", rate: settings.finishing_rates.lamination_bopp_gloss.rate, unit: "₹/m²" },
+                  { key: "laminationBoppMatt"  as const, label: "BOPP Lamination — Matt",  rate: settings.finishing_rates.lamination_bopp_matt.rate,  unit: "₹/m²" },
+                  { key: "embossing"           as const, label: "Embossing",                rate: settings.finishing_rates.embossing.rate,               unit: "₹/m²" },
+                  { key: "windowPatching"      as const, label: "Window Patching",          rate: settings.finishing_rates.window_patching.rate,         unit: "₹/carton" },
+                ] as const).map(item => (
+                  <div key={item.key} className="flex items-center justify-between py-0.5">
+                    <div>
+                      <p className="text-xs font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">₹{item.rate}/{item.unit === "₹/m²" ? "m²" : "carton"}</p>
+                    </div>
+                    <Toggle on={form[item.key]} onToggle={() => setForm(p => ({ ...p, [item.key]: !p[item.key] }))} />
+                  </div>
+                ))}
+
+                {/* Foil stamping with area % */}
+                <div className="flex items-start justify-between py-0.5 gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">Foil Stamping</p>
+                    <p className="text-xs text-muted-foreground">₹{settings.finishing_rates.foil_stamping.rate}/m²</p>
+                    {form.foilStamping && (
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <Input
+                          type="number" value={form.foilAreaPct} onChange={field("foilAreaPct")}
+                          min={1} max={100} className="w-20 text-xs h-7 px-2"
+                        />
+                        <span className="text-xs text-muted-foreground">% of sheet area</span>
+                      </div>
+                    )}
+                  </div>
+                  <Toggle on={form.foilStamping} onToggle={() => setForm(p => ({ ...p, foilStamping: !p.foilStamping }))} />
+                </div>
+
+                {/* Spot UV with area % */}
+                <div className="flex items-start justify-between py-0.5 gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium">Spot UV</p>
+                    <p className="text-xs text-muted-foreground">₹{settings.finishing_rates.spot_uv.rate}/m²</p>
+                    {form.spotUvFinish && (
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <Input
+                          type="number" value={form.spotUvAreaPct} onChange={field("spotUvAreaPct")}
+                          min={1} max={100} className="w-20 text-xs h-7 px-2"
+                        />
+                        <span className="text-xs text-muted-foreground">% of sheet area</span>
+                      </div>
+                    )}
+                  </div>
+                  <Toggle on={form.spotUvFinish} onToggle={() => setForm(p => ({ ...p, spotUvFinish: !p.spotUvFinish }))} />
+                </div>
+              </div>
             </Card>
 
             {/* Cost Parameters */}
@@ -979,7 +1142,6 @@ export default function CostingPage() {
                   <Input type="number" value={form.spotInkRate} onChange={field("spotInkRate")} min={0} />
                 </div>
 
-                {/* Coating rate input — shown per coating type */}
                 {form.coatingType === "aqueous" && (
                   <div className="col-span-2">
                     <Label className="text-xs mb-1 block">Aqueous Rate (₹/kg)</Label>
@@ -1007,6 +1169,18 @@ export default function CostingPage() {
                   <Label className="text-xs mb-1 block">Makeready Override</Label>
                   <Input type="number" value={form.makereadyOverride} onChange={field("makereadyOverride")} placeholder="Auto" min={0} />
                 </div>
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block">Ink Coverage</Label>
+                  <Select value={form.inkCoveragePreset} onChange={field("inkCoveragePreset")} className="w-full">
+                    <option value="light">Light — CMYK 0.28 kg/m², Spot 0.48 kg/m²</option>
+                    <option value="medium">Medium — CMYK 0.35 kg/m², Spot 0.60 kg/m²</option>
+                    <option value="heavy">Heavy — CMYK 0.45 kg/m², Spot 0.75 kg/m²</option>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block">Freight &amp; Packing (₹ flat)</Label>
+                  <Input type="number" value={form.freightPacking} onChange={field("freightPacking")} min={0} placeholder="0" />
+                </div>
               </div>
               <div className="border-t border-border pt-3 grid grid-cols-2 gap-3">
                 <div>
@@ -1019,7 +1193,14 @@ export default function CostingPage() {
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">Profit Margin (%)</Label>
-                  <Input type="number" value={form.profitPct} onChange={field("profitPct")} min={0} step={1} />
+                  <Input
+                    type="number"
+                    value={form.profitPct}
+                    onChange={field("profitPct")}
+                    min={0}
+                    step={1}
+                    className={cn(profitIsZero && "border-amber-400")}
+                  />
                 </div>
                 <div>
                   <Label className="text-xs mb-1 block">GST (%)</Label>
@@ -1034,6 +1215,19 @@ export default function CostingPage() {
 
           {/* ════ RIGHT: BREAKDOWN ════ */}
           <div className="xl:sticky xl:top-6 space-y-4">
+
+            {/* Profit = 0 warning */}
+            {profitIsZero && (
+              <div className="flex items-start gap-3 rounded-xl border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-amber-700 dark:text-amber-400">Profit margin is 0%</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+                    You are quoting at cost — no margin included. Set a profit % in Cost Parameters before finalising this quote.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {view === "detailed" ? (
               <>
@@ -1050,7 +1244,7 @@ export default function CostingPage() {
                     <Row label="Press / Machine" value={c.pressCost}
                       sub={`${dec(c.setupMin, 0)}m setup + ${dec(c.pressRunMin, 1)}m run @ ₹${c.hrRate.toLocaleString("en-IN")}/hr`} />
                     <Row label="Ink — CMYK" value={c.cmykCost}
-                      sub={`${c.procC} process colour${c.procC !== 1 ? "s" : ""}`} />
+                      sub={`${c.procC} colours · ${form.inkCoveragePreset} coverage`} />
                     {c.spotC > 0 && (
                       <Row label="Ink — Spot" value={c.spotCostAmt}
                         sub={`${c.spotC} spot colour${c.spotC !== 1 ? "s" : ""}`} />
@@ -1064,9 +1258,16 @@ export default function CostingPage() {
                     <Row label="Folder-Gluer" value={c.gluerCost}
                       sub={`${dec(c.glSetupMin, 0)}m setup + ${dec(c.glueRunMin, 0)}m run @ ₹${c.glHrRate.toLocaleString("en-IN")}/hr`} />
                     <Row label="Glue" value={c.glueCost}
-                      sub={`${dec(c.qty * 0.4 / 1000, 2)} kg × ₹150/kg`} />
+                      sub={`${dec(c.qty * (settings.glue_grams[form.cartonStyle] ?? 0.4) / 1000, 2)} kg × ₹${settings.glue_rate_per_kg.value}/kg`} />
                     <Row label="Handwork" value={c.hwCost}
                       sub={`₹${n(form.handworkPer1000)} per 1,000`} />
+                    {c.laminGlossCost > 0 && <Row label="Lamination — BOPP Gloss" value={c.laminGlossCost} sub={`₹${settings.finishing_rates.lamination_bopp_gloss.rate}/m²`} />}
+                    {c.laminMattCost > 0 && <Row label="Lamination — BOPP Matt" value={c.laminMattCost} sub={`₹${settings.finishing_rates.lamination_bopp_matt.rate}/m²`} />}
+                    {c.foilCost > 0 && <Row label="Foil Stamping" value={c.foilCost} sub={`₹${settings.finishing_rates.foil_stamping.rate}/m² × ${form.foilAreaPct}%`} />}
+                    {c.embossingCostAmt > 0 && <Row label="Embossing" value={c.embossingCostAmt} sub={`₹${settings.finishing_rates.embossing.rate}/m²`} />}
+                    {c.spotUvFinishCost > 0 && <Row label="Spot UV" value={c.spotUvFinishCost} sub={`₹${settings.finishing_rates.spot_uv.rate}/m² × ${form.spotUvAreaPct}%`} />}
+                    {c.windowPatchCost > 0 && <Row label="Window Patching" value={c.windowPatchCost} sub={`₹${settings.finishing_rates.window_patching.rate}/carton`} />}
+                    {c.freightPackingCost > 0 && <Row label="Freight &amp; Packing" value={c.freightPackingCost} sub="flat amount" />}
                   </div>
                   <div className="divide-y divide-border/60 border-t border-border bg-muted/10">
                     <Row label="Direct Cost" value={c.directCost} bold />
@@ -1136,6 +1337,8 @@ export default function CostingPage() {
                       {[
                         { label: "Plate Charges", val: c.plateCost },
                         ...(c.coatingCost > 0 ? [{ label: coatingLabel(form.coatingType), val: c.coatingCost }] : []),
+                        ...(c.finishingCost > 0 ? [{ label: "Finishing", val: c.finishingCost }] : []),
+                        ...(c.freightPackingCost > 0 ? [{ label: "Freight & Packing", val: c.freightPackingCost }] : []),
                         { label: "Pre-GST Total", val: c.preGst },
                         { label: `GST (${form.gstPct}%)`, val: c.gstAmt },
                       ].map(({ label, val }) => (
@@ -1162,6 +1365,51 @@ export default function CostingPage() {
             )}
           </div>
         </div>
+
+        {/* ── Quantity Slab Comparison ── */}
+        <Card className="overflow-hidden no-print">
+          <div className="px-4 py-3 bg-muted/30 border-b border-border flex items-center gap-2">
+            <TrendingUp size={14} className="text-primary" />
+            <h3 className="font-bold text-sm">Quantity Slab Comparison</h3>
+            <span className="text-xs text-muted-foreground ml-1">same specs · {form.profitPct}% margin · GST {form.gstPct}%</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/20 border-b border-border">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-muted-foreground">Quantity</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Planned Sheets</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Paper Cost</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Direct Cost</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Pre-GST Total</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-muted-foreground">Final (incl. GST)</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold text-primary">Rate / 1k</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {slabs.map(({ qty: slabQty, result: r }) => {
+                  const isActive = slabQty === Math.round(n(form.qtyRequired) / 1000) * 1000
+                    || String(slabQty) === form.qtyRequired;
+                  return (
+                    <tr key={slabQty} className={cn("hover:bg-muted/20 transition-colors", isActive && "bg-primary/5")}>
+                      <td className="px-4 py-2.5 font-semibold tabular-nums">
+                        {slabQty.toLocaleString("en-IN")}
+                        {isActive && <span className="ml-2 text-xs text-primary font-bold">← current</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{r.planSheets.toLocaleString("en-IN")}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(r.paperCost)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(r.directCost)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{fmt(r.preGst)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(r.finalTotal)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-bold text-primary">{fmt(r.per1kRate)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
       </div>
     </>
   );

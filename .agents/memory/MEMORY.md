@@ -1,1 +1,2 @@
 - [API codegen drift](codegen-drift.md) — generated api-zod/api-client-react hold endpoints/fields absent from openapi.yaml; full codegen deletes them and breaks the app. Hand-edit generated schemas instead.
+- [Costing compute architecture](costing-compute-architecture.md) — compute() is pure/sync with settings as 5th param; setup waste in planSheets formula; pharma test ≈₹98k pre-GST validates ₹97k–1.09L range.

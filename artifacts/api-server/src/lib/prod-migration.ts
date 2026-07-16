@@ -14,6 +14,32 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 17: costing_settings table ─────────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS costing_settings (
+        key        TEXT PRIMARY KEY,
+        value      JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`
+      INSERT INTO costing_settings (key, value) VALUES
+        ('ink_coverage',              '{"preset":"medium","light":{"cmykKg":0.28,"spotKg":0.48},"medium":{"cmykKg":0.35,"spotKg":0.60},"heavy":{"cmykKg":0.45,"spotKg":0.75}}'::jsonb),
+        ('makeready_bases',           '{"lt5c":400,"ge5c":500}'::jsonb),
+        ('die_setup_waste_sheets',    '{"existing":50,"new_die":150}'::jsonb),
+        ('gluer_setup_waste_cartons', '{"value":100}'::jsonb),
+        ('glue_grams',                '{"straight_tuck":0.4,"reverse_tuck":0.5,"auto_bottom":0.7,"crash_lock":0.6}'::jsonb),
+        ('glue_rate_per_kg',          '{"value":150}'::jsonb),
+        ('finishing_rates',           '{"lamination_bopp_gloss":{"rate":18,"unit":"sqm"},"lamination_bopp_matt":{"rate":16,"unit":"sqm"},"foil_stamping":{"rate":8,"unit":"sqm"},"embossing":{"rate":12,"unit":"sqm"},"spot_uv":{"rate":14,"unit":"sqm"},"window_patching":{"rate":0.80,"unit":"per_carton"}}'::jsonb),
+        ('freight_packing_default',   '{"value":0}'::jsonb)
+      ON CONFLICT (key) DO NOTHING;
+    `);
+    logger.info("Migration 17 complete — costing_settings table ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 17 error");
+  }
+
   // ─── MIGRATION 16: external alert tables ──────────────────────────────────
   try {
     await db.execute(sql`
