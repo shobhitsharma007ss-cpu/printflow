@@ -41,7 +41,7 @@ router.use(requireRole("owner", "supervisor"), scheduleRouter);
 // Owner-only routes: Reports screen, user management, alert config, and destructive admin
 // actions must not be reachable by supervisor/operator sessions (e.g. the
 // shared operator tablet), even though the frontend already hides them.
-router.use(costingSettingsRouter);
+router.use(requireRole("owner"), costingSettingsRouter);
 router.use(requireRole("owner"), reportsRouter);
 router.use(requireRole("owner"), usersRouter);
 router.use(requireRole("owner"), alertsRouter);

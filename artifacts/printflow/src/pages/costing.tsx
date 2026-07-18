@@ -50,6 +50,7 @@ interface CostForm {
   ratePerKg: string;
   processColors: string;
   spotColors: string;
+  spotHandling: string;
   printPassCount: string;
   coatingType: string;
   isNewDie: boolean;
@@ -100,6 +101,7 @@ const DEFAULTS: CostForm = {
   ratePerKg: "85",
   processColors: "4",
   spotColors: "1",
+  spotHandling: "convert_cmyk",
   printPassCount: "1",
   coatingType: "aqueous",
   isNewDie: false,
@@ -161,7 +163,16 @@ function compute(
   const procC      = Math.max(0, n(form.processColors, 4));
   const spotC      = Math.max(0, n(form.spotColors));
   const totalC     = procC + spotC;
-  const passes     = Math.max(1, n(form.printPassCount, 1));
+  // Spot handling: Prakash floor practice — a 5th colour is usually converted
+  // into CMYK (4c single pass, no spot plate/ink); only a genuine special
+  // (gold, specific Pantone) gets its own plate and forces a second pass.
+  const spotHandling  = form.spotHandling || "convert_cmyk";
+  const spotConverted = spotC > 0 && spotHandling === "convert_cmyk";
+  const effSpotC      = spotConverted ? 0 : spotC;
+  const effTotalC     = procC + effSpotC;
+  const unitCap       = machine?.colorUnits ?? 4;
+  const minPasses     = effTotalC > unitCap ? Math.ceil(effTotalC / unitCap) : 1;
+  const passes        = Math.max(minPasses, Math.max(1, n(form.printPassCount, 1)));
   const coating    = form.coatingType;
   const isNewDie   = form.isNewDie;
   const dieFab     = n(form.dieFabCost);
@@ -193,7 +204,7 @@ function compute(
 
   // Makeready from settings
   const mb = settings.makeready_bases;
-  const baseReady = totalC >= 5 ? mb.ge5c : mb.lt5c;
+  const baseReady = effTotalC >= 5 ? mb.ge5c : mb.lt5c;
   const makeready = mkOverride > 0 ? mkOverride : passes >= 2 ? baseReady * 2 : baseReady;
   const makereadyAuto = passes >= 2 ? baseReady * 2 : baseReady;
 
@@ -213,7 +224,7 @@ function compute(
   const paperCost = planSheets * sheetCostEa;
 
   // Plates: total_colors × passes + passes (if inline coating)
-  const plateCnt  = totalC * passes + (coating !== "none" ? passes : 0);
+  const plateCnt  = effTotalC * passes + (coating !== "none" ? passes : 0);
   const plateCost = plateCnt * plateEach;
 
   // Press
@@ -222,12 +233,14 @@ function compute(
   const pressCost   = ((setupMin + pressRunMin) / 60) * hrRate;
 
   // Ink — coverage from preset
-  const cov = INK_COVERAGE[form.inkCoveragePreset as keyof typeof INK_COVERAGE] ?? INK_COVERAGE.medium;
+  const covSet = settings.ink_coverage ?? COSTING_SETTINGS_DEFAULTS.ink_coverage;
+  const presetKey = (form.inkCoveragePreset || covSet.preset || "medium") as "light" | "medium" | "heavy";
+  const cov = covSet[presetKey] ?? covSet.medium ?? INK_COVERAGE.medium;
   const imgAreaM2      = sheetAreaM2 * 0.75;
   const cmykKgPerColor = (imgAreaM2 * cov.cmykKg * planSheets * 1.3) / 1000;
   const spotKgPerColor = (imgAreaM2 * cov.spotKg * planSheets * 1.5) / 1000;
   const cmykCost       = procC * cmykKgPerColor * cmykRate;
-  const spotCostAmt    = spotC * spotKgPerColor * spotRate;
+  const spotCostAmt    = effSpotC * spotKgPerColor * spotRate;
   const inkCost        = cmykCost + spotCostAmt;
 
   // Coating
@@ -318,6 +331,7 @@ function compute(
     directCost, factoryOh, adminOh,
     subtotal, profit, preGst, gstAmt, finalTotal, per1kRate,
     procC, spotC, totalC, passes,
+    spotConverted, effSpotC, effTotalC, unitCap, minPasses,
   };
 }
 
@@ -999,6 +1013,26 @@ export default function CostingPage() {
                   </Select>
                 </div>
               </div>
+              {n(form.spotColors) > 0 && (
+                <div>
+                  <Label className="text-xs mb-1 block">Spot colour handling</Label>
+                  <Select value={form.spotHandling} onChange={field("spotHandling")} className="w-full">
+                    <option value="convert_cmyk">Convert to CMYK — no extra plate/pass (usual)</option>
+                    <option value="genuine_special">Genuine special — own plate, extra pass</option>
+                  </Select>
+                </div>
+              )}
+              {c.spotConverted && (
+                <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-600 dark:text-blue-400">
+                  Spot colour converted into CMYK → job runs as {c.effTotalC}-colour, single pass. No spot plate or spot ink charged.
+                </div>
+              )}
+              {c.minPasses >= 2 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  ⚠️ {c.effTotalC} colours on a {c.unitCap}-unit press: requires {c.passes} passes — makeready ×{c.passes}, plates ×{c.passes}, press time ×{c.passes}.
+                  {n(form.printPassCount) < c.minPasses ? " Pass count auto-raised." : ""}
+                </div>
+              )}
               <div>
                 <Label className="text-xs mb-1 block">Press Machine</Label>
                 <Select value={form.selectedMachineId} onChange={field("selectedMachineId")} className="w-full">

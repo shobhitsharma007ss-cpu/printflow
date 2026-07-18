@@ -149,6 +149,7 @@ export interface Machine {
   maxPaperLength?: string | null;
   speedPerHour?: number | null;
   ratedSph?: number | null;
+  colorUnits?: number | null;
   peakRunningSph?: number | null;
   ratedSpeedMPerMin?: number | null;
   setupMinRepeat?: number | null;
