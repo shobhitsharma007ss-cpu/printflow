@@ -5,7 +5,11 @@ import { useListStockInward } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import type { StockSummaryRow } from "@workspace/api-client-react";
 
-/* Data-dense inventory: KPI strip + sortable table + brand chips.
+/* Data-dense inventory table, category-aware.
+   - Paper: sheets+kg dual stock, rate/kg + rate/sheet columns
+   - Consumables (ink/coating/glue): qty in its own unit, single rate/unit column
+   - Stock states: OK · Low (has stock, below reorder) · Out (had stock, now zero)
+     · Not stocked (never had an inward) — greyed and hidden by default.
    Pure frontend — combines /reports/stock-summary + /materials + /stock-inward. */
 
 const INR0 = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
@@ -20,14 +24,17 @@ function parseDimsCm(dimensions?: string | null): { l: number; w: number } | nul
 }
 
 type SortKey = "value" | "age" | "qty" | "name";
+type StockState = "ok" | "low" | "out" | "never";
 
 export function InventoryTable({
   stock,
+  category = "paper",
   onSelect,
   onInward,
   onAdjust,
 }: {
   stock: StockSummaryRow[];
+  category?: "paper" | "ink" | "coating" | "glue";
   onSelect: (id: number) => void;
   onInward?: (id: number) => void;
   onAdjust?: (id: number) => void;
@@ -35,8 +42,10 @@ export function InventoryTable({
   const { data: materials } = useMaterials();
   const { data: inwards } = useListStockInward();
 
+  const isPaper = category === "paper";
   const [q, setQ] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "board" | "consumable" | "low">("all");
+  const [onlyAttention, setOnlyAttention] = useState(false);
+  const [showEmpty, setShowEmpty] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("value");
 
   const matById = useMemo(() => new Map((materials ?? []).map((m) => [m.id, m])), [materials]);
@@ -50,6 +59,12 @@ export function InventoryTable({
       const inner = map.get(r.materialId)!;
       inner.set(b, (inner.get(b) ?? 0) + Number(r.qtyReceived || 0));
     }
+    return map;
+  }, [inwards]);
+
+  const inwardCountByMat = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of inwards ?? []) map.set(r.materialId, (map.get(r.materialId) ?? 0) + 1);
     return map;
   }, [inwards]);
 
@@ -69,7 +84,6 @@ export function InventoryTable({
       const dims = parseDimsCm(s.dimensions);
       const shWtKg = isBoard && dims && s.gsm ? (dims.l * dims.w * s.gsm) / 10_000_000 : null;
 
-      // currentQty unit: boards tracked in sheets
       const sheets = isBoard ? s.currentQty : null;
       const kg = isBoard ? (shWtKg ? s.currentQty * shWtKg : null) : (s.unit === "kg" ? s.currentQty : null);
 
@@ -81,19 +95,26 @@ export function InventoryTable({
 
       const ageDays = (s as unknown as { oldestBatchDays?: number | null }).oldestBatchDays ?? null;
       const brands = Array.from(brandsByMat.get(s.id)?.entries() ?? []).sort((a, b) => b[1] - a[1]);
+      const hasHistory = (inwardCountByMat.get(s.id) ?? 0) > 0;
+
+      const state: StockState =
+        s.currentQty > 0
+          ? (s.isLowStock ? "low" : "ok")
+          : (hasHistory ? "out" : "never");
 
       return {
-        s, isBoard, sheets, kg, rateKg, rateSheet, value, ageDays, brands,
+        s, isBoard, sheets, kg, rateKg, rateSheet, value, ageDays, brands, state,
         lastInward: lastInwardByMat.get(s.id) ?? null,
       };
     });
-  }, [stock, matById, brandsByMat, lastInwardByMat]);
+  }, [stock, matById, brandsByMat, inwardCountByMat, lastInwardByMat]);
+
+  const neverCount = rows.filter((r) => r.state === "never").length;
 
   const filtered = useMemo(() => {
     let r = rows;
-    if (typeFilter === "board") r = r.filter((x) => x.isBoard);
-    if (typeFilter === "consumable") r = r.filter((x) => !x.isBoard);
-    if (typeFilter === "low") r = r.filter((x) => x.s.isLowStock);
+    if (!showEmpty) r = r.filter((x) => x.state !== "never");
+    if (onlyAttention) r = r.filter((x) => x.state === "low" || x.state === "out");
     if (q.trim()) {
       const t = q.toLowerCase();
       r = r.filter((x) =>
@@ -108,24 +129,26 @@ export function InventoryTable({
       name: (a, b) => a.s.materialName.localeCompare(b.s.materialName),
     };
     return [...r].sort(sorters[sortKey]);
-  }, [rows, q, typeFilter, sortKey]);
+  }, [rows, q, onlyAttention, showEmpty, sortKey]);
 
-  // KPI strip
+  // KPI strip — scoped to the current category; "never stocked" excluded from alerts
   const kpi = useMemo(() => {
     const totalValue = rows.reduce((acc, r) => acc + (r.value ?? 0), 0);
-    const low = rows.filter((r) => r.s.isLowStock).length;
+    const attention = rows.filter((r) => r.state === "low" || r.state === "out").length;
     const aging = rows.filter((r) => (r.ageDays ?? 0) > 90).length;
     const lastDates = rows.map((r) => r.lastInward).filter(Boolean) as string[];
     const lastInward = lastDates.length ? lastDates.sort().at(-1)! : null;
-    return { totalValue, low, aging, lastInward };
+    return { totalValue, attention, aging, lastInward };
   }, [rows]);
+
+  const unitLabel = (r: (typeof rows)[0]) => (r.isBoard ? "sh" : r.s.unit);
 
   return (
     <div className="space-y-4">
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Total Stock Value" value={INR0.format(Math.round(kpi.totalValue))} accent="text-primary" />
-        <Kpi label="Low Stock Items" value={String(kpi.low)} accent={kpi.low > 0 ? "text-rose-600" : "text-emerald-600"} />
+        <Kpi label="Stock Value" value={INR0.format(Math.round(kpi.totalValue))} accent="text-primary" />
+        <Kpi label="Low / Out" value={String(kpi.attention)} accent={kpi.attention > 0 ? "text-rose-600" : "text-emerald-600"} />
         <Kpi label="Stock > 90 Days Old" value={String(kpi.aging)} accent={kpi.aging > 0 ? "text-amber-600" : "text-emerald-600"} />
         <Kpi label="Last Inward" value={kpi.lastInward ?? "—"} accent="text-foreground" />
       </div>
@@ -142,18 +165,26 @@ export function InventoryTable({
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {([["all","All"],["board","Paper"],["consumable","Consumables"],["low","Low stock"]] as const).map(([v, l]) => (
+          <button
+            onClick={() => setOnlyAttention((v) => !v)}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-xs font-bold border",
+              onlyAttention ? "bg-rose-600 text-white border-rose-600" : "bg-card border-border text-muted-foreground",
+            )}
+          >
+            Low / Out
+          </button>
+          {neverCount > 0 && (
             <button
-              key={v}
-              onClick={() => setTypeFilter(v)}
+              onClick={() => setShowEmpty((v) => !v)}
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-bold border",
-                typeFilter === v ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground",
+                showEmpty ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground",
               )}
             >
-              {l}
+              {showEmpty ? "Hide empty" : `Show empty (${neverCount})`}
             </button>
-          ))}
+          )}
           <span className="mx-1 text-muted-foreground"><ArrowDownUp size={14} /></span>
           <select
             value={sortKey}
@@ -174,18 +205,27 @@ export function InventoryTable({
           <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-bold">Material</th>
+              <th className="px-4 py-3 text-center font-bold">Status</th>
               <th className="px-4 py-3 text-right font-bold">Stock</th>
-              <th className="px-4 py-3 text-right font-bold">Rate/kg</th>
-              <th className="px-4 py-3 text-right font-bold">Rate/sheet</th>
+              <th className="px-4 py-3 text-right font-bold">{isPaper ? "Rate/kg" : "Rate/unit"}</th>
+              {isPaper && <th className="px-4 py-3 text-right font-bold">Rate/sheet</th>}
               <th className="px-4 py-3 text-right font-bold">Value</th>
-              <th className="px-4 py-3 text-left font-bold">Brands</th>
+              <th className="px-4 py-3 text-left font-bold">{isPaper ? "Brands" : "Brand"}</th>
               <th className="px-4 py-3 text-center font-bold">Age</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">No materials match</td></tr>
+              <tr>
+                <td colSpan={isPaper ? 9 : 8} className="px-4 py-10 text-center text-muted-foreground">
+                  {rows.length === 0
+                    ? "No materials in this category yet — add one to get started."
+                    : neverCount > 0 && !showEmpty && !q
+                      ? `Nothing in stock. ${neverCount} material${neverCount > 1 ? "s" : ""} defined but never stocked — use "Show empty" to see them.`
+                      : "No materials match."}
+                </td>
+              </tr>
             )}
             {filtered.map((r) => (
               <tr
@@ -193,27 +233,32 @@ export function InventoryTable({
                 onClick={() => onSelect(r.s.id)}
                 className={cn(
                   "border-t border-border cursor-pointer hover:bg-muted/30 transition-colors",
-                  r.s.isLowStock && "bg-rose-50/50 dark:bg-rose-950/10",
+                  r.state === "low" && "bg-rose-50/50 dark:bg-rose-950/10",
+                  r.state === "out" && "bg-amber-50/40 dark:bg-amber-950/10",
+                  r.state === "never" && "opacity-60",
                 )}
               >
                 <td className="px-4 py-3">
                   <p className="font-bold leading-tight">{r.s.materialName}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {[r.s.gsm ? `${r.s.gsm} GSM` : null, r.s.dimensions || null, r.s.grain ? (r.s.grain === "long" ? "LG" : "SG") : null]
+                    {[r.s.gsm ? `${r.s.gsm} GSM` : null, isPaper ? (r.s.dimensions || null) : null, isPaper && r.s.grain ? (r.s.grain === "long" ? "LG" : "SG") : null]
                       .filter(Boolean).join(" · ")}
                   </p>
                 </td>
+                <td className="px-4 py-3 text-center"><StateBadge state={r.state} /></td>
                 <td className="px-4 py-3 text-right tabular-nums">
-                  <p className="font-bold">
-                    {r.s.currentQty.toLocaleString("en-IN")} <span className="text-[11px] font-semibold text-muted-foreground">{r.isBoard ? "sh" : r.s.unit}</span>
+                  <p className={cn("font-bold", r.state === "never" && "text-muted-foreground")}>
+                    {r.s.currentQty.toLocaleString("en-IN")} <span className="text-[11px] font-semibold text-muted-foreground">{unitLabel(r)}</span>
                   </p>
-                  {r.isBoard && r.kg != null && (
+                  {r.isBoard && r.kg != null && r.kg > 0 && (
                     <p className="text-[11px] text-muted-foreground">{Math.round(r.kg).toLocaleString("en-IN")} kg</p>
                   )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{r.rateKg != null ? `₹${r.rateKg.toLocaleString("en-IN")}` : "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{r.rateSheet != null ? `₹${Number(r.rateSheet).toFixed(2)}` : "—"}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-bold">{r.value != null ? INR0.format(Math.round(r.value)) : "—"}</td>
+                {isPaper && (
+                  <td className="px-4 py-3 text-right tabular-nums">{r.rateSheet != null ? `₹${Number(r.rateSheet).toFixed(2)}` : "—"}</td>
+                )}
+                <td className="px-4 py-3 text-right tabular-nums font-bold">{r.value != null && r.value > 0 ? INR0.format(Math.round(r.value)) : "—"}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1 max-w-[220px]">
                     {r.brands.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
@@ -257,6 +302,13 @@ export function InventoryTable({
       </div>
     </div>
   );
+}
+
+function StateBadge({ state }: { state: StockState }) {
+  if (state === "ok") return <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">OK</span>;
+  if (state === "low") return <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">Low</span>;
+  if (state === "out") return <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Out</span>;
+  return <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-muted text-muted-foreground">Not stocked</span>;
 }
 
 function Kpi({ label, value, accent }: { label: string; value: string; accent: string }) {

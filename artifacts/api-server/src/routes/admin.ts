@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, stockInwardTable, materialsTable, materialBatchesTable, jobsTable, jobRoutingTable, jobMaterialsTable, jobInterruptionsTable, wastageLogTable } from "@workspace/db";
+import { db, stockInwardTable, materialsTable, materialBatchesTable, stockMovementsTable, jobsTable, jobRoutingTable, jobMaterialsTable, jobInterruptionsTable, wastageLogTable, jobQuotesTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 router.post("/admin/clear-inventory", async (_req, res): Promise<void> => {
   try {
+    await db.delete(stockMovementsTable);   // migration-15 ledger references materials — must go first
     await db.delete(materialBatchesTable);
     await db.delete(stockInwardTable);
     // Always reset current_qty (NOT NULL, always exists)
@@ -24,6 +25,7 @@ router.post("/admin/clear-inventory", async (_req, res): Promise<void> => {
 
 router.post("/admin/clear-jobs", async (_req, res): Promise<void> => {
   try {
+    await db.delete(jobQuotesTable);        // quotes reference jobs — must go first
     await db.delete(jobInterruptionsTable);
     await db.delete(wastageLogTable);
     await db.delete(jobMaterialsTable);

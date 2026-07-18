@@ -52,13 +52,33 @@ function batchAgeColor(days: number): string {
   return "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400";
 }
 
+// ─── Category segmentation (matches the inward wizard's mental model) ───────
+
+export type InvCategory = "paper" | "ink" | "coating" | "glue";
+
+export function materialCategory(m: { materialType: string; subType?: string | null; materialName?: string | null }): InvCategory {
+  if (m.materialType === "board" || m.materialType === "paper") return "paper";
+  const hay = `${m.subType ?? ""} ${m.materialName ?? ""}`.toLowerCase();
+  if (hay.includes("varnish") || hay.includes("aqueous") || hay.includes("coating") || hay.includes("uv")) return "coating";
+  if (hay.includes("ink")) return "ink";
+  return "glue"; // gum, adhesive, glue, lubricant, washes, fountain, spray — "Glue & Other"
+}
+
+const CATEGORY_LABELS: Record<InvCategory, string> = {
+  paper: "Paper & Board",
+  ink: "Inks",
+  coating: "Coatings & Chemicals",
+  glue: "Glue & Other",
+};
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 export default function Inventory() {
   const { data: stock, isLoading } = useStockSummary();
   const { data: allMaterials } = useMaterials();
-  const [activeTab, setActiveTab] = useState<"boards" | "consumables">("boards");
+  const [activeTab, setActiveTab] = useState<InvCategory>("paper");
   const [viewMode, setViewMode] = useState<"table" | "visual">("table");
+  const [showEmpty, setShowEmpty] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isInwardOpen, setIsInwardOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState<number | null>(null);
@@ -77,14 +97,13 @@ export default function Inventory() {
     </div>
   );
 
-  const vendorMap = new Map<number, string>(
-    (allMaterials ?? [])
-      .filter(m => (m as Record<string, unknown>)["vendorName"])
-      .map(m => [m.id, (m as Record<string, unknown>)["vendorName"] as string])
-  );
 
-  const boards = stock?.filter(s => s.materialType === "board" || s.materialType === "paper") || [];
-  const consumables = stock?.filter(s => s.materialType === "consumable") || [];
+  const byCategory: Record<InvCategory, StockSummaryRow[]> = { paper: [], ink: [], coating: [], glue: [] };
+  for (const row of stock ?? []) byCategory[materialCategory(row)].push(row);
+  const boards = byCategory.paper;
+  const activeStock = byCategory[activeTab];
+  const stockedBoards = boards.filter(b => b.currentQty > 0);
+  const emptyBoardCount = boards.length - stockedBoards.length;
   const selectedMaterial = stock?.find(s => s.id === selectedMaterialId) ?? null;
 
   return (
@@ -106,22 +125,25 @@ export default function Inventory() {
         </div>
       </div>
 
-      <div className="flex space-x-1 p-1 bg-muted rounded-xl w-full max-w-md">
-        {(["boards", "consumables"] as const).map(tab => (
+      <div className="flex space-x-1 p-1 bg-muted rounded-xl w-full max-w-2xl">
+        {(["paper", "ink", "coating", "glue"] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => { setActiveTab(tab); if (tab !== "paper") setViewMode("table"); }}
             className={cn(
-              "flex-1 py-2.5 text-sm font-bold rounded-lg transition-all",
+              "flex-1 py-2.5 text-sm font-bold rounded-lg transition-all whitespace-nowrap px-3",
               activeTab === tab ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {tab === "boards" ? "Boards & Paper" : "Consumables"}
+            {CATEGORY_LABELS[tab]}
+            <span className={cn("ml-1.5 text-[11px] font-black", activeTab === tab ? "text-primary" : "text-muted-foreground/60")}>
+              {byCategory[tab].filter(r => r.currentQty > 0).length}
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-2 -mt-4">
+      <div className={cn("flex items-center gap-2 -mt-4", activeTab !== "paper" && "hidden")}>
         {(["table", "visual"] as const).map(v => (
           <button
             key={v}
@@ -151,59 +173,51 @@ export default function Inventory() {
 
       {viewMode === "table" && (
         <InventoryTable
-          stock={activeTab === "boards" ? boards : consumables}
+          stock={activeStock}
+          category={activeTab}
           onSelect={setSelectedMaterialId}
           onInward={() => setIsInwardOpen(true)}
           onAdjust={setAdjustMaterialId}
         />
       )}
 
-      <div className={cn("flex gap-6", viewMode !== "visual" && "hidden")}>
+      <div className={cn("flex gap-6", (viewMode !== "visual" || activeTab !== "paper") && "hidden")}>
         <div className="flex-1 min-w-0">
-          {activeTab === "boards" && (
-            <Card className="p-8">
-              <div className="flex items-center gap-2 mb-8 border-b border-border pb-4">
+          <Card className="p-8">
+            <div className="flex items-center justify-between mb-8 border-b border-border pb-4">
+              <div className="flex items-center gap-2">
                 <Layers className="text-primary" size={24} />
                 <h2 className="text-xl font-bold">Paper & Board Stocks</h2>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-x-6 gap-y-12">
-                {boards.map(item => (
-                  <StackVisual
-                    key={item.id}
-                    item={item}
-                    isSelected={selectedMaterialId === item.id}
-                    onClick={() => setSelectedMaterialId(selectedMaterialId === item.id ? null : item.id)}
-                  />
-                ))}
-                {boards.length === 0 && (
-                  <p className="col-span-full text-center text-muted-foreground py-10">No boards or paper in inventory.</p>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {activeTab === "consumables" && (
-            <Card className="p-8">
-              <div className="flex items-center gap-2 mb-8 border-b border-border pb-4">
-                <Package className="text-primary" size={24} />
-                <h2 className="text-xl font-bold">Consumables (Inks, Glues, Plates)</h2>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-x-6 gap-y-12">
-                {consumables.map(item => (
-                  <CylinderVisual
-                    key={item.id}
-                    item={item}
-                    vendorName={vendorMap.get(item.id)}
-                    isSelected={selectedMaterialId === item.id}
-                    onClick={() => setSelectedMaterialId(selectedMaterialId === item.id ? null : item.id)}
-                  />
-                ))}
-                {consumables.length === 0 && (
-                  <p className="col-span-full text-center text-muted-foreground py-10">No consumables in inventory.</p>
-                )}
-              </div>
-            </Card>
-          )}
+              {emptyBoardCount > 0 && (
+                <button
+                  onClick={() => setShowEmpty(v => !v)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold border transition-colors",
+                    showEmpty ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {showEmpty ? "Hide empty" : `Show empty (${emptyBoardCount})`}
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-x-6 gap-y-12">
+              {(showEmpty ? boards : stockedBoards).map(item => (
+                <StackVisual
+                  key={item.id}
+                  item={item}
+                  isSelected={selectedMaterialId === item.id}
+                  onClick={() => setSelectedMaterialId(selectedMaterialId === item.id ? null : item.id)}
+                />
+              ))}
+              {stockedBoards.length === 0 && !showEmpty && (
+                <div className="col-span-full text-center py-10">
+                  <p className="text-muted-foreground font-medium">No paper in stock yet.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Record inward stock to see it here{emptyBoardCount > 0 ? `, or show the ${emptyBoardCount} empty materials.` : "."}</p>
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
         {selectedMaterialId && selectedMaterial && (
@@ -1096,44 +1110,3 @@ function StackVisual({ item, isSelected, onClick }: { item: StockSummaryRow; isS
   );
 }
 
-function CylinderVisual({ item, vendorName, isSelected, onClick }: { item: StockSummaryRow; vendorName?: string; isSelected: boolean; onClick: () => void }) {
-  const safePct = (typeof item.stockPct === "number" && Number.isFinite(item.stockPct)) ? item.stockPct : 0;
-  const fillPct = Math.min(Math.max(safePct, 0), 100);
-  const colorClass = safePct < 30 ? "from-rose-400 to-rose-600" : safePct < 60 ? "from-amber-400 to-amber-600" : "from-emerald-400 to-emerald-600";
-  const oldestDays = (item as unknown as Record<string, unknown>)["oldestBatchDays"] as number | null | undefined;
-
-  return (
-    <div className="flex flex-col items-center group cursor-pointer" onClick={onClick}>
-      <div className={cn(
-        "w-20 h-32 bg-muted rounded-[50%_50%_50%_50%/10%_10%_10%_10%] relative overflow-hidden border-2 shadow-inner transition-all",
-        item.isLowStock
-          ? "border-rose-500 shadow-[0_0_0_2px_rgba(239,68,68,0.25)]"
-          : isSelected
-            ? "border-primary shadow-[0_0_0_3px_rgba(59,130,246,0.3)]"
-            : "border-border group-hover:border-primary"
-      )}>
-        <div className={cn("absolute bottom-0 w-full bg-gradient-to-t transition-all duration-1000 ease-out", colorClass)} style={{ height: `${fillPct}%` }} />
-        <div className="absolute top-0 left-2 w-2 h-full bg-white/20 blur-[2px]" />
-        {item.isLowStock && (
-          <div className="absolute top-2 right-1/2 translate-x-1/2 text-rose-500 bg-white dark:bg-background rounded-full p-0.5 shadow-sm">
-            <AlertTriangle size={14} strokeWidth={3} />
-          </div>
-        )}
-      </div>
-      <div className="mt-4 text-center w-full">
-        <h4 className="font-bold text-foreground text-sm truncate px-1" title={item.materialName}>{item.materialName}</h4>
-        {vendorName && (
-          <p className="text-[10px] text-muted-foreground truncate px-1 mt-0.5" title={vendorName}>{vendorName}</p>
-        )}
-        {oldestDays != null && (
-          <span className={cn("inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold", batchAgeColor(oldestDays))}>
-            {oldestDays}d
-          </span>
-        )}
-        <Badge className="mt-1 bg-background border-border text-foreground">
-          {item.currentQty} {item.unit}
-        </Badge>
-      </div>
-    </div>
-  );
-}

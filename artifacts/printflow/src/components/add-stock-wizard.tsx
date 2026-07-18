@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Button, Input, Label, Modal, Select } from "@/components/ui-elements";
 import { useCreateMaterial, useAddMaterialVendor } from "@/hooks/use-inventory";
+import { useMaterials } from "@/hooks/use-inventory";
 import { useVendors, useCreateVendor } from "@/hooks/use-vendors";
 import { Layers, FileText, Droplets, ChevronDown, ChevronUp } from "lucide-react";
 import { cn, parseDim, dimToCm } from "@/lib/utils";
@@ -135,6 +136,12 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
 
   const autoName = buildAutoName(form.category, form.subType, form.gsm, form.width, form.height, form.dimUnit);
   const displayName = form.nameOverridden ? form.customName : autoName;
+  const { data: existingMaterials } = useMaterials();
+  const duplicateOf = useMemo(() => {
+    const t = displayName.trim().toLowerCase();
+    if (!t) return null;
+    return (existingMaterials ?? []).find(m => m.materialName.trim().toLowerCase() === t)?.materialName ?? null;
+  }, [existingMaterials, displayName]);
 
   useEffect(() => {
     if (!form.nameOverridden) {
@@ -168,6 +175,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
   const doSave = async (): Promise<boolean> => {
     const materialName = displayName.trim() || autoName;
     if (!materialName) { toast.error("Material name required"); return false; }
+    if (duplicateOf) { toast.error(`"${duplicateOf}" already exists — record inward stock on it instead of creating a duplicate`); return false; }
 
     const unit = getAutoUnit(form.category, form.subType);
     const dimensions = isBoardOrPaper ? buildDimensionString(form.width, form.height, form.dimUnit) : undefined;
@@ -437,6 +445,11 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
             onChange={e => update({ customName: e.target.value, nameOverridden: true })}
             placeholder="Auto-generated from selections above"
           />
+              {duplicateOf && (
+                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1">
+                  ⚠️ "{duplicateOf}" already exists — record inward stock on it instead of adding a duplicate.
+                </p>
+              )}
           {form.nameOverridden && (
             <button
               type="button"
