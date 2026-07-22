@@ -103,6 +103,39 @@ async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise
   return { canStart: waitingFor.length === 0, waitingFor };
 }
 
+// Decision B: paper is the hard constraint. Refuse job start if the board/paper
+// material is short. Inks/glue are exempt (Decision C — tracked, never blocking).
+async function checkPaperStock(jobId: number): Promise<{ ok: boolean; shortName?: string; need?: number; have?: number; unit?: string }> {
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+  if (!job) return { ok: true };
+
+  // Gather paper requirements: the job's primary board + any board-type job_materials.
+  const reqs: Array<{ materialId: number; need: number }> = [];
+  if (job.materialId && Number(job.qtySheets) > 0) {
+    reqs.push({ materialId: job.materialId, need: Number(job.qtySheets) });
+  }
+  const jobMats = await db
+    .select({ materialId: jobMaterialsTable.materialId, plannedQty: jobMaterialsTable.plannedQty })
+    .from(jobMaterialsTable)
+    .where(eq(jobMaterialsTable.jobId, jobId));
+  for (const jm of jobMats) {
+    reqs.push({ materialId: jm.materialId, need: Number(jm.plannedQty) });
+  }
+
+  for (const r of reqs) {
+    const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, r.materialId));
+    if (!mat) continue;
+    // Only PAPER/BOARD gates the start. Inks, coatings, glue never block.
+    const isPaper = mat.materialType === "board" || mat.materialType === "paper";
+    if (!isPaper) continue;
+    const have = Number(mat.currentQty);
+    if (r.need > have) {
+      return { ok: false, shortName: mat.materialName, need: r.need, have, unit: mat.unit };
+    }
+  }
+  return { ok: true };
+}
+
 async function deductJobMaterials(jobId: number, performedBy = "system"): Promise<DeductionInfo[]> {
   // Idempotency: skip if materials already deducted for this job
   const [jobForDeduction] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
@@ -624,6 +657,15 @@ router.patch("/jobs/:id/status", async (req, res): Promise<void> => {
   const performer = (req.session as { user?: { name?: string } } | undefined)?.user?.name ?? "system";
   let deductions: DeductionInfo[] = [];
   if (parsed.data.status === "in-progress" && currentJob.status === "pending") {
+    const paper = await checkPaperStock(job.id);
+    if (!paper.ok) {
+      res.status(409).json({
+        error: `Cannot start — insufficient paper. ${paper.shortName}: need ${Number(paper.need).toLocaleString("en-IN")} ${paper.unit}, have ${Number(paper.have).toLocaleString("en-IN")} ${paper.unit}. Record inward stock first.`,
+        insufficientPaper: true,
+        material: paper.shortName, need: paper.need, have: paper.have, unit: paper.unit,
+      });
+      return;
+    }
     deductions = await deductJobMaterials(job.id, performer);
   }
 
@@ -672,6 +714,18 @@ router.patch("/job-routing/:id/status", async (req, res): Promise<void> => {
   if (parsed.data.status === "in-progress") {
     await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, routing.machineId));
     if (job && job.status === "pending") {
+      const paper = await checkPaperStock(job.id);
+      if (!paper.ok) {
+        // Revert the routing step we just set to in-progress — the job can't start.
+        await db.update(jobRoutingTable).set({ status: currentRouting.status, startedAt: null }).where(eq(jobRoutingTable.id, params.data.id));
+        await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, routing.machineId));
+        res.status(409).json({
+          error: `Cannot start — insufficient paper. ${paper.shortName}: need ${Number(paper.need).toLocaleString("en-IN")} ${paper.unit}, have ${Number(paper.have).toLocaleString("en-IN")} ${paper.unit}. Record inward stock first.`,
+          insufficientPaper: true,
+          material: paper.shortName, need: paper.need, have: paper.have, unit: paper.unit,
+        });
+        return;
+      }
       await db.update(jobsTable).set({ status: "in-progress" }).where(eq(jobsTable.id, job.id));
       deductions = await deductJobMaterials(job.id, routingPerformer);
     }

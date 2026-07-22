@@ -14,6 +14,13 @@ import {
   getGetStockSummaryQueryKey,
 } from "@workspace/api-client-react";
 
+// Pull the server's JSON error message (e.g. paper shortage, waiting-for) out of the thrown error.
+function serverErrorMessage(err: unknown, fallback: string): string {
+  // Matches the ApiError shape from custom-fetch: { status, data: { error } }
+  const anyErr = err as { data?: { error?: string } | null; message?: string };
+  return anyErr?.data?.error || anyErr?.message || fallback;
+}
+
 export function useJobs(status?: string) {
   return useListJobs({ status });
 }
@@ -55,8 +62,8 @@ export function useUpdateJobStatus() {
           }
         }
       },
-      onError: () => {
-        toast.error("Failed to update job status. Please try again.");
+      onError: (err) => {
+        toast.error(serverErrorMessage(err, "Failed to update job status. Please try again."), { duration: 7000 });
       }
     }
   });
@@ -89,8 +96,8 @@ export function useUpdateJobRoutingStatus() {
           toast.success("Step completed", { description: "Next step will start automatically." });
         }
       },
-      onError: () => {
-        toast.error("Failed to update step status. Please try again.");
+      onError: (err) => {
+        toast.error(serverErrorMessage(err, "Failed to update step status. Please try again."), { duration: 7000 });
       }
     }
   });
