@@ -66,6 +66,7 @@ interface JobForm {
   cartonW: string;
   cartonH: string;
   cartonStyle: string;
+  manualUps: string;
 }
 
 export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -99,6 +100,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     cartonW: "",
     cartonH: "",
     cartonStyle: "straight_tuck",
+    manualUps: "",
   });
 
   const boardsMats = useMemo(
@@ -283,7 +285,13 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
   const plannedSheets = Math.ceil(qtyNum * wastageMultiplier);
 
   // Bridge: inline layout plan from carton dims
+  const manualUpsN = parseInt(form.manualUps, 10);
+  const hasManualUps = manualUpsN > 0;
   const cartonPlan = (() => {
+    // Manual ups wins — poster/gumming or printer-known layout, no carton dims needed.
+    if (hasManualUps) {
+      return { blank: null as ReturnType<typeof flatBlank> | null, ups: manualUpsN, label: `${manualUpsN}-up (entered)` };
+    }
     const L = parseFloat(form.cartonL), W = parseFloat(form.cartonW), H = parseFloat(form.cartonH);
     if (!(L > 0) || !(W > 0) || !(H > 0)) return null;
     const blank = flatBlank(L, W, H, form.cartonStyle);
@@ -344,7 +352,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
           spotColors: parseInt(form.spotColors) || 0,
           printPassCount: (parseInt(form.processColors) || 4) + (parseInt(form.spotColors) || 0) > 4 ? 2 : 1,
           dryingWaitHours: parseInt(form.dryingWaitHours) || 0,
-          cartonStyle: cartonPlan ? form.cartonStyle : undefined,
+          cartonStyle: cartonPlan && cartonPlan.blank ? form.cartonStyle : undefined,
           upsPerSheet: cartonPlan?.ups ?? undefined,
         },
       },
@@ -384,6 +392,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     cartonW: "",
     cartonH: "",
     cartonStyle: "straight_tuck",
+    manualUps: "",
     });
   };
 
@@ -706,8 +715,18 @@ function Step2Material({
       )}
 
       <div className="space-y-2 rounded-xl border border-border p-3">
-        <Label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Carton Dimensions (optional — auto ups)</Label>
-        <div className="grid grid-cols-4 gap-2">
+        <Label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Ups per Sheet</Label>
+        <Input
+          type="number"
+          min="0"
+          placeholder="Enter ups directly (e.g. 8) — or leave blank & use carton dims below"
+          value={form.manualUps}
+          onChange={(e) => setForm({ ...form, manualUps: e.target.value })}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Poster / gumming sheet? Enter ups (usually 1). Already planned your layout? Enter it here. Otherwise fill carton dimensions and we compute it.
+        </p>
+        <div className={cn("grid grid-cols-4 gap-2 pt-1", hasManualUps && "opacity-40 pointer-events-none")}>
           <Input type="number" placeholder="L mm" value={form.cartonL} onChange={(e) => setForm({ ...form, cartonL: e.target.value })} />
           <Input type="number" placeholder="W mm" value={form.cartonW} onChange={(e) => setForm({ ...form, cartonW: e.target.value })} />
           <Input type="number" placeholder="H mm" value={form.cartonH} onChange={(e) => setForm({ ...form, cartonH: e.target.value })} />
@@ -730,6 +749,9 @@ function Step2Material({
             </p>
           );
         })()}
+        {hasManualUps && (
+          <p className="text-xs font-semibold text-primary">Using {manualUpsN}-up (entered) — carton dimensions ignored.</p>
+        )}
       </div>
 
       <div className="space-y-2">
