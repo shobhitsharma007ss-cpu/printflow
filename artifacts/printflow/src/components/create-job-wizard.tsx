@@ -589,6 +589,8 @@ function Step2Material({
   plannedSheets: number;
   onAddMaterial: () => void;
 }) {
+  const manualUpsN = parseInt(form.manualUps, 10);
+  const hasManualUps = manualUpsN > 0;
   return (
     <div className="space-y-4">
       <div>
