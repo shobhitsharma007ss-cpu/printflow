@@ -260,11 +260,24 @@ export default function OperatorStation() {
     toast.success(`${job.jobCode} खुल गया`);
   }
 
+  // Still loading machine list — show a spinner, never a blank screen or false "not found"
+  if (machines === undefined) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
+          <p className="text-lg font-semibold text-muted-foreground">लोड हो रहा है…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!machine) {
     return (
       <div className="min-h-screen grid place-items-center bg-background">
         <div className="text-center">
           <p className="text-2xl font-bold mb-4">Machine not found</p>
+          <p className="text-sm text-muted-foreground mb-4">Machine #{machineId} — शायद delete हो गई या galat link.</p>
           <Link href="/floor/stations"><a className="text-primary underline text-lg">{HI.allMachines}</a></Link>
         </div>
       </div>
@@ -357,7 +370,7 @@ export default function OperatorStation() {
                   {HI.material}: {current.job.materialName ?? "—"}{current.job.materialGsm ? ` · ${current.job.materialGsm} GSM` : ""}
                 </p>
                 <p className="text-lg text-muted-foreground">
-                  {HI.qty}: <span className="font-bold text-foreground">{(current.job.plannedSheets ?? current.job.qtySheets).toLocaleString("en-IN")}</span> {HI.sheets}
+                  {HI.qty}: <span className="font-bold text-foreground">{Number(current.job.plannedSheets ?? current.job.qtySheets ?? 0).toLocaleString("en-IN")}</span> {HI.sheets}
                 </p>
               </div>
               {active && (
@@ -410,7 +423,7 @@ export default function OperatorStation() {
                   <div className="min-w-0">
                     <p className="text-lg font-bold truncate">{job.jobCode} <span className="font-medium text-muted-foreground">· {job.clientName}</span></p>
                     <p className="text-sm text-muted-foreground truncate">
-                      {(job.plannedSheets ?? job.qtySheets).toLocaleString("en-IN")} {HI.sheets}{job.materialName ? ` · ${job.materialName}` : ""}
+                      {Number(job.plannedSheets ?? job.qtySheets ?? 0).toLocaleString("en-IN")} {HI.sheets}{job.materialName ? ` · ${job.materialName}` : ""}
                     </p>
                   </div>
                   {step.canStart === true
