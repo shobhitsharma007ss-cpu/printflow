@@ -37,6 +37,8 @@ interface CostForm {
   jobName: string;
   clientName: string;
   linkedJobId: string;
+  jobKind: string;        // "carton_dims" | "carton_ups" | "flat_sheet"
+  qtyBasis: string;       // flat_sheet only: "sheets" | "pieces"
   qtyRequired: string;
   cartonLengthMm: string;
   cartonWidthMm: string;
@@ -88,6 +90,8 @@ const DEFAULTS: CostForm = {
   jobName: "",
   clientName: "",
   linkedJobId: "",
+  jobKind: "carton_dims",
+  qtyBasis: "sheets",
   qtyRequired: "25000",
   cartonLengthMm: "100",
   cartonWidthMm: "80",
@@ -154,7 +158,17 @@ function compute(
   gluerMachine: MachineRow | null,
   settings: CostingSettingsMap = COSTING_SETTINGS_DEFAULTS,
 ) {
-  const qty        = n(form.qtyRequired);
+  const jobKind    = form.jobKind || "carton_dims";
+  const isFlat     = jobKind === "flat_sheet";
+  const isCarton   = !isFlat;
+  const qtyInput   = n(form.qtyRequired);
+  const upsForCalc = Math.max(1, n(form.upsPerSheet, 1));
+  // Flat-sheet jobs can be quoted per-sheet or per-piece; cartons are always per-piece.
+  const qtyBasis   = form.qtyBasis || "sheets";
+  const qtyPieces  = isFlat
+    ? (qtyBasis === "sheets" ? qtyInput * upsForCalc : qtyInput)
+    : qtyInput;
+  const qty        = qtyPieces;   // "pieces" everywhere downstream (cartons or posters)
   const L_cm       = n(form.sheetLengthIn) * 2.54;
   const B_cm       = n(form.sheetBreadthIn) * 2.54;
   const gsm        = n(form.gsm);
@@ -214,10 +228,16 @@ function compute(
   const gluerSetupWasteCartons = settings.gluer_setup_waste_cartons.value;
   const gluerSetupWasteSheets = Math.ceil(gluerSetupWasteCartons / ups);
 
-  // Quantities — makeready + die/gluer setup waste all feed into plan
-  const reqSheets  = Math.ceil(qty / ups);
+  // Quantities — makeready + die/gluer setup waste all feed into plan.
+  // Flat-sheet quoted by sheets: that number IS the sheet count. Otherwise derive from ups.
+  const reqSheets  = (isFlat && qtyBasis === "sheets")
+    ? qtyInput
+    : Math.ceil(qty / ups);
+  // Flat sheets have no die-cutting or folder-gluing — drop those setup wastes.
+  const effDieSetupWasteSheets   = isFlat ? 0 : dieSetupWasteSheets;
+  const effGluerSetupWasteSheets = isFlat ? 0 : gluerSetupWasteSheets;
   const planSheets = Math.ceil(
-    (reqSheets + makeready + dieSetupWasteSheets + gluerSetupWasteSheets) * (1 + wastePct / 100),
+    (reqSheets + makeready + effDieSetupWasteSheets + effGluerSetupWasteSheets) * (1 + wastePct / 100),
   );
 
   // Paper
@@ -268,8 +288,8 @@ function compute(
     : (dieMachine?.setupMinRepeat ?? 10);
   const dieHrRate   = dieMachine?.hourRate != null ? parseFloat(String(dieMachine.hourRate)) : 1500;
   const dieRunMin   = dieRunSph > 0 ? (planSheets / dieRunSph) * 60 : 0;
-  let dieCutCost    = ((dieSetupMin + dieRunMin) / 60) * dieHrRate;
-  if (isNewDie) dieCutCost += dieFab;
+  let dieCutCost    = isFlat ? 0 : ((dieSetupMin + dieRunMin) / 60) * dieHrRate;
+  if (!isFlat && isNewDie) dieCutCost += dieFab;
 
   // Folder-gluer
   const styleFact  = STYLE_FACTORS[form.cartonStyle] ?? 1.0;
@@ -280,12 +300,12 @@ function compute(
   const ratedCph   = (glFeedM * 60 * 1000) / clMm;
   const effCph     = ratedCph * glEff * styleFact;
   const glueRunMin = qty > 0 && effCph > 0 ? (qty / effCph) * 60 : 0;
-  const gluerCost  = ((glSetupMin + glueRunMin) / 60) * glHrRate;
+  const gluerCost  = isFlat ? 0 : ((glSetupMin + glueRunMin) / 60) * glHrRate;
 
   // Glue — per-style grams from settings
   const glueGramsPerCarton = (settings.glue_grams[form.cartonStyle] ?? 0.4);
   const glueRatePerKg = settings.glue_rate_per_kg.value;
-  const glueCost = (qty * glueGramsPerCarton / 1000) * glueRatePerKg;
+  const glueCost = isFlat ? 0 : (qty * glueGramsPerCarton / 1000) * glueRatePerKg;
 
   // Handwork
   const hwCost = (qty / 1000) * hwPer1k;
@@ -332,6 +352,8 @@ function compute(
     subtotal, profit, preGst, gstAmt, finalTotal, per1kRate,
     procC, spotC, totalC, passes,
     spotConverted, effSpotC, effTotalC, unitCap, minPasses,
+    jobKind, isFlat, isCarton, qtyPieces,
+    effDieSetupWasteSheets, effGluerSetupWasteSheets,
   };
 }
 
@@ -631,7 +653,7 @@ export default function CostingPage() {
       `GST (${form.gstPct}%):         ${fmt(c.gstAmt)}`,
       `Final Total:     ${fmt(c.finalTotal)}`,
       "",
-      `Rate / 1,000 cartons (pre-GST): ${fmt(c.per1kRate)}`,
+      `Rate / 1,000 ${c.isFlat ? (form.qtyBasis === "sheets" ? "sheets" : "pieces") : "cartons"} (pre-GST): ${fmt(c.per1kRate)}`,
     ].join("\n");
     navigator.clipboard.writeText(text)
       .then(() => toast.success("Copied to clipboard"))
@@ -831,6 +853,38 @@ export default function CostingPage() {
               </div>
             </Card>
 
+            {/* Job Type — decides how ups/sheets are derived and which steps apply */}
+            <Card className="p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Job Type</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { k: "carton_dims", t: "Carton", s: "from dimensions" },
+                  { k: "carton_ups",  t: "Carton", s: "ups known" },
+                  { k: "flat_sheet",  t: "Flat sheet", s: "poster / gumming" },
+                ].map(opt => (
+                  <button
+                    key={opt.k}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, jobKind: opt.k }))}
+                    className={cn(
+                      "rounded-lg border px-2 py-2.5 text-center transition-all",
+                      form.jobKind === opt.k
+                        ? "border-primary bg-primary/10 ring-1 ring-primary"
+                        : "border-border bg-card hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <p className="text-sm font-bold leading-tight">{opt.t}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{opt.s}</p>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {form.jobKind === "carton_dims" && "Enter carton L×W×H — ups is computed from the blank and checked against the sheet."}
+                {form.jobKind === "carton_ups" && "You already planned the layout — enter ups and sheet size directly. Die-cutting and gluing still costed."}
+                {form.jobKind === "flat_sheet" && "Single-up or ganged sheet work (posters, gumming sheets, labels). No die-cutting, folder-gluer or glue."}
+              </p>
+            </Card>
+
             {/* Link to Job */}
             <Card className="p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -854,13 +908,42 @@ export default function CostingPage() {
             {/* Job Quantity + Ups */}
             <Card className="p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Job Details</h3>
+              {c.isFlat && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs">Quantity is:</Label>
+                  <div className="flex rounded-lg border border-border overflow-hidden">
+                    {["sheets", "pieces"].map(b => (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, qtyBasis: b }))}
+                        className={cn(
+                          "px-3 py-1 text-xs font-bold capitalize transition-colors",
+                          form.qtyBasis === b ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
+                        )}
+                      >{b}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs mb-1 block">Qty Required (cartons)</Label>
+                  <Label className="text-xs mb-1 block">
+                    {c.isFlat
+                      ? (form.qtyBasis === "sheets" ? "Qty Required (sheets)" : "Qty Required (pieces)")
+                      : "Qty Required (cartons)"}
+                  </Label>
                   <Input type="number" value={form.qtyRequired} onChange={field("qtyRequired")} min={1} />
+                  {c.isFlat && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {form.qtyBasis === "sheets"
+                        ? `${c.qtyPieces.toLocaleString("en-IN")} pieces at ${form.upsPerSheet}-up`
+                        : `${c.reqSheets.toLocaleString("en-IN")} sheets needed at ${form.upsPerSheet}-up`}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">Ups per Sheet</Label>
+                  <Label className="text-xs mb-1 block">{c.isFlat ? "Ups per Sheet (gang)" : "Ups per Sheet"}</Label>
                   <Input
                     type="number"
                     value={form.upsPerSheet}
@@ -868,7 +951,7 @@ export default function CostingPage() {
                     min={1}
                     className={cn(impositionCheck?.overLimit && "border-rose-500 focus:ring-rose-500")}
                   />
-                  {impositionCheck && (
+                  {impositionCheck && form.jobKind === "carton_dims" && (
                     <p className={cn("mt-1 text-xs flex items-center gap-1",
                       impositionCheck.overLimit ? "text-rose-600 font-semibold" : "text-muted-foreground")}>
                       {impositionCheck.overLimit
@@ -882,6 +965,7 @@ export default function CostingPage() {
             </Card>
 
             {/* Carton */}
+            {form.jobKind === "carton_dims" && (
             <Card className="p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carton Dimensions</h3>
               <div className="grid grid-cols-3 gap-2">
@@ -908,6 +992,7 @@ export default function CostingPage() {
                 </Select>
               </div>
             </Card>
+            )}
 
             {/* Paper / Board */}
             <Card className="p-4 space-y-3">
@@ -1068,6 +1153,7 @@ export default function CostingPage() {
                   <option value="varnish">Varnish (Inline) — ₹180/kg</option>
                 </Select>
               </div>
+              {!c.isFlat && (<>
               <div>
                 <Label className="text-xs mb-1 block">Die Cutter</Label>
                 <Select value={form.selectedDieCutterId} onChange={field("selectedDieCutterId")} className="w-full">
@@ -1086,6 +1172,7 @@ export default function CostingPage() {
                 <Label className="text-xs font-medium">New Die Required?</Label>
                 <Toggle on={form.isNewDie} onToggle={() => setForm(p => ({ ...p, isNewDie: !p.isNewDie }))} />
               </div>
+              </>)}
               {form.isNewDie && (
                 <div>
                   <Label className="text-xs mb-1 block">Die Fabrication Cost (₹)</Label>
@@ -1287,12 +1374,18 @@ export default function CostingPage() {
                       <Row label={coatingLabel(form.coatingType)} value={c.coatingCost}
                         sub={coatingRateLabel} />
                     )}
+                    {!c.isFlat && (
                     <Row label="Die Cutting" value={c.dieCutCost}
                       sub={`${form.isNewDie ? "New die" : "Existing die"} — ${c.dieSetupMin}m setup + ${dec(c.dieRunMin, 0)}m run`} />
+                    )}
+                    {!c.isFlat && (
                     <Row label="Folder-Gluer" value={c.gluerCost}
                       sub={`${dec(c.glSetupMin, 0)}m setup + ${dec(c.glueRunMin, 0)}m run @ ₹${c.glHrRate.toLocaleString("en-IN")}/hr`} />
+                    )}
+                    {!c.isFlat && (
                     <Row label="Glue" value={c.glueCost}
                       sub={`${dec(c.qty * (settings.glue_grams[form.cartonStyle] ?? 0.4) / 1000, 2)} kg × ₹${settings.glue_rate_per_kg.value}/kg`} />
+                    )}
                     <Row label="Handwork" value={c.hwCost}
                       sub={`₹${n(form.handworkPer1000)} per 1,000`} />
                     {c.laminGlossCost > 0 && <Row label="Lamination — BOPP Gloss" value={c.laminGlossCost} sub={`₹${settings.finishing_rates.lamination_bopp_gloss.rate}/m²`} />}
@@ -1323,7 +1416,7 @@ export default function CostingPage() {
                   <div className="px-4 py-6 bg-primary/5 text-center">
                     <p className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1">
                       <Info size={11} />
-                      Rate per 1,000 cartons (pre-GST)
+                      Rate per 1,000 {c.isFlat ? (form.qtyBasis === "sheets" ? "sheets" : "pieces") : "cartons"} (pre-GST)
                     </p>
                     <p className="text-5xl font-black text-primary tracking-tight tabular-nums">
                       {fmt(c.per1kRate)}
@@ -1389,7 +1482,7 @@ export default function CostingPage() {
                     <div className="bg-primary/5 rounded-xl px-4 py-5 text-center mt-2">
                       <p className="text-xs text-muted-foreground mb-2 flex items-center justify-center gap-1">
                         <Info size={11} />
-                        Rate per 1,000 cartons (pre-GST)
+                        Rate per 1,000 {c.isFlat ? (form.qtyBasis === "sheets" ? "sheets" : "pieces") : "cartons"} (pre-GST)
                       </p>
                       <p className="text-5xl font-black text-primary tabular-nums">{fmt(c.per1kRate)}</p>
                     </div>
