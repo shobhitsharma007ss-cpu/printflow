@@ -501,7 +501,7 @@ export default function CostingPage() {
       const allowed: (keyof CostForm)[] = [
         "qtyRequired", "cartonLengthMm", "cartonWidthMm", "cartonHeightMm",
         "cartonStyle", "upsPerSheet", "sheetLengthIn", "sheetBreadthIn",
-        "materialId", "gsm", "ratePerKg",
+        "materialId", "gsm", "ratePerKg", "jobKind", "qtyBasis",
       ];
       setForm(p => {
         const next = { ...p };

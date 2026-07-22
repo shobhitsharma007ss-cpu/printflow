@@ -51,11 +51,20 @@ export default function LayoutPlanner() {
   const { data: jobs } = useJobs();
   const [saveJobId, setSaveJobId] = useState<string>("");
 
+  const [mode, setMode] = useState<"carton_dims" | "sheet_ups" | "flat_sheet">("carton_dims");
   const [cartonL, setCartonL] = useState("100");
   const [cartonW, setCartonW] = useState("40");
   const [cartonH, setCartonH] = useState("40");
   const [style, setStyle] = useState("straight_tuck");
   const [qty, setQty] = useState("25000");
+  // Manual sheet size (sheet_ups + flat_sheet modes), in inches
+  const [manualSheetLenIn, setManualSheetLenIn] = useState("23");
+  const [manualSheetWidIn, setManualSheetWidIn] = useState("36");
+  // Flat-sheet piece size (mm) + gang ups
+  const [pieceW, setPieceW] = useState("210");
+  const [pieceH, setPieceH] = useState("297");
+  const [flatQtyBasis, setFlatQtyBasis] = useState<"sheets" | "pieces">("sheets");
+  const [manualUps, setManualUps] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [allow, setAllow] = useState<Allowances>({ ...DEFAULT_ALLOWANCES });
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -63,16 +72,80 @@ export default function LayoutPlanner() {
   const L = num(cartonL);
   const W = num(cartonW);
   const H = num(cartonH);
+  const manualSheetLongMm = Math.max(num(manualSheetLenIn), num(manualSheetWidIn)) * 25.4;
+  const manualSheetShortMm = Math.min(num(manualSheetLenIn), num(manualSheetWidIn)) * 25.4;
+  const isFlat = mode === "flat_sheet";
+  const isSheetUps = mode === "sheet_ups";
   const qtyN = Math.max(1, num(qty, 25000));
   const validCarton = L > 0 && W > 0 && H > 0;
 
-  const blank = useMemo(
+  const cartonBlank = useMemo(
     () => (validCarton ? flatBlank(L, W, H, style, allow) : null),
     [L, W, H, style, allow, validCarton],
   );
+  // Effective "blank" the imposition engine tiles. Flat sheet = the typed piece rectangle.
+  const pieceWmm = num(pieceW), pieceHmm = num(pieceH);
+  const validFlat = pieceWmm > 0 && pieceHmm > 0;
+  const blank = useMemo(() => {
+    if (isFlat) {
+      return validFlat
+        ? { blankW: pieceWmm, blankH: pieceHmm, formula: "Flat piece (as entered)" }
+        : null;
+    }
+    return cartonBlank;
+  }, [isFlat, validFlat, pieceWmm, pieceHmm, cartonBlank]);
 
   const recommendations = useMemo<Recommendation[]>(() => {
     if (!blank) return [];
+
+    // sheet_ups + flat_sheet: user specifies ONE sheet directly — no stock ranking.
+    if (mode !== "carton_dims") {
+      const longMm = manualSheetLongMm, shortMm = manualSheetShortMm;
+      if (longMm <= 0 || shortMm <= 0) return [];
+      let computed = upsOnSheet(blank.blankW, blank.blankH, longMm, shortMm, allow);
+      // Full-sheet flat work (poster/gumming ≈ sheet size): gripper/trim math yields 0,
+      // but it's really 1-up printed edge-to-edge. Default to 1 when the piece fits the raw sheet.
+      if (isFlat && computed.ups === 0 && blank.blankW <= longMm && blank.blankH <= shortMm) {
+        computed = { ...computed, ups: 1, cols: 1, rows: 1, yieldPct: Math.round((blank.blankW * blank.blankH * 1000) / (longMm * shortMm)) / 10 };
+      }
+      const typedUps = num(manualUps, 0);
+      const useUps = typedUps > 0
+        ? { ...computed, ups: typedUps, cols: computed.cols || typedUps, rows: computed.rows || 1 }
+        : computed;
+      // match a stock material of this size to pull gsm/rate if available
+      const boardsM = (materials ?? []).filter(m => m.materialType === "board" || m.materialType === "paper");
+      let matched: typeof boardsM[0] | undefined;
+      for (const m of boardsM) {
+        const d = parseSheetDimsMm(m.dimensions);
+        if (d && Math.abs(d.longMm - longMm) < 2 && Math.abs(d.shortMm - shortMm) < 2) { matched = m; break; }
+      }
+      const gsm = matched?.gsm ?? null;
+      const rateKg = matched?.ratePerUnit != null ? Number(matched.ratePerUnit) : null;
+      let rateSheet = matched?.ratePerSheet != null ? Number(matched.ratePerSheet) : null;
+      if ((rateSheet == null || rateSheet <= 0) && rateKg != null && gsm) {
+        rateSheet = sheetWeightKg(longMm, shortMm, gsm) * rateKg;
+      }
+      // flat-sheet quantity may be in sheets or pieces
+      const sheetsNeeded = (isFlat && flatQtyBasis === "sheets")
+        ? qtyN
+        : Math.ceil(qtyN / Math.max(1, useUps.ups));
+      return [{
+        key: "manual-sheet",
+        source: "stock",
+        materialId: matched?.id ?? null,
+        name: matched?.materialName ?? `${manualSheetLenIn}×${manualSheetWidIn} in (entered)`,
+        dimsLabel: `${manualSheetLenIn}x${manualSheetWidIn}`,
+        longMm, shortMm, gsm,
+        grain: matched?.grain ?? null,
+        ratePerKg: rateKg, ratePerSheet: rateSheet,
+        stockQty: matched?.currentQty != null ? Number(matched.currentQty) : null,
+        stockUnit: matched?.unit ?? null,
+        ups: useUps,
+        sheetsNeeded,
+        paperCost: rateSheet != null && rateSheet > 0 ? sheetsNeeded * rateSheet : null,
+      }];
+    }
+
     const recs: Recommendation[] = [];
 
     const boards = (materials ?? []).filter(
@@ -139,7 +212,7 @@ export default function LayoutPlanner() {
     }
     parents.sort((x, y) => y.ups.yieldPct - x.ups.yieldPct);
     return parents.slice(0, 3);
-  }, [blank, materials, qtyN, allow]);
+  }, [blank, materials, qtyN, allow, mode, isFlat, manualSheetLongMm, manualSheetShortMm, manualUps, flatQtyBasis, manualSheetLenIn, manualSheetWidIn]);
 
   const selected = useMemo(() => {
     if (recommendations.length === 0) return null;
@@ -153,21 +226,26 @@ export default function LayoutPlanner() {
 
   function useInCosting() {
     if (!selected || !blank) return;
-    const payload = {
+    const costingKind = isFlat ? "flat_sheet" : "carton_ups";
+    const payload: Record<string, string> = {
       qtyRequired: String(qtyN),
-      cartonLengthMm: String(L),
-      cartonWidthMm: String(W),
-      cartonHeightMm: String(H),
-      cartonStyle: style,
+      jobKind: costingKind,
       upsPerSheet: String(selected.ups.ups),
-      // costing form takes inches; convert from mm. Long edge → length.
       sheetLengthIn: String(+(selected.shortMm / 25.4).toFixed(4)),
       sheetBreadthIn: String(+(selected.longMm / 25.4).toFixed(4)),
-      ...(selected.materialId != null && { materialId: String(selected.materialId) }),
-      ...(selected.gsm != null && { gsm: String(selected.gsm) }),
-      ...(selected.ratePerKg != null && { ratePerKg: String(selected.ratePerKg) }),
       _label: `${selected.ups.ups}-up on ${selected.dimsLabel} (${selected.ups.yieldPct}% yield)`,
     };
+    if (!isFlat) {
+      payload.cartonLengthMm = String(L);
+      payload.cartonWidthMm = String(W);
+      payload.cartonHeightMm = String(H);
+      payload.cartonStyle = style;
+    } else {
+      payload.qtyBasis = flatQtyBasis;
+    }
+    if (selected.materialId != null) payload.materialId = String(selected.materialId);
+    if (selected.gsm != null) payload.gsm = String(selected.gsm);
+    if (selected.ratePerKg != null) payload.ratePerKg = String(selected.ratePerKg);
     sessionStorage.setItem("pf.layoutHandoff", JSON.stringify(payload));
     navigate("/costing");
   }
@@ -185,13 +263,40 @@ export default function LayoutPlanner() {
           Layout Planner
         </h1>
         <p className="text-muted-foreground mt-1">
-          Measure a carton → flat blank, best sheet, ups & dieline layout in seconds
+          Carton → best sheet, or enter your own sheet/poster size → ups & layout in seconds
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* ------------ INPUTS ------------ */}
-        <Card className="lg:col-span-2 p-5 space-y-5 h-fit">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* ------------ INPUTS (desktop: left / mobile: below preview) ------------ */}
+        <Card className="lg:col-span-4 order-2 lg:order-1 p-5 space-y-5 h-fit">
+          {/* Mode selector — mirrors the Costing page */}
+          <div>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-2">Mode</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { k: "carton_dims", t: "Carton", s: "auto sheet" },
+                { k: "sheet_ups",   t: "Carton", s: "my sheet" },
+                { k: "flat_sheet",  t: "Flat", s: "poster/gum" },
+              ].map((o) => (
+                <button
+                  key={o.k}
+                  type="button"
+                  onClick={() => setMode(o.k as typeof mode)}
+                  className={cn(
+                    "rounded-lg border px-2 py-2 text-center transition-all",
+                    mode === o.k ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-border bg-card hover:border-muted-foreground/40",
+                  )}
+                >
+                  <p className="text-sm font-bold leading-tight">{o.t}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{o.s}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Carton dimensions — hidden for flat sheet */}
+          {!isFlat && (
           <div>
             <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
               <Ruler size={14} /> Carton Dimensions (mm)
@@ -214,29 +319,85 @@ export default function LayoutPlanner() {
               L = front panel width · W = side depth · H = standing height
             </p>
           </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Carton Style</Label>
-              <Select value={style} onChange={(e) => setStyle(e.target.value)}>
-                {CARTON_STYLES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </Select>
+          {/* Flat-sheet piece size */}
+          {isFlat && (
+          <div>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+              <Ruler size={14} /> Piece Size (mm)
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Width</Label>
+                <Input type="number" min="1" value={pieceW} onChange={(e) => setPieceW(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Height</Label>
+                <Input type="number" min="1" value={pieceH} onChange={(e) => setPieceH(e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Quantity (cartons)</Label>
-              <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <p className="text-[11px] text-muted-foreground mt-2">e.g. A4 poster = 210 × 297 · gumming sheet = full sheet size</p>
+          </div>
+          )}
+
+          {/* Manual sheet size — sheet_ups + flat_sheet */}
+          {(isSheetUps || isFlat) && (
+          <div>
+            <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3">Sheet Size (inches)</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Length</Label>
+                <Input type="number" min="1" step="0.1" value={manualSheetLenIn} onChange={(e) => setManualSheetLenIn(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Width</Label>
+                <Input type="number" min="1" step="0.1" value={manualSheetWidIn} onChange={(e) => setManualSheetWidIn(e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-3 space-y-1.5">
+              <Label>Ups per sheet {isFlat ? "(gang)" : ""} <span className="text-muted-foreground font-normal">— blank to auto-compute</span></Label>
+              <Input type="number" min="0" placeholder="auto" value={manualUps} onChange={(e) => setManualUps(e.target.value)} />
             </div>
           </div>
+          )}
 
-          {blank && (
-            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-primary mb-1">Flat Blank</p>
-              <p className="text-2xl font-black tabular-nums">
-                {blank.blankW} × {blank.blankH} <span className="text-sm font-semibold text-muted-foreground">mm</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1">{blank.formula}</p>
+          {/* Carton style — carton modes only */}
+          {!isFlat && (
+          <div className="space-y-1.5">
+            <Label>Carton Style</Label>
+            <Select value={style} onChange={(e) => setStyle(e.target.value)}>
+              {CARTON_STYLES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </Select>
+          </div>
+          )}
+
+          {/* Quantity + (flat) basis toggle */}
+          <div className="space-y-1.5">
+            {isFlat && (
+              <div className="flex items-center gap-2 mb-1">
+                <Label className="text-xs">Quantity is:</Label>
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  {["sheets", "pieces"].map((b) => (
+                    <button key={b} type="button" onClick={() => setFlatQtyBasis(b as "sheets" | "pieces")}
+                      className={cn("px-2.5 py-1 text-xs font-bold capitalize",
+                        flatQtyBasis === b ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground")}>
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <Label>{isFlat ? (flatQtyBasis === "sheets" ? "Quantity (sheets)" : "Quantity (pieces)") : "Quantity (cartons)"}</Label>
+            <Input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} />
+          </div>
+
+          {blank && !isFlat && (
+            <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Flat blank</span>
+              <span className="text-sm font-black tabular-nums">{blank.blankW} × {blank.blankH} <span className="text-[11px] font-semibold text-muted-foreground">mm</span></span>
             </div>
           )}
 
@@ -269,25 +430,29 @@ export default function LayoutPlanner() {
         </Card>
 
         {/* ------------ RESULTS ------------ */}
-        <div className="lg:col-span-3 space-y-4">
-          {!validCarton || !blank ? (
+        <div className="lg:col-span-8 order-1 lg:order-2 space-y-4 lg:sticky lg:top-4">
+          {!blank ? (
             <Card className="p-10 text-center text-muted-foreground">
-              Enter carton L, W and H to see layouts
+              {isFlat ? "Enter piece size and sheet size to see the layout"
+                : isSheetUps ? "Enter carton dimensions and a sheet size"
+                : "Enter carton L, W and H to see layouts"}
             </Card>
           ) : (
             <>
               <div>
                 <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-2">
-                  {recommendations.length > 0 && recommendations[0].source === "parent"
-                    ? "No stock fits — suggested parent sizes"
-                    : "Best sheets from your stock"}
+                  {mode !== "carton_dims"
+                    ? "Layout on your sheet"
+                    : recommendations.length > 0 && recommendations[0].source === "parent"
+                      ? "No stock fits — suggested parent sizes"
+                      : "Best sheets from your stock"}
                 </h3>
                 {recommendations.length === 0 ? (
                   <Card className="p-6 text-center text-sm text-muted-foreground">
                     This blank doesn't fit any stock sheet or standard parent — check the carton dimensions.
                   </Card>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
                     {recommendations.map((r) => {
                       const isSel = selected?.key === r.key;
                       return (
@@ -296,7 +461,7 @@ export default function LayoutPlanner() {
                           type="button"
                           onClick={() => setSelectedKey(r.key)}
                           className={cn(
-                            "text-left rounded-xl border p-3.5 transition-all",
+                            "text-left rounded-xl border p-3 transition-all",
                             isSel
                               ? "border-primary ring-2 ring-primary/30 bg-primary/5"
                               : "border-border bg-card hover:border-primary/40",
@@ -368,7 +533,7 @@ export default function LayoutPlanner() {
                         Sheet Layout
                       </h3>
                       <p className="text-xs text-muted-foreground tabular-nums">
-                        {selected.dimsLabel} · blank {blank.blankW}×{blank.blankH}mm ·{" "}
+                        {selected.dimsLabel} · {isFlat ? "piece" : "blank"} {blank.blankW}×{blank.blankH}mm ·{" "}
                         <b>{selected.ups.cols}×{selected.ups.rows} = {selected.ups.ups}-up</b> · {selected.ups.yieldPct}% yield
                       </p>
                     </div>
@@ -396,10 +561,13 @@ export default function LayoutPlanner() {
                         disabled={!saveJobId || !selected}
                         onClick={async () => {
                           if (!saveJobId || !selected) return;
+                          const body = isFlat
+                            ? { upsPerSheet: selected.ups.ups }
+                            : { cartonStyle: style, upsPerSheet: selected.ups.ups };
                           const r = await fetch(`/api/jobs/${saveJobId}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ cartonStyle: style, upsPerSheet: selected.ups.ups }),
+                            body: JSON.stringify(body),
                           });
                           if (r.ok) toast.success(`Saved ${selected.ups.ups}-up to job`);
                           else toast.error("Save failed");
