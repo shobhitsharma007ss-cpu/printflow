@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useDashboardMetrics } from "@/hooks/use-dashboard";
 import { Card } from "@/components/ui-elements";
+import { PlantPulse } from "@/components/plant-pulse";
 import { Activity, Briefcase, AlertTriangle, CheckCircle2, Factory, Clock } from "lucide-react";
 import { getStatusColor, getStatusDotColor, isAnimatedStatus } from "@/lib/utils";
 import { format } from "date-fns";
@@ -75,6 +76,8 @@ export default function Dashboard() {
           bgColor="bg-indigo-500/10"
         />
       </div>
+
+      <PlantPulse machines={metrics.machineStatuses} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Machine Status Row */}

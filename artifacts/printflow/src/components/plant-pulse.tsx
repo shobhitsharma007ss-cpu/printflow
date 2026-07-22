@@ -1,172 +1,274 @@
 import React, { useMemo } from "react";
 
-/* PLANT PULSE — living press hero for the wall TV.
-   Pure CSS animations (transform/opacity only → 60fps on stick PC).
-   Speed of everything maps to REAL data: fastest running machine's SPH.
-   Respects prefers-reduced-motion. Self-contained: no framer, no deps. */
+/* PLANT PULSE v2 — the living line.
+   Not a generic press: THEIR plant. Every machine from the DB rendered as a
+   station in production order, each animating by its OWN live status:
+   running spins at its real SPH · paused freezes mid-motion (amber)
+   maintenance beats red · idle sits as a dim ghost.
+   Wall-TV hero: dark by design, glanceable from across the floor.
+   Pure CSS transform/opacity — 60fps on a stick PC. Reduced-motion safe. */
 
-type M = { status?: string | null; speedPerHour?: number | null };
+type M = {
+  id: number;
+  machineName?: string | null;
+  machineType?: string | null;
+  status?: string | null;
+  speedPerHour?: number | null;
+  currentJobName?: string | null;
+};
+
+type Kind = "cutter" | "press" | "coater" | "diecut" | "gluer" | "gear";
+
+function kindOf(m: M): Kind {
+  const s = `${m.machineType ?? ""} ${m.machineName ?? ""}`.toLowerCase();
+  if (/die/.test(s)) return "diecut";
+  if (/glu|fold/.test(s)) return "gluer";
+  if (/coat/.test(s)) return "coater";
+  if (/cut|guillo|wohlenberg/.test(s)) return "cutter";
+  if (/print|press|komori|planeta|offset/.test(s)) return "press";
+  return "gear";
+}
+
+const ORDER: Record<Kind, number> = { cutter: 0, press: 1, coater: 2, diecut: 3, gluer: 4, gear: 5 };
+
+function stateOf(m: M): "run" | "paused" | "maint" | "idle" {
+  if (m.status === "maintenance") return "maint";
+  if (m.status === "paused") return "paused";
+  if (m.status === "running") return "run";
+  return "idle";
+}
+
+const STATE_COLOR = { run: "#34d399", paused: "#fbbf24", maint: "#fb7185", idle: "#475569" } as const;
 
 export function PlantPulse({ machines }: { machines: M[] | undefined }) {
-  const { running, idle, maint, cycleSec } = useMemo(() => {
-    const ms = machines ?? [];
-    const running = ms.filter((m) => m.status === "running").length;
-    const maint = ms.filter((m) => m.status === "maintenance").length;
-    const idle = ms.length - running - maint;
-    const maxSph = Math.max(0, ...ms.filter((m) => m.status === "running").map((m) => m.speedPerHour ?? 0));
-    // 12,000 sph → 1.1s cylinder cycle; 5,000 → 2.6s; nothing running → slow ghost 6s
-    const cycleSec = maxSph > 0 ? Math.max(0.8, Math.min(3, 13200 / maxSph)) : 6;
-    return { running, idle, maint, cycleSec };
+  const model = useMemo(() => {
+    const ms = [...(machines ?? [])].sort((a, b) => ORDER[kindOf(a)] - ORDER[kindOf(b)] || a.id - b.id);
+    const counts = { run: 0, paused: 0, maint: 0, idle: 0 };
+    for (const m of ms) counts[stateOf(m)]++;
+    const fastest = ms
+      .filter((m) => stateOf(m) === "run" && (m.speedPerHour ?? 0) > 0)
+      .sort((a, b) => (b.speedPerHour ?? 0) - (a.speedPerHour ?? 0))[0];
+    const flowCyc = fastest ? Math.max(0.8, Math.min(3, 13200 / (fastest.speedPerHour ?? 8000))) : 6;
+    return { ms, counts, fastest, flowCyc, live: counts.run > 0 };
   }, [machines]);
 
-  const live = running > 0;
-  const pulseClass = running >= 3 ? "pp-ecg-high" : running >= 1 ? "pp-ecg-med" : "pp-ecg-flat";
+  const { ms, counts, fastest, flowCyc, live } = model;
+  if (ms.length === 0) return null;
+
+  const W = 900;
+  const slot = (W - 60) / ms.length;
+  const ecg = useMemo(() => {
+    const n = counts.run;
+    if (n === 0) return `M0 16 L${W} 16`;
+    let d = `M0 16`;
+    const seg = W / (n + 1);
+    for (let i = 1; i <= n; i++) {
+      const cx = seg * i;
+      d += ` L${cx - 26} 16 L${cx - 14} 12 L${cx - 6} 28 L${cx + 2} 3 L${cx + 10} 22 L${cx + 18} 16`;
+    }
+    d += ` L${W} 16`;
+    return d;
+  }, [counts.run]);
 
   return (
-    <div className="pp-wrap relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0b0f14] p-4 md:p-5">
-      <style>{PP_CSS}</style>
+    <div className="pp2 relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0b0f14] p-4 md:p-5">
+      <style>{CSS}</style>
 
-      {/* header row: counts */}
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Plant Pulse</p>
+      <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-500">Plant Pulse</p>
+          {live && (
+            <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-400">
+              <i className="pp2-dot" /> Live
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-4 text-xs font-bold tabular-nums">
-          <span className="flex items-center gap-1.5 text-emerald-400">
-            <i className="pp-dot bg-emerald-400" style={{ animationDuration: live ? "1.6s" : "0s" }} />
-            {running} running
-          </span>
-          <span className="flex items-center gap-1.5 text-slate-400">
-            <i className="pp-dot bg-slate-500" style={{ animation: "none" }} />
-            {idle} idle
-          </span>
-          {maint > 0 && (
-            <span className="flex items-center gap-1.5 text-rose-400">
-              <i className="pp-dot bg-rose-400" style={{ animationDuration: "1.2s" }} />
-              {maint} maintenance
+          <span className="text-emerald-400">{counts.run} running</span>
+          {counts.paused > 0 && <span className="text-amber-400">{counts.paused} paused</span>}
+          {counts.maint > 0 && <span className="text-rose-400">{counts.maint} maintenance</span>}
+          <span className="text-slate-500">{counts.idle} idle</span>
+          {fastest && (
+            <span className="hidden md:inline text-slate-400">
+              {fastest.machineName} · {(fastest.speedPerHour ?? 0).toLocaleString("en-IN")} sph
             </span>
           )}
         </div>
       </div>
 
-      {/* the living press */}
-      <svg
-        viewBox="0 0 900 190"
-        className={live ? "pp-live w-full h-auto" : "pp-idle w-full h-auto"}
-        style={{ ["--cyc" as string]: `${cycleSec}s` }}
-        role="img"
-        aria-label="Live press animation"
-      >
-        {/* base line */}
-        <rect x="20" y="158" width="860" height="6" rx="3" fill="#1e293b" />
-
-        {/* FEEDER: paper pile */}
-        <g>
-          <rect x="34" y="128" width="70" height="30" rx="3" fill="#334155" />
-          {[0, 1, 2, 3, 4].map((i) => (
-            <rect key={i} x={38} y={124 - i * 5} width={62} height={4} rx={2} fill="#cbd5e1" opacity={0.9 - i * 0.15} />
-          ))}
-          <text x="69" y="180" textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">FEEDER</text>
-        </g>
-
-        {/* sheet path — traveling dashes */}
+      <svg viewBox={`0 0 ${W} 210`} className="w-full h-auto" role="img" aria-label="Live plant line — one station per machine">
+        {/* conveyor */}
+        <rect x="20" y="164" width={W - 40} height="5" rx="2.5" fill="#1e293b" />
         <path
-          d="M 104 120 L 780 120"
-          stroke="#e2e8f0"
-          strokeWidth="2.5"
-          strokeDasharray="16 26"
-          className="pp-sheet"
-          fill="none"
-          strokeLinecap="round"
+          d={`M 30 158 L ${W - 30} 158`}
+          stroke="#e2e8f0" strokeWidth="2" strokeDasharray="12 22" strokeLinecap="round" fill="none"
+          className={live ? "pp2-flow" : ""} opacity={live ? 0.9 : 0.12}
+          style={{ ["--fc" as string]: `${flowCyc}s` }}
         />
-
-        {/* 4 INK UNITS + COATER */}
-        {[
-          { x: 150, c: "#22d3ee", label: "C" },
-          { x: 280, c: "#e879f9", label: "M" },
-          { x: 410, c: "#facc15", label: "Y" },
-          { x: 540, c: "#94a3b8", label: "K" },
-          { x: 670, c: "#34d399", label: "COAT" },
-        ].map((u, i) => (
-          <g key={i}>
-            {/* glow under unit */}
-            <ellipse cx={u.x + 40} cy={150} rx={42} ry={9} fill={u.c} className="pp-glow" style={{ animationDelay: `${i * 0.18}s` }} />
-            {/* tower */}
-            <rect x={u.x} y={52} width={80} height={106} rx={8} fill="#0f172a" stroke="#1e293b" strokeWidth="2" />
-            {/* ink duct tint */}
-            <rect x={u.x + 12} y={60} width={56} height={10} rx={5} fill={u.c} opacity="0.85" />
-            {/* upper cylinder — rotates */}
-            <g className="pp-cyl" style={{ transformOrigin: `${u.x + 40}px 96px` }}>
-              <circle cx={u.x + 40} cy={96} r={17} fill="#1e293b" stroke="#475569" strokeWidth="2" />
-              <line x1={u.x + 40} y1={82} x2={u.x + 40} y2={96} stroke={u.c} strokeWidth="3" strokeLinecap="round" />
-            </g>
-            {/* lower cylinder — counter-rotates */}
-            <g className="pp-cyl-r" style={{ transformOrigin: `${u.x + 40}px 132px` }}>
-              <circle cx={u.x + 40} cy={132} r={13} fill="#1e293b" stroke="#475569" strokeWidth="2" />
-              <line x1={u.x + 40} y1={132} x2={u.x + 50} y2={132} stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" />
-            </g>
-            <text x={u.x + 40} y={44} textAnchor="middle" fontSize="11" fill={u.c} fontWeight="800">{u.label}</text>
-          </g>
+        {ms.map((m, i) => (
+          <Station key={m.id} m={m} x={30 + slot * i + slot / 2} slot={Math.min(slot, 110)} />
         ))}
-
-        {/* DELIVERY: growing stack */}
-        <g>
-          <rect x="790" y="128" width="76" height="30" rx="3" fill="#334155" />
-          {[0, 1, 2, 3].map((i) => (
-            <rect key={i} x={794} y={124 - i * 5} width={68} height={4} rx={2} fill="#e2e8f0" opacity={0.85 - i * 0.15} />
-          ))}
-          {/* landing sheet */}
-          <rect x="794" y="100" width="68" height="4" rx="2" fill="#ffffff" className="pp-land" />
-          <text x="828" y="180" textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">DELIVERY</text>
-        </g>
       </svg>
 
-      {/* ECG plant heartbeat */}
-      <svg viewBox="0 0 900 34" className="w-full h-auto mt-1" aria-hidden="true">
+      <svg viewBox={`0 0 ${W} 32`} className="w-full h-auto mt-1" aria-hidden="true">
         <path
-          d={
-            running >= 3
-              ? "M0 17 L120 17 L140 4 L160 30 L180 17 L340 17 L360 2 L385 32 L410 17 L560 17 L580 6 L600 28 L620 17 L900 17"
-              : running >= 1
-                ? "M0 17 L200 17 L220 8 L245 26 L270 17 L520 17 L540 9 L565 25 L590 17 L900 17"
-                : "M0 17 L900 17"
-          }
-          stroke={live ? "#34d399" : "#334155"}
-          strokeWidth="2"
-          fill="none"
-          strokeLinecap="round"
-          className={`pp-ecg ${pulseClass}`}
+          d={ecg}
+          stroke={live ? "#34d399" : "#334155"} strokeWidth="1.5" fill="none"
+          strokeLinecap="round" strokeLinejoin="round"
+          className={`pp2-ecg ${counts.run >= 3 ? "pp2-ecg-hi" : counts.run >= 1 ? "pp2-ecg-md" : "pp2-ecg-lo"}`}
         />
       </svg>
     </div>
   );
 }
 
-const PP_CSS = `
-.pp-dot{display:inline-block;width:8px;height:8px;border-radius:9999px;animation:ppBlink 1.6s ease-in-out infinite}
-@keyframes ppBlink{0%,100%{opacity:1}50%{opacity:.35}}
+function Station({ m, x, slot }: { m: M; x: number; slot: number }) {
+  const k = kindOf(m);
+  const st = stateOf(m);
+  const c = STATE_COLOR[st];
+  const cyc = Math.max(0.7, Math.min(3, 11000 / Math.max(1, m.speedPerHour ?? 8000)));
+  const name = (m.machineName ?? "").length > 13 ? `${(m.machineName ?? "").slice(0, 12)}…` : m.machineName ?? "";
+  const w = Math.min(slot - 14, 78);
 
-.pp-live .pp-cyl{animation:ppSpin var(--cyc) linear infinite}
-.pp-live .pp-cyl-r{animation:ppSpinR calc(var(--cyc)*0.72) linear infinite}
-.pp-live .pp-sheet{animation:ppTravel calc(var(--cyc)*0.9) linear infinite}
-.pp-live .pp-glow{opacity:.16;animation:ppGlow calc(var(--cyc)*2) ease-in-out infinite}
-.pp-live .pp-land{animation:ppLand calc(var(--cyc)*1.8) ease-in infinite}
-.pp-idle .pp-cyl,.pp-idle .pp-cyl-r{animation:ppSpin 14s linear infinite}
-.pp-idle .pp-sheet{opacity:.15}
-.pp-idle .pp-glow{opacity:.05}
-.pp-idle .pp-land{opacity:0}
+  return (
+    <g
+      className={`pp2-st pp2-${st}`}
+      style={{ ["--c" as string]: `${cyc}s`, ["--d" as string]: `-${(cyc * 0.4).toFixed(2)}s` }}
+    >
+      {/* status underline on conveyor */}
+      <rect x={x - w / 2} y={164} width={w} height={5} rx={2.5} fill={c} opacity={st === "idle" ? 0.25 : 0.9} />
+      {st === "maint" && <rect x={x - w / 2} y={164} width={w} height={5} rx={2.5} fill={c} className="pp2-beat" />}
 
-@keyframes ppSpin{to{transform:rotate(360deg)}}
-@keyframes ppSpinR{to{transform:rotate(-360deg)}}
-@keyframes ppTravel{to{stroke-dashoffset:-42}}
-@keyframes ppGlow{0%,100%{opacity:.10}50%{opacity:.30}}
-@keyframes ppLand{0%{transform:translateY(-26px);opacity:0}25%{opacity:1}55%{transform:translateY(0);opacity:1}100%{transform:translateY(0);opacity:0}}
+      {k === "press" && <Press x={x} c={c} />}
+      {k === "cutter" && <Cutter x={x} c={c} />}
+      {k === "diecut" && <DieCut x={x} c={c} />}
+      {k === "gluer" && <Gluer x={x} c={c} />}
+      {k === "coater" && <Coater x={x} c={c} />}
+      {k === "gear" && <Gear x={x} c={c} />}
 
-.pp-ecg{stroke-dasharray:1200;stroke-dashoffset:1200}
-.pp-ecg-high{animation:ppEcg 2.2s linear infinite}
-.pp-ecg-med{animation:ppEcg 3.6s linear infinite}
-.pp-ecg-flat{animation:ppEcg 8s linear infinite;opacity:.5}
-@keyframes ppEcg{to{stroke-dashoffset:0}}
-
-@media (prefers-reduced-motion: reduce){
-  .pp-wrap *{animation:none !important}
+      <text x={x} y={188} textAnchor="middle" fontSize="11" fontWeight="700"
+        fill={st === "idle" ? "#475569" : "#cbd5e1"}>{name}</text>
+      <text x={x} y={202} textAnchor="middle" fontSize="9" fontWeight="700" letterSpacing="0.08em"
+        fill={c} opacity={st === "idle" ? 0.5 : 0.9}>
+        {st === "run" ? "RUNNING" : st === "paused" ? "PAUSED" : st === "maint" ? "MAINT" : "IDLE"}
+      </text>
+    </g>
+  );
 }
+
+/* Cylinders rotate via dashed-ring dashoffset — cleaner than spoke lines */
+function Press({ x, c }: { x: number; c: string }) {
+  return (
+    <g>
+      <rect x={x - 34} y={82} width={68} height={76} rx={7} fill="#0f172a" stroke="#1e293b" strokeWidth="1.5" />
+      {["#22d3ee", "#e879f9", "#facc15", "#94a3b8"].map((ink, i) => (
+        <rect key={i} x={x - 26 + i * 14} y={88} width={10} height={4} rx={2} fill={ink} opacity={0.85} />
+      ))}
+      <circle cx={x} cy={112} r={13} fill="#0b0f14" stroke="#475569" strokeWidth="1.5" />
+      <circle cx={x} cy={112} r={13} fill="none" stroke={c} strokeWidth="2" strokeDasharray="7 14"
+        className="pp2-spin" style={{ transformOrigin: `${x}px 112px` }} />
+      <circle cx={x} cy={140} r={10} fill="#0b0f14" stroke="#475569" strokeWidth="1.5" />
+      <circle cx={x} cy={140} r={10} fill="none" stroke="#64748b" strokeWidth="2" strokeDasharray="5 11"
+        className="pp2-spin-r" style={{ transformOrigin: `${x}px 140px` }} />
+      <line x1={x - 30} y1={127} x2={x + 30} y2={127} stroke="#e2e8f0" strokeWidth="1.5" opacity="0.5" />
+    </g>
+  );
+}
+
+function Cutter({ x, c }: { x: number; c: string }) {
+  return (
+    <g>
+      {[0, 1, 2, 3].map((i) => (
+        <rect key={i} x={x - 26} y={150 - i * 5} width={52} height={3.5} rx={1.5} fill="#cbd5e1" opacity={0.85 - i * 0.18} />
+      ))}
+      <rect x={x - 30} y={96} width={60} height={8} rx={3} fill="#334155" />
+      <g className="pp2-chop">
+        <rect x={x - 26} y={106} width={52} height={5} rx={2} fill={c} />
+        <polygon points={`${x - 26},111 ${x + 26},111 ${x},117`} fill={c} opacity="0.7" />
+      </g>
+    </g>
+  );
+}
+
+function DieCut({ x, c }: { x: number; c: string }) {
+  return (
+    <g>
+      <rect x={x - 30} y={144} width={60} height={12} rx={3} fill="#334155" />
+      <g className="pp2-chop">
+        <rect x={x - 26} y={104} width={52} height={22} rx={4} fill="#0f172a" stroke="#475569" strokeWidth="1.5" />
+        <line x1={x - 18} y1={126} x2={x - 18} y2={132} stroke={c} strokeWidth="2" strokeLinecap="round" />
+        <line x1={x} y1={126} x2={x} y2={132} stroke={c} strokeWidth="2" strokeLinecap="round" />
+        <line x1={x + 18} y1={126} x2={x + 18} y2={132} stroke={c} strokeWidth="2" strokeLinecap="round" />
+      </g>
+    </g>
+  );
+}
+
+function Gluer({ x, c }: { x: number; c: string }) {
+  return (
+    <g>
+      <rect x={x - 32} y={128} width={64} height={28} rx={6} fill="#0f172a" stroke="#1e293b" strokeWidth="1.5" />
+      {[0, 1, 2].map((i) => (
+        <path key={i} d={`M ${x - 16 + i * 14} 136 l 8 6 l -8 6`} stroke={c} strokeWidth="2.5" fill="none"
+          strokeLinecap="round" strokeLinejoin="round" className="pp2-chev" style={{ animationDelay: `${i * 0.18}s` }} />
+      ))}
+    </g>
+  );
+}
+
+function Coater({ x, c }: { x: number; c: string }) {
+  return (
+    <g>
+      <line x1={x - 30} y1={150} x2={x + 30} y2={150} stroke="#e2e8f0" strokeWidth="1.5" opacity="0.5" />
+      <circle cx={x} cy={132} r={14} fill="#0b0f14" stroke="#475569" strokeWidth="1.5" />
+      <circle cx={x} cy={132} r={14} fill="none" stroke={c} strokeWidth="2" strokeDasharray="8 14"
+        className="pp2-spin" style={{ transformOrigin: `${x}px 132px` }} />
+    </g>
+  );
+}
+
+function Gear({ x, c }: { x: number; c: string }) {
+  return (
+    <circle cx={x} cy={136} r={14} fill="none" stroke={c} strokeWidth="2.5" strokeDasharray="5 8"
+      className="pp2-spin" style={{ transformOrigin: `${x}px 136px` }} />
+  );
+}
+
+const CSS = `
+.pp2-dot{display:inline-block;width:7px;height:7px;border-radius:9999px;background:#34d399;animation:pp2Blink 1.4s ease-in-out infinite}
+@keyframes pp2Blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.pp2-run .pp2-spin{animation:pp2Spin var(--c) linear infinite}
+.pp2-run .pp2-spin-r{animation:pp2SpinR calc(var(--c)*.72) linear infinite}
+.pp2-run .pp2-chop{animation:pp2Chop calc(var(--c)*1.4) ease-in-out infinite;}
+.pp2-run .pp2-chev{animation:pp2Chev calc(var(--c)*.9) ease-in-out infinite}
+
+.pp2-paused .pp2-spin,.pp2-paused .pp2-spin-r,.pp2-paused .pp2-chop,.pp2-paused .pp2-chev{
+  animation-play-state:paused !important;
+  animation-name:pp2Spin;animation-duration:var(--c);animation-delay:var(--d);animation-iteration-count:infinite;animation-timing-function:linear}
+.pp2-paused .pp2-spin-r{animation-name:pp2SpinR}
+.pp2-paused .pp2-chop{animation-name:pp2Chop;animation-timing-function:ease-in-out}
+.pp2-paused .pp2-chev{animation-name:pp2Chev;animation-timing-function:ease-in-out}
+
+.pp2-idle{opacity:.3}
+.pp2-idle .pp2-spin,.pp2-idle .pp2-spin-r,.pp2-idle .pp2-chop,.pp2-idle .pp2-chev{animation:none}
+
+.pp2-maint .pp2-spin,.pp2-maint .pp2-spin-r,.pp2-maint .pp2-chop,.pp2-maint .pp2-chev{animation:none}
+.pp2-beat{animation:pp2Beat 1.3s ease-in-out infinite}
+@keyframes pp2Beat{0%,100%{opacity:.25}18%{opacity:1}36%{opacity:.35}50%{opacity:.95}70%,100%{opacity:.25}}
+
+.pp2-flow{animation:pp2Flow var(--fc) linear infinite}
+@keyframes pp2Flow{to{stroke-dashoffset:-34}}
+@keyframes pp2Spin{to{transform:rotate(360deg)}}
+@keyframes pp2SpinR{to{transform:rotate(-360deg)}}
+@keyframes pp2Chop{0%,55%,100%{transform:translateY(0)}70%{transform:translateY(26px)}82%{transform:translateY(26px)}}
+@keyframes pp2Chev{0%{transform:translateX(0);opacity:.25}50%{transform:translateX(7px);opacity:1}100%{transform:translateX(14px);opacity:0}}
+
+.pp2-ecg{stroke-dasharray:1400;stroke-dashoffset:1400}
+.pp2-ecg-hi{animation:pp2Ecg 2.4s linear infinite}
+.pp2-ecg-md{animation:pp2Ecg 4s linear infinite}
+.pp2-ecg-lo{animation:pp2Ecg 9s linear infinite;opacity:.45}
+@keyframes pp2Ecg{to{stroke-dashoffset:0}}
+
+@media (prefers-reduced-motion: reduce){.pp2 *{animation:none !important}}
 `;
