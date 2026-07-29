@@ -26,6 +26,7 @@ import {
   RescheduleJobBody,
 } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -533,6 +534,77 @@ router.get("/jobs", async (req, res): Promise<void> => {
   res.json(result.filter(Boolean));
 });
 
+// Decision C: link inks + glue to the job so they're tracked & deducted for
+// consumption reporting (never blocking). Matches the standard CMYK set + any
+// spot inks + folding glue in inventory. If a material isn't stocked, it's
+// skipped silently — this is reporting-grade, not a hard dependency.
+async function autoLinkConsumables(jobId: number): Promise<void> {
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+  if (!job || !job.materialId || Number(job.qtySheets) <= 0) return;
+
+  // Don't double-link if this job already has ink/glue rows.
+  const existing = await db.select({ materialId: jobMaterialsTable.materialId }).from(jobMaterialsTable).where(eq(jobMaterialsTable.jobId, jobId));
+  const existingIds = new Set(existing.map(e => e.materialId));
+
+  // Sheet area from the paper's dimensions (mm string like "23x36 in" or "585x914 mm").
+  const [paper] = await db.select().from(materialsTable).where(eq(materialsTable.id, job.materialId));
+  if (!paper) return;
+  const dims = parseAreaM2(paper.dimensions);
+  if (!dims) return; // can't size ink without sheet area; skip quietly
+  const sheets = Number(job.qtySheets);
+  const passes = Number(job.printPassCount ?? 1) || 1;
+  const procC = Number(job.processColors ?? 4) || 4;
+  const spotC = Number(job.spotColors ?? 0) || 0;
+
+  // Same formula family as costing: area × coverage × sheets × filmWeight → kg.
+  const imageCoverage = 0.75;
+  const cmykKgPerColor = (dims * imageCoverage * 0.35 * sheets * 1.3) / 1000;
+  const spotKgPerColor = (dims * imageCoverage * 0.60 * sheets * 1.5) / 1000;
+
+  const allMats = await db.select().from(materialsTable);
+  const findByName = (needle: string) =>
+    allMats.find(m => (m.materialType === "consumable") && m.materialName.toLowerCase().includes(needle));
+
+  const inkRows: Array<{ mat: typeof allMats[0]; kg: number }> = [];
+  // CMYK — each process colour, one plate-worth of ink per pass
+  const cyan = findByName("cyan"), magenta = findByName("magenta"), yellow = findByName("yellow"), black = findByName("black");
+  const cmykKg = cmykKgPerColor * passes;
+  if (procC >= 1 && cyan) inkRows.push({ mat: cyan, kg: cmykKg });
+  if (procC >= 2 && magenta) inkRows.push({ mat: magenta, kg: cmykKg });
+  if (procC >= 3 && yellow) inkRows.push({ mat: yellow, kg: cmykKg });
+  if (procC >= 4 && black) inkRows.push({ mat: black, kg: cmykKg });
+
+  // Glue — folding adhesive, by carton count (qtySheets is pieces for flat, cartons for carton jobs)
+  const glueGramsPerCarton = 0.4;
+  const glue = allMats.find(m => m.materialType === "consumable" && /glue|adhesive/.test(m.materialName.toLowerCase()) && !/plate|storage/.test(m.materialName.toLowerCase()));
+  const glueKg = (sheets * glueGramsPerCarton) / 1000;
+
+  for (const { mat, kg } of inkRows) {
+    if (existingIds.has(mat.id) || kg <= 0) continue;
+    await db.insert(jobMaterialsTable).values({
+      jobId, materialId: mat.id, plannedQty: kg.toFixed(3), unit: mat.unit || "kg",
+      costPerUnit: mat.ratePerUnit != null ? String(mat.ratePerUnit) : null,
+    });
+  }
+  if (glue && !existingIds.has(glue.id) && glueKg > 0) {
+    await db.insert(jobMaterialsTable).values({
+      jobId, materialId: glue.id, plannedQty: glueKg.toFixed(3), unit: glue.unit || "kg",
+      costPerUnit: glue.ratePerUnit != null ? String(glue.ratePerUnit) : null,
+    });
+  }
+}
+
+// Parse sheet area in m² from a dimensions string. Handles "23x36 in", "585x914 mm", "585x914".
+function parseAreaM2(dimensions: string | null | undefined): number | null {
+  if (!dimensions) return null;
+  const raw = dimensions.toLowerCase();
+  const parts = raw.split(/[x×*]/).map(x => parseFloat(x));
+  if (parts.length < 2 || !(parts[0] > 0) || !(parts[1] > 0)) return null;
+  const factor = raw.includes("mm") ? 0.1 : raw.includes("cm") ? 1 : 2.54; // → cm
+  const lCm = parts[0] * factor, wCm = parts[1] * factor;
+  return (lCm * wCm) / 1e4; // cm² → m²
+}
+
 router.post("/jobs", async (req, res): Promise<void> => {
   const parsed = CreateJobBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -597,6 +669,9 @@ router.post("/jobs", async (req, res): Promise<void> => {
       });
     }
   }
+
+  // Decision C: auto-link inks + glue for consumption tracking.
+  try { await autoLinkConsumables(job.id); } catch (e) { logger.error({ e, jobId: job.id }, "autoLinkConsumables failed (non-fatal)"); }
 
   const result = await buildJobWithDetails(job.id);
   res.status(201).json(result);
