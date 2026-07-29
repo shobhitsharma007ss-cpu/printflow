@@ -6,6 +6,8 @@ import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { UnitSelect } from "@/components/unit-select";
+import { DEFAULT_DIM_UNIT, unitToMm, unitToIn, mmToUnit, inToUnit, dimDecimals, type DimUnit } from "@/lib/units";
 import { format } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
 import { useListJobQuotes, useConvertJobQuote, getListJobQuotesQueryKey } from "@workspace/api-client-react";
@@ -40,6 +42,8 @@ interface CostForm {
   jobKind: string;        // "carton_dims" | "carton_ups" | "flat_sheet"
   qtyBasis: string;       // flat_sheet only: "sheets" | "pieces"
   qtyRequired: string;
+  cartonUnit: string;   // display unit for carton dims
+  sheetUnit: string;    // display unit for sheet dims
   cartonLengthMm: string;
   cartonWidthMm: string;
   cartonHeightMm: string;
@@ -93,14 +97,16 @@ const DEFAULTS: CostForm = {
   jobKind: "carton_dims",
   qtyBasis: "sheets",
   qtyRequired: "25000",
-  cartonLengthMm: "100",
-  cartonWidthMm: "80",
-  cartonHeightMm: "40",
+  cartonUnit: DEFAULT_DIM_UNIT,
+  sheetUnit: DEFAULT_DIM_UNIT,
+  cartonLengthMm: "10",
+  cartonWidthMm: "8",
+  cartonHeightMm: "4",
   cartonStyle: "straight_tuck",
   upsPerSheet: "6",
   materialId: "",
-  sheetLengthIn: "23",
-  sheetBreadthIn: "36",
+  sheetLengthIn: "58.42",
+  sheetBreadthIn: "91.44",
   gsm: "300",
   ratePerKg: "85",
   processColors: "4",
@@ -169,8 +175,13 @@ function compute(
     ? (qtyBasis === "sheets" ? qtyInput * upsForCalc : qtyInput)
     : qtyInput;
   const qty        = qtyPieces;   // "pieces" everywhere downstream (cartons or posters)
-  const L_cm       = n(form.sheetLengthIn) * 2.54;
-  const B_cm       = n(form.sheetBreadthIn) * 2.54;
+  const sheetU     = (form.sheetUnit || DEFAULT_DIM_UNIT) as DimUnit;
+  const cartonU    = (form.cartonUnit || DEFAULT_DIM_UNIT) as DimUnit;
+  // Inputs are held in the user's chosen unit — convert to canonical here.
+  const sheetLenIn = unitToIn(n(form.sheetLengthIn), sheetU);
+  const sheetBrdIn = unitToIn(n(form.sheetBreadthIn), sheetU);
+  const L_cm       = sheetLenIn * 2.54;
+  const B_cm       = sheetBrdIn * 2.54;
   const gsm        = n(form.gsm);
   const ratePerKg  = n(form.ratePerKg);
   const ups        = Math.max(1, n(form.upsPerSheet, 1));
@@ -203,7 +214,7 @@ function compute(
   const aqRate     = n(form.aqueousRate, 230);
   const uvRate     = n(form.uvRate, 380);
   const varnishRate = n(form.varnishRate, 180);
-  const clMm       = Math.max(1, n(form.cartonLengthMm, 100));
+  const clMm       = Math.max(1, unitToMm(n(form.cartonLengthMm, 10), cartonU));
 
   // Press params from machine row
   const ratedSph = machine?.ratedSph ?? 12000;
@@ -411,6 +422,25 @@ export default function CostingPage() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(p => ({ ...p, [k]: e.target.value }));
 
+  // Switching a unit re-expresses the values already typed, so nothing is lost.
+  const switchCartonUnit = (next: DimUnit) => setForm(p => {
+    const cur = (p.cartonUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const conv = (v: string) => {
+      const out = mmToUnit(unitToMm(n(v), cur), next);
+      return out ? String(Number(out.toFixed(dimDecimals(next)))) : v;
+    };
+    return { ...p, cartonUnit: next, cartonLengthMm: conv(p.cartonLengthMm), cartonWidthMm: conv(p.cartonWidthMm), cartonHeightMm: conv(p.cartonHeightMm) };
+  });
+
+  const switchSheetUnit = (next: DimUnit) => setForm(p => {
+    const cur = (p.sheetUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const conv = (v: string) => {
+      const out = inToUnit(unitToIn(n(v), cur), next);
+      return out ? String(Number(out.toFixed(dimDecimals(next)))) : v;
+    };
+    return { ...p, sheetUnit: next, sheetLengthIn: conv(p.sheetLengthIn), sheetBreadthIn: conv(p.sheetBreadthIn) };
+  });
+
   const pressOptions = useMemo(
     () => (machines ?? []).filter(m => m.machineType === "printing"),
     [machines],
@@ -477,18 +507,20 @@ export default function CostingPage() {
 
   // Ups cross-check via imposition engine
   const impositionCheck = useMemo(() => {
-    const L = n(form.cartonLengthMm);
-    const W = n(form.cartonWidthMm);
-    const H = n(form.cartonHeightMm);
+    const cu = (form.cartonUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const su = (form.sheetUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const L = unitToMm(n(form.cartonLengthMm), cu);
+    const W = unitToMm(n(form.cartonWidthMm), cu);
+    const H = unitToMm(n(form.cartonHeightMm), cu);
     if (!L || !W || !H) return null;
     const blank = flatBlank(L, W, H, form.cartonStyle);
-    const longMm  = n(form.sheetLengthIn)  * 25.4;
-    const shortMm = n(form.sheetBreadthIn) * 25.4;
+    const longMm  = unitToMm(n(form.sheetLengthIn),  su);
+    const shortMm = unitToMm(n(form.sheetBreadthIn), su);
     if (!longMm || !shortMm) return null;
     const res = upsOnSheet(blank.blankW, blank.blankH, longMm, shortMm);
     const entered = Math.max(1, n(form.upsPerSheet, 1));
     return { maxUps: res.ups, entered, overLimit: entered > res.ups, blankW: blank.blankW, blankH: blank.blankH };
-  }, [form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm, form.cartonStyle, form.sheetLengthIn, form.sheetBreadthIn, form.upsPerSheet]);
+  }, [form.cartonLengthMm, form.cartonWidthMm, form.cartonHeightMm, form.cartonStyle, form.sheetLengthIn, form.sheetBreadthIn, form.upsPerSheet, form.cartonUnit, form.sheetUnit]);
 
   // Receive a layout handed off from the Layout Planner (sessionStorage, one-shot).
   useEffect(() => {
@@ -501,7 +533,7 @@ export default function CostingPage() {
       const allowed: (keyof CostForm)[] = [
         "qtyRequired", "cartonLengthMm", "cartonWidthMm", "cartonHeightMm",
         "cartonStyle", "upsPerSheet", "sheetLengthIn", "sheetBreadthIn",
-        "materialId", "gsm", "ratePerKg", "jobKind", "qtyBasis",
+        "materialId", "gsm", "ratePerKg", "jobKind", "qtyBasis", "cartonUnit", "sheetUnit",
       ];
       setForm(p => {
         const next = { ...p };
@@ -967,19 +999,22 @@ export default function CostingPage() {
             {/* Carton */}
             {form.jobKind === "carton_dims" && (
             <Card className="p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carton Dimensions</h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Carton Dimensions</h3>
+                <UnitSelect value={(form.cartonUnit || DEFAULT_DIM_UNIT) as DimUnit} onChange={switchCartonUnit} />
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <Label className="text-xs mb-1 block">L (mm)</Label>
-                  <Input type="number" value={form.cartonLengthMm} onChange={field("cartonLengthMm")} min={1} />
+                  <Label className="text-xs mb-1 block">L ({form.cartonUnit || DEFAULT_DIM_UNIT})</Label>
+                  <Input type="number" value={form.cartonLengthMm} onChange={field("cartonLengthMm")} min={0} step="any" />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">W (mm)</Label>
-                  <Input type="number" value={form.cartonWidthMm} onChange={field("cartonWidthMm")} min={1} />
+                  <Label className="text-xs mb-1 block">W ({form.cartonUnit || DEFAULT_DIM_UNIT})</Label>
+                  <Input type="number" value={form.cartonWidthMm} onChange={field("cartonWidthMm")} min={0} step="any" />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">H (mm)</Label>
-                  <Input type="number" value={form.cartonHeightMm} onChange={field("cartonHeightMm")} min={1} />
+                  <Label className="text-xs mb-1 block">H ({form.cartonUnit || DEFAULT_DIM_UNIT})</Label>
+                  <Input type="number" value={form.cartonHeightMm} onChange={field("cartonHeightMm")} min={0} step="any" />
                 </div>
               </div>
               <div>
@@ -1017,14 +1052,18 @@ export default function CostingPage() {
                   ))}
                 </Select>
               </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sheet Size</span>
+                <UnitSelect value={(form.sheetUnit || DEFAULT_DIM_UNIT) as DimUnit} onChange={switchSheetUnit} />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs mb-1 block">Sheet Length (in)</Label>
-                  <Input type="number" value={form.sheetLengthIn} onChange={field("sheetLengthIn")} step={0.5} min={1} />
+                  <Label className="text-xs mb-1 block">Length ({form.sheetUnit || DEFAULT_DIM_UNIT})</Label>
+                  <Input type="number" value={form.sheetLengthIn} onChange={field("sheetLengthIn")} step="any" min={0} />
                 </div>
                 <div>
-                  <Label className="text-xs mb-1 block">Sheet Breadth (in)</Label>
-                  <Input type="number" value={form.sheetBreadthIn} onChange={field("sheetBreadthIn")} step={0.5} min={1} />
+                  <Label className="text-xs mb-1 block">Breadth ({form.sheetUnit || DEFAULT_DIM_UNIT})</Label>
+                  <Input type="number" value={form.sheetBreadthIn} onChange={field("sheetBreadthIn")} step="any" min={0} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

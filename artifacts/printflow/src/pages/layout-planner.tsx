@@ -6,6 +6,8 @@ import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { UnitSelect } from "@/components/unit-select";
+import { DEFAULT_DIM_UNIT, unitToMm, mmToUnit, dimDecimals, type DimUnit } from "@/lib/units";
 import {
   DEFAULT_ALLOWANCES,
   CARTON_STYLES,
@@ -52,28 +54,44 @@ export default function LayoutPlanner() {
   const [saveJobId, setSaveJobId] = useState<string>("");
 
   const [mode, setMode] = useState<"carton_dims" | "sheet_ups" | "flat_sheet">("carton_dims");
-  const [cartonL, setCartonL] = useState("100");
-  const [cartonW, setCartonW] = useState("40");
-  const [cartonH, setCartonH] = useState("40");
+  const [dimUnit, setDimUnit] = useState<DimUnit>(DEFAULT_DIM_UNIT);      // carton + piece
+  const [sheetUnit, setSheetUnit] = useState<DimUnit>(DEFAULT_DIM_UNIT);  // manual sheet size
+  const [cartonL, setCartonL] = useState("10");
+  const [cartonW, setCartonW] = useState("4");
+  const [cartonH, setCartonH] = useState("4");
   const [style, setStyle] = useState("straight_tuck");
   const [qty, setQty] = useState("25000");
   // Manual sheet size (sheet_ups + flat_sheet modes), in inches
-  const [manualSheetLenIn, setManualSheetLenIn] = useState("23");
-  const [manualSheetWidIn, setManualSheetWidIn] = useState("36");
+  const [manualSheetLenIn, setManualSheetLenIn] = useState("58.42");
+  const [manualSheetWidIn, setManualSheetWidIn] = useState("91.44");
   // Flat-sheet piece size (mm) + gang ups
-  const [pieceW, setPieceW] = useState("210");
-  const [pieceH, setPieceH] = useState("297");
+  const [pieceW, setPieceW] = useState("21");
+  const [pieceH, setPieceH] = useState("29.7");
   const [flatQtyBasis, setFlatQtyBasis] = useState<"sheets" | "pieces">("sheets");
   const [manualUps, setManualUps] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [allow, setAllow] = useState<Allowances>({ ...DEFAULT_ALLOWANCES });
   const [selectedKey, setSelectedKey] = useState<string>("");
 
-  const L = num(cartonL);
-  const W = num(cartonW);
-  const H = num(cartonH);
-  const manualSheetLongMm = Math.max(num(manualSheetLenIn), num(manualSheetWidIn)) * 25.4;
-  const manualSheetShortMm = Math.min(num(manualSheetLenIn), num(manualSheetWidIn)) * 25.4;
+  // Inputs are held in the chosen unit — convert to canonical mm for the engine.
+  const L = unitToMm(num(cartonL), dimUnit);
+  const W = unitToMm(num(cartonW), dimUnit);
+  const H = unitToMm(num(cartonH), dimUnit);
+  const manualSheetLongMm = unitToMm(Math.max(num(manualSheetLenIn), num(manualSheetWidIn)), sheetUnit);
+  const manualSheetShortMm = unitToMm(Math.min(num(manualSheetLenIn), num(manualSheetWidIn)), sheetUnit);
+  const convDim = (v: string, from: DimUnit, to: DimUnit) => {
+    const out = mmToUnit(unitToMm(num(v), from), to);
+    return out ? String(Number(out.toFixed(dimDecimals(to)))) : v;
+  };
+  const switchDimUnit = (next: DimUnit) => {
+    setCartonL(v => convDim(v, dimUnit, next)); setCartonW(v => convDim(v, dimUnit, next)); setCartonH(v => convDim(v, dimUnit, next));
+    setPieceW(v => convDim(v, dimUnit, next)); setPieceH(v => convDim(v, dimUnit, next));
+    setDimUnit(next);
+  };
+  const switchSheetUnit = (next: DimUnit) => {
+    setManualSheetLenIn(v => convDim(v, sheetUnit, next)); setManualSheetWidIn(v => convDim(v, sheetUnit, next));
+    setSheetUnit(next);
+  };
   const isFlat = mode === "flat_sheet";
   const isSheetUps = mode === "sheet_ups";
   const qtyN = Math.max(1, num(qty, 25000));
@@ -84,7 +102,7 @@ export default function LayoutPlanner() {
     [L, W, H, style, allow, validCarton],
   );
   // Effective "blank" the imposition engine tiles. Flat sheet = the typed piece rectangle.
-  const pieceWmm = num(pieceW), pieceHmm = num(pieceH);
+  const pieceWmm = unitToMm(num(pieceW), dimUnit), pieceHmm = unitToMm(num(pieceH), dimUnit);
   const validFlat = pieceWmm > 0 && pieceHmm > 0;
   const blank = useMemo(() => {
     if (isFlat) {
@@ -230,6 +248,8 @@ export default function LayoutPlanner() {
     const payload: Record<string, string> = {
       qtyRequired: String(qtyN),
       jobKind: costingKind,
+      cartonUnit: "mm",   // layout hands over canonical values
+      sheetUnit: "in",
       upsPerSheet: String(selected.ups.ups),
       sheetLengthIn: String(+(selected.shortMm / 25.4).toFixed(4)),
       sheetBreadthIn: String(+(selected.longMm / 25.4).toFixed(4)),
@@ -299,19 +319,20 @@ export default function LayoutPlanner() {
           {!isFlat && (
           <div>
             <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-              <Ruler size={14} /> Carton Dimensions (mm)
+              <Ruler size={14} /> Carton Dimensions
             </h3>
+            <div className="flex justify-end -mt-8 mb-2"><UnitSelect value={dimUnit} onChange={switchDimUnit} /></div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label>Length (L)</Label>
+                <Label>Length ({dimUnit})</Label>
                 <Input type="number" min="1" value={cartonL} onChange={(e) => setCartonL(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Width (W)</Label>
+                <Label>Width ({dimUnit})</Label>
                 <Input type="number" min="1" value={cartonW} onChange={(e) => setCartonW(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Height (H)</Label>
+                <Label>Height ({dimUnit})</Label>
                 <Input type="number" min="1" value={cartonH} onChange={(e) => setCartonH(e.target.value)} />
               </div>
             </div>
@@ -325,8 +346,9 @@ export default function LayoutPlanner() {
           {isFlat && (
           <div>
             <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-              <Ruler size={14} /> Piece Size (mm)
+              <Ruler size={14} /> Piece Size
             </h3>
+            <div className="flex justify-end -mt-8 mb-2"><UnitSelect value={dimUnit} onChange={switchDimUnit} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Width</Label>
@@ -344,7 +366,10 @@ export default function LayoutPlanner() {
           {/* Manual sheet size — sheet_ups + flat_sheet */}
           {(isSheetUps || isFlat) && (
           <div>
-            <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-3">Sheet Size (inches)</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Sheet Size</h3>
+              <UnitSelect value={sheetUnit} onChange={switchSheetUnit} />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Length</Label>

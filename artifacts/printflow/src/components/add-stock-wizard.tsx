@@ -8,7 +8,7 @@ import { cn, parseDim, dimToCm } from "@/lib/utils";
 import { toast } from "sonner";
 
 type MatCategory = "board" | "paper" | "consumable";
-type DimUnit = "in" | "cm";
+type DimUnit = "in" | "cm" | "mm";
 
 const BOARD_TYPES: Record<string, string> = {
   "grey-back": "Grey Back Duplex",
@@ -54,8 +54,8 @@ function getAutoUnit(cat: MatCategory, subType: string): "sheets" | "kg" | "litr
 }
 
 function computeSheetWeightKg(w: number, h: number, dimUnit: DimUnit, gsm: number): number {
-  const wCm = dimUnit === "in" ? w * 2.54 : w;
-  const hCm = dimUnit === "in" ? h * 2.54 : h;
+  const wCm = dimToCm(w, dimUnit);
+  const hCm = dimToCm(h, dimUnit);
   return (wCm * hCm * gsm) / 10_000_000;
 }
 
@@ -107,7 +107,7 @@ const blank: FormState = {
   gsm: 250,
   width: "",
   height: "",
-  dimUnit: "in",
+  dimUnit: "cm",
   grain: "",
   openingQtyKg: "",
   reorderKg: "",
@@ -351,7 +351,7 @@ export function AddStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: 
               <div className="flex items-center justify-between mb-1">
                 <Label>Dimensions</Label>
                 <div className="flex gap-1">
-                  {(["in", "cm"] as const).map(u => (
+                  {(["cm", "mm", "in"] as const).map(u => (
                     <button
                       key={u}
                       type="button"

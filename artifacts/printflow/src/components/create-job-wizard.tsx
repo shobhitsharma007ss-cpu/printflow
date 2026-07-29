@@ -6,6 +6,8 @@ import { useCreateJob } from "@/hooks/use-jobs";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
 import { AddStockWizard } from "@/components/add-stock-wizard";
 import { cn, formatDim } from "@/lib/utils";
+import { UnitSelect } from "@/components/unit-select";
+import { DEFAULT_DIM_UNIT, unitToMm, mmToUnit, dimDecimals, type DimUnit } from "@/lib/units";
 import {
   ArrowRight, ArrowLeft, Check, AlertTriangle, Plus, X,
   Printer, Droplets, Scissors, Package, Info, GripVertical,
@@ -66,6 +68,7 @@ interface JobForm {
   cartonW: string;
   cartonH: string;
   cartonStyle: string;
+  dimUnit: string;
   manualUps: string;
 }
 
@@ -100,6 +103,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     cartonW: "",
     cartonH: "",
     cartonStyle: "straight_tuck",
+    dimUnit: DEFAULT_DIM_UNIT,
     manualUps: "",
   });
 
@@ -292,7 +296,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     if (hasManualUps) {
       return { blank: null as ReturnType<typeof flatBlank> | null, ups: manualUpsN, label: `${manualUpsN}-up (entered)` };
     }
-    const L = parseFloat(form.cartonL), W = parseFloat(form.cartonW), H = parseFloat(form.cartonH);
+    const cpUnit = (form.dimUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const L = unitToMm(parseFloat(form.cartonL), cpUnit), W = unitToMm(parseFloat(form.cartonW), cpUnit), H = unitToMm(parseFloat(form.cartonH), cpUnit);
     if (!(L > 0) || !(W > 0) || !(H > 0)) return null;
     const blank = flatBlank(L, W, H, form.cartonStyle);
     const dims = parseSheetDimsMm(selectedMaterial?.dimensions);
@@ -392,6 +397,7 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     cartonW: "",
     cartonH: "",
     cartonStyle: "straight_tuck",
+    dimUnit: DEFAULT_DIM_UNIT,
     manualUps: "",
     });
   };
@@ -591,6 +597,17 @@ function Step2Material({
 }) {
   const manualUpsN = parseInt(form.manualUps, 10);
   const hasManualUps = manualUpsN > 0;
+  const dimU = (form.dimUnit || DEFAULT_DIM_UNIT) as DimUnit;
+  const switchDimU = (next: DimUnit) => setForm((p) => {
+    const cur = (p.dimUnit || DEFAULT_DIM_UNIT) as DimUnit;
+    const conv = (v: string) => {
+      const val = parseFloat(v);
+      if (!(val > 0)) return v;
+      const out = mmToUnit(unitToMm(val, cur), next);
+      return String(Number(out.toFixed(dimDecimals(next))));
+    };
+    return { ...p, dimUnit: next, cartonL: conv(p.cartonL), cartonW: conv(p.cartonW), cartonH: conv(p.cartonH) };
+  });
   return (
     <div className="space-y-4">
       <div>
@@ -728,10 +745,14 @@ function Step2Material({
         <p className="text-[11px] text-muted-foreground">
           Poster / gumming sheet? Enter ups (usually 1). Already planned your layout? Enter it here. Otherwise fill carton dimensions and we compute it.
         </p>
-        <div className={cn("grid grid-cols-4 gap-2 pt-1", hasManualUps && "opacity-40 pointer-events-none")}>
-          <Input type="number" placeholder="L mm" value={form.cartonL} onChange={(e) => setForm({ ...form, cartonL: e.target.value })} />
-          <Input type="number" placeholder="W mm" value={form.cartonW} onChange={(e) => setForm({ ...form, cartonW: e.target.value })} />
-          <Input type="number" placeholder="H mm" value={form.cartonH} onChange={(e) => setForm({ ...form, cartonH: e.target.value })} />
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[11px] font-semibold text-muted-foreground">Carton dimensions</span>
+          <UnitSelect value={dimU} onChange={switchDimU} />
+        </div>
+        <div className={cn("grid grid-cols-4 gap-2", hasManualUps && "opacity-40 pointer-events-none")}>
+          <Input type="number" step="any" placeholder={`L ${dimU}`} value={form.cartonL} onChange={(e) => setForm({ ...form, cartonL: e.target.value })} />
+          <Input type="number" step="any" placeholder={`W ${dimU}`} value={form.cartonW} onChange={(e) => setForm({ ...form, cartonW: e.target.value })} />
+          <Input type="number" step="any" placeholder={`H ${dimU}`} value={form.cartonH} onChange={(e) => setForm({ ...form, cartonH: e.target.value })} />
           <Select value={form.cartonStyle} onChange={(e) => setForm({ ...form, cartonStyle: e.target.value })}>
             {CARTON_STYLES.map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
           </Select>
