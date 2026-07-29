@@ -171,6 +171,13 @@ export default function OperatorStation() {
   const [operator, setOperator] = useState<string>(() => localStorage.getItem(opKey) ?? "");
   useEffect(() => { if (operator) localStorage.setItem(opKey, operator); }, [operator, opKey]);
 
+  // UI state — declared before the derived memos that read pinnedJobId
+  const [showReasons, setShowReasons] = useState(false);
+  const [showCount, setShowCount] = useState(false);
+  const [showScan, setShowScan] = useState(false);
+  const [count, setCount] = useState(0);
+  const [pinnedJobId, setPinnedJobId] = useState<number | null>(null);
+
   // derive this machine's steps
   const active = useMemo(() => {
     for (const job of jobs ?? []) {
@@ -206,12 +213,6 @@ export default function OperatorStation() {
 
   const isPaused = active?.step.status === "paused";
   const elapsed = useLiveElapsed(active?.step.startedAt, active?.step.totalPausedSeconds ?? 0, !!isPaused);
-
-  const [showReasons, setShowReasons] = useState(false);
-  const [showCount, setShowCount] = useState(false);
-  const [showScan, setShowScan] = useState(false);
-  const [count, setCount] = useState(0);
-  const [pinnedJobId, setPinnedJobId] = useState<number | null>(null);
 
   const needName = !operator;
   const stamp = operator ? ` — by ${operator}` : "";
