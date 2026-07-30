@@ -455,16 +455,16 @@ export default function LayoutPlanner() {
         </Card>
 
         {/* ------------ RESULTS ------------ */}
-        <div className="lg:col-span-8 order-1 lg:order-2 space-y-4 lg:sticky lg:top-4">
+        <div className="lg:col-span-8 order-1 lg:order-2 flex flex-col gap-4 lg:sticky lg:top-4">
           {!blank ? (
-            <Card className="p-10 text-center text-muted-foreground">
+            <Card className="p-10 text-center text-muted-foreground order-1">
               {isFlat ? "Enter piece size and sheet size to see the layout"
                 : isSheetUps ? "Enter carton dimensions and a sheet size"
                 : "Enter carton L, W and H to see layouts"}
             </Card>
           ) : (
             <>
-              <div>
+              <div className="order-2">
                 <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground mb-2">
                   {mode !== "carton_dims"
                     ? "Layout on your sheet"
@@ -522,7 +522,7 @@ export default function LayoutPlanner() {
                   {grain && (
                     grain.status === "risk" ? (
                       <div className={cn(
-                        "flex items-start gap-2.5 rounded-xl border p-3 text-sm",
+                        "order-3 flex items-start gap-2.5 rounded-xl border p-3 text-sm",
                         grain.heavy
                           ? "border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-300"
                           : "border-border bg-muted/30 text-muted-foreground",
@@ -541,18 +541,18 @@ export default function LayoutPlanner() {
                         </p>
                       </div>
                     ) : grain.status === "ok" ? (
-                      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+                      <div className="order-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 p-3 text-sm text-emerald-700 dark:text-emerald-400">
                         <CheckCircle2 size={16} /> Grain OK — runs parallel to carton height
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground px-1">
+                      <p className="order-3 text-xs text-muted-foreground px-1">
                         Grain unknown for this sheet — set grain on the material to check scoring risk.
                       </p>
                     )
                   )}
 
-                  {/* SVG layout */}
-                  <Card className="p-5">
+                  {/* SVG layout — pinned to the top of the results column */}
+                  <Card className="p-5 order-1">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">
                         Sheet Layout
