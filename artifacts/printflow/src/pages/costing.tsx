@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Calculator, Save, Copy, Info, Printer, Link2, FileText, ArrowRight, CheckCircle2, AlertTriangle, TrendingUp, Layers } from "lucide-react";
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMachines } from "@/hooks/use-machines";
+import { checkPressFit, pressFitLabel } from "@/lib/press-fit";
 import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { toast } from "sonner";
@@ -1066,6 +1067,21 @@ export default function CostingPage() {
                   <Input type="number" value={form.sheetBreadthIn} onChange={field("sheetBreadthIn")} step="any" min={0} />
                 </div>
               </div>
+              {(() => {
+                const fit = checkPressFit(sheetLenIn * 25.4, sheetBrdIn * 25.4, machines);
+                const label = pressFitLabel(fit);
+                if (!label) return null;
+                return (
+                  <p className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-xs font-semibold",
+                    fit.noneFit
+                      ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                      : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+                  )}>
+                    ⚠ {label}
+                  </p>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs mb-1 block">GSM</Label>

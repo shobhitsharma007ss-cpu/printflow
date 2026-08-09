@@ -14,6 +14,47 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 18: machine sheet-size limits (mm) ─────────────────────────
+  // Max SHEET = what the machine can physically feed.
+  // Max PRINT AREA = usable image area after gripper + side margins.
+  // These differ per machine (Komori loses 20/10, Planeta loses 26/51),
+  // so they are stored, not derived.
+  try {
+    await db.execute(sql`
+      ALTER TABLE machines ADD COLUMN IF NOT EXISTS max_sheet_width_mm   INTEGER;
+      ALTER TABLE machines ADD COLUMN IF NOT EXISTS max_sheet_length_mm  INTEGER;
+      ALTER TABLE machines ADD COLUMN IF NOT EXISTS max_print_width_mm   INTEGER;
+      ALTER TABLE machines ADD COLUMN IF NOT EXISTS max_print_length_mm  INTEGER;
+    `);
+
+    // Seed real specs (only where still NULL — never overwrite owner edits)
+    await db.execute(sql`
+      UPDATE machines SET
+        max_sheet_width_mm  = COALESCE(max_sheet_width_mm,  640),
+        max_sheet_length_mm = COALESCE(max_sheet_length_mm, 940),
+        max_print_width_mm  = COALESCE(max_print_width_mm,  620),
+        max_print_length_mm = COALESCE(max_print_length_mm, 930)
+      WHERE machine_code IN ('KOM-LA37','KOM-GL37');
+    `);
+    await db.execute(sql`
+      UPDATE machines SET
+        max_sheet_width_mm  = COALESCE(max_sheet_width_mm,  711),
+        max_sheet_length_mm = COALESCE(max_sheet_length_mm, 1016),
+        max_print_width_mm  = COALESCE(max_print_width_mm,  685),
+        max_print_length_mm = COALESCE(max_print_length_mm, 965)
+      WHERE machine_code = 'PLAN-SV';
+    `);
+    await db.execute(sql`
+      UPDATE machines SET
+        max_sheet_width_mm  = COALESCE(max_sheet_width_mm,  720),
+        max_sheet_length_mm = COALESCE(max_sheet_length_mm, 1020)
+      WHERE machine_code IN ('BOB-DC1','BOB-DC2');
+    `);
+    logger.info("Migration 18 complete — machine sheet limits ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 18 error");
+  }
+
   // ─── MIGRATION 17: costing_settings table ─────────────────────────────────
   try {
     await db.execute(sql`

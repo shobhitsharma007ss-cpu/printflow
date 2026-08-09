@@ -147,6 +147,10 @@ export interface Machine {
   machineType: MachineMachineType;
   maxPaperWidth?: string | null;
   maxPaperLength?: string | null;
+  maxSheetWidthMm?: number | null;
+  maxSheetLengthMm?: number | null;
+  maxPrintWidthMm?: number | null;
+  maxPrintLengthMm?: number | null;
   speedPerHour?: number | null;
   ratedSph?: number | null;
   colorUnits?: number | null;

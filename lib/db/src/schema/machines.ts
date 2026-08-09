@@ -9,6 +9,12 @@ export const machinesTable = pgTable("machines", {
   machineType: text("machine_type").notNull(),
   maxPaperWidth: text("max_paper_width"),
   maxPaperLength: text("max_paper_length"),
+  // Physical limits in mm (migration 18). Sheet = what it can feed;
+  // print = usable image area after gripper/side margins.
+  maxSheetWidthMm: integer("max_sheet_width_mm"),
+  maxSheetLengthMm: integer("max_sheet_length_mm"),
+  maxPrintWidthMm: integer("max_print_width_mm"),
+  maxPrintLengthMm: integer("max_print_length_mm"),
   speedPerHour: integer("speed_per_hour"),
   capabilities: text("capabilities").array().notNull().default([]),
   status: text("status").notNull().default("idle"),

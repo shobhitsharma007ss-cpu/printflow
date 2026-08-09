@@ -4,6 +4,8 @@ import { LayoutGrid, ArrowRight, ChevronDown, ChevronUp, Ruler, AlertTriangle, C
 import { Card, Button, Input, Label, Select } from "@/components/ui-elements";
 import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
+import { useMachines } from "@/hooks/use-machines";
+import { checkPressFit, pressFitLabel } from "@/lib/press-fit";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { UnitSelect } from "@/components/unit-select";
@@ -50,6 +52,7 @@ interface Recommendation {
 export default function LayoutPlanner() {
   const [, navigate] = useLocation();
   const { data: materials } = useMaterials();
+  const { data: machines } = useMachines();
   const { data: jobs } = useJobs();
   const [saveJobId, setSaveJobId] = useState<string>("");
 
@@ -514,6 +517,21 @@ export default function LayoutPlanner() {
                               stock: {r.stockQty.toLocaleString("en-IN")} {r.stockUnit}
                             </p>
                           )}
+                          {(() => {
+                            const fit = checkPressFit(r.longMm, r.shortMm, machines);
+                            const label = pressFitLabel(fit);
+                            if (!label) return null;
+                            return (
+                              <p className={cn(
+                                "mt-1.5 rounded-md px-1.5 py-1 text-[10px] font-semibold leading-tight",
+                                fit.noneFit
+                                  ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+                              )}>
+                                ⚠ {label}
+                              </p>
+                            );
+                          })()}
                         </button>
                       );
                     })}
