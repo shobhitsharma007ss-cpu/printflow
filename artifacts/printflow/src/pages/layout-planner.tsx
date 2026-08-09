@@ -92,6 +92,11 @@ export default function LayoutPlanner() {
     setManualSheetLenIn(v => convDim(v, sheetUnit, next)); setManualSheetWidIn(v => convDim(v, sheetUnit, next));
     setSheetUnit(next);
   };
+  // Blank/sheet figures are computed in mm — show them in whatever unit the user picked.
+  const showMm = (mm: number) => {
+    const v = mmToUnit(mm, dimUnit);
+    return Number(v.toFixed(dimDecimals(dimUnit)));
+  };
   const isFlat = mode === "flat_sheet";
   const isSheetUps = mode === "sheet_ups";
   const qtyN = Math.max(1, num(qty, 25000));
@@ -422,7 +427,7 @@ export default function LayoutPlanner() {
           {blank && !isFlat && (
             <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Flat blank</span>
-              <span className="text-sm font-black tabular-nums">{blank.blankW} × {blank.blankH} <span className="text-[11px] font-semibold text-muted-foreground">mm</span></span>
+              <span className="text-sm font-black tabular-nums">{showMm(blank.blankW)} × {showMm(blank.blankH)} <span className="text-[11px] font-semibold text-muted-foreground">{dimUnit}</span></span>
             </div>
           )}
 
@@ -558,7 +563,7 @@ export default function LayoutPlanner() {
                         Sheet Layout
                       </h3>
                       <p className="text-xs text-muted-foreground tabular-nums">
-                        {selected.dimsLabel} · {isFlat ? "piece" : "blank"} {blank.blankW}×{blank.blankH}mm ·{" "}
+                        {selected.dimsLabel} · {isFlat ? "piece" : "blank"} {showMm(blank.blankW)}×{showMm(blank.blankH)}{dimUnit} ·{" "}
                         <b>{selected.ups.cols}×{selected.ups.rows} = {selected.ups.ups}-up</b> · {selected.ups.yieldPct}% yield
                       </p>
                     </div>
