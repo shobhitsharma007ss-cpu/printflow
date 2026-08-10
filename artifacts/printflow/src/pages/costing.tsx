@@ -1068,7 +1068,13 @@ export default function CostingPage() {
                 </div>
               </div>
               {(() => {
-                const fit = checkPressFit(sheetLenIn * 25.4, sheetBrdIn * 25.4, machines);
+                // Compute mm here — sheetLenIn lives inside compute(), not this scope.
+                const su = (form.sheetUnit || DEFAULT_DIM_UNIT) as DimUnit;
+                const fit = checkPressFit(
+                  unitToMm(n(form.sheetLengthIn), su),
+                  unitToMm(n(form.sheetBreadthIn), su),
+                  machines,
+                );
                 const label = pressFitLabel(fit);
                 if (!label) return null;
                 return (
