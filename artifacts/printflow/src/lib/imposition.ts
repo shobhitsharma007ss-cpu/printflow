@@ -100,8 +100,12 @@ export function upsOnSheet(
   sheetShortMm: number,
   a: Allowances = DEFAULT_ALLOWANCES,
 ): UpsResult {
-  const usableW = sheetLongMm - a.gripper - a.tail;
-  const usableH = sheetShortMm - 2 * a.side;
+  // Sheets feed LONG-EDGE-FIRST: the long edge spans the press cylinder
+  // (Komori G37 = 940mm wide), so the gripper grabs the long edge and the
+  // gripper + tail margins eat into the SHORT (travel) dimension.
+  // The long (across-press) dimension loses only the side-lay margins.
+  const usableW = sheetLongMm - 2 * a.side;            // across the press
+  const usableH = sheetShortMm - a.gripper - a.tail;   // travel: gripper leads, tail trails
 
   const fit = (bw: number, bh: number): OrientationFit => {
     if (bw <= 0 || bh <= 0 || usableW < bw || usableH < bh) {

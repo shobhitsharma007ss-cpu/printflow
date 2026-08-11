@@ -654,8 +654,12 @@ function LayoutSvg({
   const bw = (ups.winner === "A" ? blankW : blankH) * scale;
   const bh = (ups.winner === "A" ? blankH : blankW) * scale;
   const gutter = allow.gutter * scale;
-  const startX = allow.gripper * scale;
-  const startY = allow.side * scale;
+  // Gripper edge = the LONG edge (bottom of the drawing). Grid starts after
+  // the side margin horizontally and the tail margin vertically; the gripper
+  // band occupies the bottom of the sheet.
+  const startX = allow.side * scale;
+  const startY = allow.tail * scale;
+  const gripH  = allow.gripper * scale;
 
   const rects: Array<{ x: number; y: number }> = [];
   for (let r = 0; r < ups.rows; r++) {
@@ -681,12 +685,11 @@ function LayoutSvg({
       {/* sheet */}
       <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="white" stroke="rgb(100 116 139)" strokeWidth="1.5" className="dark:opacity-90" />
 
-      {/* gripper band on the long edge (left) */}
-      <rect x="0" y="0" width={allow.gripper * scale} height={VIEW_H} fill="url(#grip)" />
-      <text x={allow.gripper * scale / 2} y={VIEW_H / 2}
-        fontSize="9" fill="rgb(244 63 94)" textAnchor="middle"
-        transform={`rotate(-90 ${allow.gripper * scale / 2} ${VIEW_H / 2})`}>
-        GRIPPER
+      {/* gripper band along the LONG edge (bottom) — the leading edge into the press */}
+      <rect x="0" y={VIEW_H - gripH} width={VIEW_W} height={gripH} fill="url(#grip)" />
+      <text x={VIEW_W / 2} y={VIEW_H - gripH / 2 + 3}
+        fontSize="9" fill="rgb(244 63 94)" textAnchor="middle">
+        GRIPPER — sheet feeds this edge first
       </text>
 
       {/* blanks */}
