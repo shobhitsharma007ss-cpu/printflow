@@ -6,6 +6,7 @@ import { useMaterials } from "@/hooks/use-inventory";
 import { useJobs } from "@/hooks/use-jobs";
 import { useMachines } from "@/hooks/use-machines";
 import { checkPressFit, pressFitLabel } from "@/lib/press-fit";
+import { DielineView } from "@/components/dieline-view";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { UnitSelect } from "@/components/unit-select";
@@ -628,6 +629,24 @@ export default function LayoutPlanner() {
                       </Button>
                     </div>
                   </Card>
+
+                  {/* Dieline — the unfolded carton, cut/crease, downloadable for the die maker */}
+                  {!isFlat && validCarton && (
+                    <Card className="p-5 order-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">
+                          Dieline — {CARTON_STYLES.find((c) => c.value === style)?.label ?? style}
+                        </h3>
+                        <span className="text-[10px] text-muted-foreground">L{L} × W{W} × H{H} mm</span>
+                      </div>
+                      <DielineView
+                        L={L} W={W} H={H}
+                        style={style}
+                        styleLabel={CARTON_STYLES.find((c) => c.value === style)?.label ?? style}
+                        allow={allow}
+                      />
+                    </Card>
+                  )}
                 </>
               )}
             </>
