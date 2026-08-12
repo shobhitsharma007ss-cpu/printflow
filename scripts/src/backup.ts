@@ -76,6 +76,21 @@ out.on("finish", () => {
   }
   const mb = (size / 1024 / 1024).toFixed(2);
   console.log(`✓ backup complete — ${mb} MB`);
+
+  // A schema-only dump compresses to roughly 10-30 KB. If we're under ~60 KB
+  // there is almost certainly no real data in here — which on Replit usually
+  // means the Shell is pointed at the DEV database, not production.
+  if (size < 60 * 1024) {
+    console.log("");
+    console.log("⚠  WARNING — this dump is tiny, so it holds little or no data.");
+    console.log(`   Database dumped: "${dbName}" @ ${host}`);
+    console.log("   On Replit the Shell defaults to the DEV database.");
+    console.log("   To back up PRODUCTION, copy its URL from the Database panel");
+    console.log("   (toggle Development → Production) and run:");
+    console.log("");
+    console.log('     DATABASE_URL="<production-url>" pnpm --filter @workspace/scripts backup');
+    console.log("");
+  }
   console.log("");
   console.log("NEXT: download this file off Replit (Files panel → backups → ⋮ → Download).");
   console.log("A backup that lives only on the server is not a backup.");
