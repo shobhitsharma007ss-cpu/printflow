@@ -14,6 +14,22 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 19: packing detail on dispatches ───────────────────────────
+  // A challan proves goods moved; a packing slip lets the receiver COUNT.
+  // Cartons ship as bundles ("50,000 = 100 bundles x 500 + 0 loose"), so the
+  // receiver checks 100 bundles instead of opening 50,000 pieces.
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_dispatches ADD COLUMN IF NOT EXISTS bundles        INTEGER;
+      ALTER TABLE job_dispatches ADD COLUMN IF NOT EXISTS qty_per_bundle INTEGER;
+      ALTER TABLE job_dispatches ADD COLUMN IF NOT EXISTS loose_qty      INTEGER;
+      ALTER TABLE job_dispatches ADD COLUMN IF NOT EXISTS packed_by      TEXT;
+    `);
+    logger.info("Migration 19 complete — dispatch packing detail ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 19 error");
+  }
+
   // ─── MIGRATION 18: machine sheet-size limits (mm) ─────────────────────────
   // Max SHEET = what the machine can physically feed.
   // Max PRINT AREA = usable image area after gripper + side margins.

@@ -39,7 +39,7 @@ export default function DeliveryChallan() {
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b-2 border-black">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">Delivery Challan</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-neutral-500">Delivery Challan &amp; Packing Slip</p>
             <p className="text-3xl font-black tracking-tight mt-1">PrintFlow</p>
             <p className="text-sm text-neutral-500 mt-0.5">Plant Management System</p>
           </div>
@@ -117,6 +117,36 @@ export default function DeliveryChallan() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Packing detail — the count the receiver verifies against */}
+        {(dispatch.bundles || dispatch.qtyPerBundle) && (
+          <div className="px-6 py-4 border-b border-neutral-200">
+            <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3">Packing Detail</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-300 text-left">
+                  <th className="pb-1.5 text-xs uppercase tracking-wider text-neutral-400 font-bold">Bundles</th>
+                  <th className="pb-1.5 text-xs uppercase tracking-wider text-neutral-400 font-bold">Qty / Bundle</th>
+                  <th className="pb-1.5 text-xs uppercase tracking-wider text-neutral-400 font-bold">Loose</th>
+                  <th className="pb-1.5 text-xs uppercase tracking-wider text-neutral-400 font-bold text-right">Total Pieces</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="pt-2 font-bold font-mono text-base">{(dispatch.bundles ?? 0).toLocaleString("en-IN")}</td>
+                  <td className="pt-2 font-bold font-mono text-base">{(dispatch.qtyPerBundle ?? 0).toLocaleString("en-IN")}</td>
+                  <td className="pt-2 font-bold font-mono text-base">{(dispatch.looseQty ?? 0).toLocaleString("en-IN")}</td>
+                  <td className="pt-2 font-bold font-mono text-base text-right">{dispatch.dispatchQty.toLocaleString("en-IN")}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-2 text-xs text-neutral-500">
+              Receiver to verify {(dispatch.bundles ?? 0).toLocaleString("en-IN")} bundles
+              {dispatch.looseQty ? ` + ${dispatch.looseQty.toLocaleString("en-IN")} loose pieces` : ""}.
+              {dispatch.packedBy ? ` Packed by ${dispatch.packedBy}.` : ""}
+            </p>
           </div>
         )}
 

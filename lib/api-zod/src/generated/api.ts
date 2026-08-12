@@ -1233,6 +1233,10 @@ export const CreateDispatchBody = zod.object({
   lrNumber: zod.string().optional(),
   transporterName: zod.string().optional(),
   notes: zod.string().optional(),
+  bundles: zod.number().int().nonnegative().optional(),
+  qtyPerBundle: zod.number().int().nonnegative().optional(),
+  looseQty: zod.number().int().nonnegative().optional(),
+  packedBy: zod.string().optional(),
 });
 
 /**

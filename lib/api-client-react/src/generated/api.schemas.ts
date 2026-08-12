@@ -671,6 +671,10 @@ export interface JobDispatch {
   dispatchDate: string;
   vehicleNumber?: string | null;
   lrNumber?: string | null;
+  bundles?: number | null;
+  qtyPerBundle?: number | null;
+  looseQty?: number | null;
+  packedBy?: string | null;
   transporterName?: string | null;
   notes?: string | null;
   createdAt: string;
@@ -681,6 +685,10 @@ export interface CreateDispatchRequest {
   dispatchDate: string;
   vehicleNumber?: string;
   lrNumber?: string;
+  bundles?: number | null;
+  qtyPerBundle?: number | null;
+  looseQty?: number | null;
+  packedBy?: string | null;
   transporterName?: string;
   notes?: string;
 }

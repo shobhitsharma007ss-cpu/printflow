@@ -1139,6 +1139,10 @@ router.post("/jobs/:id/dispatches", async (req, res): Promise<void> => {
   const [dispatch] = await db.insert(jobDispatchesTable).values({
     jobId: params.data.id,
     dispatchQty: parsed.data.dispatchQty,
+    bundles: parsed.data.bundles ?? null,
+    qtyPerBundle: parsed.data.qtyPerBundle ?? null,
+    looseQty: parsed.data.looseQty ?? null,
+    packedBy: parsed.data.packedBy ?? null,
     dispatchDate: parsed.data.dispatchDate,
     vehicleNumber: parsed.data.vehicleNumber ?? null,
     lrNumber: parsed.data.lrNumber ?? null,

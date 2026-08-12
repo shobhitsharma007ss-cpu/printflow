@@ -118,6 +118,11 @@ export const jobDispatchesTable = pgTable("job_dispatches", {
   lrNumber: text("lr_number"),
   transporterName: text("transporter_name"),
   notes: text("notes"),
+  // Packing detail (migration 19) — what the receiver counts.
+  bundles: integer("bundles"),
+  qtyPerBundle: integer("qty_per_bundle"),
+  looseQty: integer("loose_qty"),
+  packedBy: text("packed_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

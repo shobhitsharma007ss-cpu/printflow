@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
@@ -703,6 +704,9 @@ function DispatchSection({ job }: { job: NonNullable<ReturnType<typeof useJob>["
     lrNumber: '',
     transporterName: '',
     notes: '',
+    bundles: '',
+    qtyPerBundle: '',
+    packedBy: '',
   });
 
   const createDispatch = useCreateJobDispatch({
@@ -715,7 +719,7 @@ function DispatchSection({ job }: { job: NonNullable<ReturnType<typeof useJob>["
           description: `${data.dispatchQty.toLocaleString("en-IN")} sheets dispatched. ${data.remaining} remaining.`,
         });
         setShowForm(false);
-        setForm({ dispatchQty: '', dispatchDate: new Date().toISOString().split('T')[0], vehicleNumber: '', lrNumber: '', transporterName: '', notes: '' });
+        setForm({ dispatchQty: '', dispatchDate: new Date().toISOString().split('T')[0], vehicleNumber: '', lrNumber: '', transporterName: '', notes: '', bundles: '', qtyPerBundle: '', packedBy: '' });
       },
       onError: (err: any) => {
         const msg = err?.message ?? "Failed to record dispatch.";
@@ -737,6 +741,18 @@ function DispatchSection({ job }: { job: NonNullable<ReturnType<typeof useJob>["
         lrNumber: form.lrNumber.trim() || undefined,
         transporterName: form.transporterName.trim() || undefined,
         notes: form.notes.trim() || undefined,
+        bundles: parseInt(form.bundles, 10) || undefined,
+        qtyPerBundle: parseInt(form.qtyPerBundle, 10) || undefined,
+        // loose = whatever doesn't fill a complete bundle, so the slip always
+        // reconciles: bundles x per-bundle + loose = dispatched qty
+        looseQty: (() => {
+          const b = parseInt(form.bundles, 10) || 0;
+          const per = parseInt(form.qtyPerBundle, 10) || 0;
+          if (!b || !per) return undefined;
+          const loose = qty - b * per;
+          return loose > 0 ? loose : 0;
+        })(),
+        packedBy: form.packedBy.trim() || undefined,
       },
     });
   };
@@ -840,6 +856,57 @@ function DispatchSection({ job }: { job: NonNullable<ReturnType<typeof useJob>["
               placeholder="e.g. Shree Transport"
               className="text-sm h-8"
             />
+          </div>
+
+          {/* Packing detail — what the receiver actually counts */}
+          <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Packing (for slip)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Bundles / cartons</Label>
+                <Input
+                  type="number" min={0}
+                  value={form.bundles}
+                  onChange={e => setForm({ ...form, bundles: e.target.value })}
+                  placeholder="e.g. 100"
+                  className="text-sm h-8"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px]">Qty per bundle</Label>
+                <Input
+                  type="number" min={0}
+                  value={form.qtyPerBundle}
+                  onChange={e => setForm({ ...form, qtyPerBundle: e.target.value })}
+                  placeholder="e.g. 500"
+                  className="text-sm h-8"
+                />
+              </div>
+            </div>
+            {(() => {
+              const b = parseInt(form.bundles, 10) || 0;
+              const per = parseInt(form.qtyPerBundle, 10) || 0;
+              const q = parseInt(form.dispatchQty, 10) || 0;
+              if (!b || !per || !q) return null;
+              const loose = q - b * per;
+              return (
+                <p className={cn("text-[11px] font-semibold",
+                  loose < 0 ? "text-rose-600" : "text-muted-foreground")}>
+                  {b.toLocaleString("en-IN")} × {per.toLocaleString("en-IN")} = {(b * per).toLocaleString("en-IN")}
+                  {loose > 0 ? ` + ${loose.toLocaleString("en-IN")} loose` : ""}
+                  {loose < 0 ? ` — exceeds dispatch qty by ${Math.abs(loose).toLocaleString("en-IN")}` : ""}
+                </p>
+              );
+            })()}
+            <div className="space-y-1">
+              <Label className="text-[11px]">Packed by</Label>
+              <Input
+                value={form.packedBy}
+                onChange={e => setForm({ ...form, packedBy: e.target.value })}
+                placeholder="Operator name"
+                className="text-sm h-8"
+              />
+            </div>
           </div>
           <div className="space-y-1">
             <Label className="text-[11px]">Notes</Label>
