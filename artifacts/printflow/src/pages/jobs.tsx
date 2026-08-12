@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
