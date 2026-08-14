@@ -1275,6 +1275,81 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
   res.status(201).json(row);
 });
 
+/** Move a routing step to a different machine of the same type.
+   The Bobst 1 breaks down at 11pm — Bobst 2's operator picks the job up.
+   Only machines of the same type are offered, and a completed step is frozen. */
+router.patch("/job-routing/:id/reassign", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const newMachineId = Number((req.body as { machineId?: number })?.machineId);
+  if (!newMachineId) { res.status(400).json({ error: "machineId is required" }); return; }
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (step.status === "completed") {
+    res.status(409).json({ error: "Step is already complete — nothing to move" });
+    return;
+  }
+  if (step.isOutsourced) {
+    res.status(400).json({ error: "Outsourced steps have a vendor, not a machine" });
+    return;
+  }
+
+  const [target] = await db.select().from(machinesTable).where(eq(machinesTable.id, newMachineId));
+  if (!target) { res.status(404).json({ error: "Machine not found" }); return; }
+
+  if (step.machineId) {
+    const [current] = await db.select().from(machinesTable).where(eq(machinesTable.id, step.machineId));
+    if (current && current.machineType !== target.machineType) {
+      res.status(400).json({
+        error: `Cannot move a ${current.machineType} step to a ${target.machineType} machine`,
+      });
+      return;
+    }
+    // Free the machine being left behind if this job was occupying it.
+    if (step.status === "in-progress" || step.status === "paused") {
+      await db.update(machinesTable).set({ status: "idle" }).where(eq(machinesTable.id, current!.id));
+    }
+  }
+
+  const note = `Moved to ${target.machineName}${step.notes ? ` · ${step.notes}` : ""}`;
+  const [updated] = await db.update(jobRoutingTable)
+    .set({ machineId: newMachineId, notes: note })
+    .where(eq(jobRoutingTable.id, id))
+    .returning();
+
+  // If the work was already running, the new machine takes it over.
+  if (step.status === "in-progress") {
+    await db.update(machinesTable).set({ status: "running" }).where(eq(machinesTable.id, newMachineId));
+  }
+
+  res.json(updated);
+});
+
+/** Machines this step could move to — same type, excluding the current one. */
+router.get("/job-routing/:id/alternatives", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (!step.machineId) { res.json([]); return; }
+
+  const [current] = await db.select().from(machinesTable).where(eq(machinesTable.id, step.machineId));
+  if (!current) { res.json([]); return; }
+
+  const rows = await db.select({
+    id: machinesTable.id,
+    machineName: machinesTable.machineName,
+    machineCode: machinesTable.machineCode,
+    status: machinesTable.status,
+  })
+    .from(machinesTable)
+    .where(eq(machinesTable.machineType, current.machineType));
+
+  res.json(rows.filter((m) => m.id !== step.machineId));
+});
+
 /* ── Outsourced steps ──────────────────────────────────────────────────────
    Lamination/foiling leaves the plant. The step keeps the same status field
    as any other step, so completing it (stock returned) unlocks the next step

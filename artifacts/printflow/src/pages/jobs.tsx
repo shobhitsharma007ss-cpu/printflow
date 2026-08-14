@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { OutsourcedWorkPanel } from "@/components/outsourced-work";
+import { ReassignMachineButton } from "@/components/reassign-machine";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
@@ -309,7 +310,15 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                                <Timer size={11} />}
                             </span>
                             <div className="min-w-0">
-                              <p className="text-xs font-bold">{step.machineName || `Machine ${step.machineId}`}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-bold">{step.machineName || `Machine ${step.machineId}`}</p>
+                                {step.status !== "completed" && (
+                                  <ReassignMachineButton
+                                    routingId={step.id}
+                                    currentMachineName={step.machineName}
+                                  />
+                                )}
+                              </div>
                               {step.operatorName && (
                                 <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
                                   <User size={9} /> {step.operatorName}

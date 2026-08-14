@@ -56,6 +56,8 @@ interface JobForm {
   wastagePercent: string;
   coatingType: string;
   finishRequirements: string[];
+  selectedDieCutterId: string;
+  selectedGluerId: string;
   printMachineId: string;
   inks: InkEntry[];
   routing: { machineId: number; machineName: string }[];
@@ -93,6 +95,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     wastagePercent: "",
     coatingType: "none",
     finishRequirements: [],
+    selectedDieCutterId: "",
+    selectedGluerId: "",
     printMachineId: "",
     inks: [],
     routing: [],
@@ -254,12 +258,19 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     // (needsStandaloneCoat is kept for the warning shown in step 3.)
 
     if (form.finishRequirements.includes("die-cutting")) {
-      const dc = cuttingMachines.find((m) => m.machineName.includes("Bobst Die Cutter") && m.status !== "maintenance");
+      // Explicit pick wins; otherwise first die cutter not under maintenance.
+      const chosen = form.selectedDieCutterId
+        ? cuttingMachines.find((m) => String(m.id) === form.selectedDieCutterId)
+        : null;
+      const dc = chosen ?? cuttingMachines.find((m) => m.capabilities.includes("die-cutting") && m.status !== "maintenance");
       if (dc) steps.push({ machineId: dc.id, machineName: dc.machineName });
     }
 
     if (form.finishRequirements.includes("folder-gluing")) {
-      const fg = gluingMachines.find((m) => m.status === "idle");
+      const chosen = form.selectedGluerId
+        ? gluingMachines.find((m) => String(m.id) === form.selectedGluerId)
+        : null;
+      const fg = chosen ?? gluingMachines.find((m) => m.status === "idle") ?? gluingMachines[0];
       if (fg) steps.push({ machineId: fg.id, machineName: fg.machineName });
     }
 
@@ -398,6 +409,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       wastagePercent: "",
       coatingType: "none",
       finishRequirements: [],
+    selectedDieCutterId: "",
+    selectedGluerId: "",
       printMachineId: "",
       inks: [],
       routing: [],
@@ -502,6 +515,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
                 form={form}
                 setForm={setForm}
                 toggleFinish={toggleFinish}
+                cuttingMachines={cuttingMachines}
+                gluingMachines={gluingMachines}
                 printingMachines={printingMachines}
                 recommendedMachine={recommendedMachine}
               />
@@ -829,13 +844,15 @@ function Step2Material({
 }
 
 function Step3Coating({
-  form, setForm, toggleFinish, printingMachines, recommendedMachine,
+  form, setForm, toggleFinish, printingMachines, recommendedMachine, cuttingMachines, gluingMachines,
 }: {
   form: JobForm;
   setForm: React.Dispatch<React.SetStateAction<JobForm>>;
   toggleFinish: (val: string) => void;
   printingMachines: Machine[];
   recommendedMachine: { machine: Machine; reason: string } | null;
+  cuttingMachines: Machine[];
+  gluingMachines: Machine[];
 }) {
   const processColorsNum = parseInt(form.processColors) || 0;
   const spotColorsNum = parseInt(form.spotColors) || 0;
@@ -1023,6 +1040,44 @@ function Step3Coating({
             );
           })}
         </div>
+
+        {/* Which finishing machine runs it — was auto-picked before, now yours */}
+        {(form.finishRequirements.includes("die-cutting") || form.finishRequirements.includes("folder-gluing")) && (
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {form.finishRequirements.includes("die-cutting") && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Die Cutter</Label>
+                <Select
+                  value={form.selectedDieCutterId}
+                  onChange={(e) => setForm({ ...form, selectedDieCutterId: e.target.value })}
+                >
+                  <option value="">Auto — first available</option>
+                  {cuttingMachines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.machineName}{m.status === "maintenance" ? " (maintenance)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            {form.finishRequirements.includes("folder-gluing") && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Folder Gluer</Label>
+                <Select
+                  value={form.selectedGluerId}
+                  onChange={(e) => setForm({ ...form, selectedGluerId: e.target.value })}
+                >
+                  <option value="">Auto — first idle</option>
+                  {gluingMachines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.machineName}{m.status === "maintenance" ? " (maintenance)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
