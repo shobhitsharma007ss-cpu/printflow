@@ -7,7 +7,11 @@ import {
   vendorsTable,
   materialsTable,
 } from "@workspace/db";
-import { z } from "zod";
+import {
+  CreatePurchaseOrderBody,
+  SendPurchaseOrderBody,
+  ReceivePurchaseOrderBody,
+} from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -15,24 +19,6 @@ const router: IRouter = Router();
    A PO is a draft until it's sent. Sending stamps sent_at/sent_via — the
    actual WhatsApp/email hand-off happens client-side via a wa.me link or the
    vendor's email, so no third-party credentials are needed to raise an order. */
-
-const PoItem = z.object({
-  materialId: z.number().int().positive().nullable().optional(),
-  description: z.string().min(1),
-  qty: z.number().positive(),
-  unit: z.string().min(1).default("kg"),
-  ratePerUnit: z.number().nonnegative(),
-});
-
-const CreatePoBody = z.object({
-  vendorId: z.number().int().positive(),
-  orderDate: z.string().min(1),
-  expectedDate: z.string().optional(),
-  gstPercent: z.number().nonnegative().default(18),
-  notes: z.string().optional(),
-  createdBy: z.string().optional(),
-  items: z.array(PoItem).min(1),
-});
 
 async function nextPoNumber(): Promise<string> {
   const rows = await db.select({ poNumber: purchaseOrdersTable.poNumber }).from(purchaseOrdersTable);
@@ -82,7 +68,7 @@ router.get("/purchase-orders/:id", async (req, res): Promise<void> => {
 
 /** Create a PO. Totals are computed server-side so the document can't disagree with itself. */
 router.post("/purchase-orders", async (req, res): Promise<void> => {
-  const parsed = CreatePoBody.safeParse(req.body);
+  const parsed = CreatePurchaseOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const d = parsed.data;
 
@@ -154,9 +140,7 @@ router.post("/purchase-orders/:id/receive", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const body = z.object({
-    items: z.array(z.object({ itemId: z.number().int(), qtyReceived: z.number().nonnegative() })).min(1),
-  }).safeParse(req.body);
+  const body = ReceivePurchaseOrderBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   await db.transaction(async (tx) => {

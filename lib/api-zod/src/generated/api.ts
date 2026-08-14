@@ -1273,3 +1273,25 @@ export const AdjustMaterialBody = zod.object({
 export const GetMaterialMovementsParams = zod.object({
   id: zod.coerce.number(),
 });
+
+// ─── Purchase orders (hand-written, not codegen) ──────────────────────────
+export const PoItemBody = zod.object({
+  materialId: zod.number().int().positive().nullable().optional(),
+  description: zod.string().min(1),
+  qty: zod.number().positive(),
+  unit: zod.string().min(1).default("kg"),
+  ratePerUnit: zod.number().nonnegative(),
+});
+export const CreatePurchaseOrderBody = zod.object({
+  vendorId: zod.number().int().positive(),
+  orderDate: zod.string().min(1),
+  expectedDate: zod.string().optional(),
+  gstPercent: zod.number().nonnegative().default(18),
+  notes: zod.string().optional(),
+  createdBy: zod.string().optional(),
+  items: zod.array(PoItemBody).min(1),
+});
+export const SendPurchaseOrderBody = zod.object({ via: zod.string().optional() });
+export const ReceivePurchaseOrderBody = zod.object({
+  items: zod.array(zod.object({ itemId: zod.number().int(), qtyReceived: zod.number().nonnegative() })).min(1),
+});
