@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { OutsourcedWorkPanel } from "@/components/outsourced-work";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
@@ -41,6 +43,9 @@ export default function Jobs() {
           Create New Job
         </Button>
       </div>
+
+      {/* Work sitting at a vendor — renders only when something is outsourced */}
+      <OutsourcedWorkPanel />
 
       <Card className="overflow-hidden border border-border">
         <div className="p-4 border-b border-border bg-muted/30 flex flex-col sm:flex-row gap-4 justify-between items-center">

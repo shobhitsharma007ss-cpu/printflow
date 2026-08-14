@@ -14,6 +14,27 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 21: outsourced routing steps ───────────────────────────────
+  // Lamination, foiling and embossing go OUT of the plant. Such a step has no
+  // internal machine — it has a vendor, a send date and an expected return.
+  // machine_id becomes nullable; every join on it is already a LEFT JOIN.
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing ALTER COLUMN machine_id DROP NOT NULL;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS is_outsourced      BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS vendor_id          INTEGER REFERENCES vendors(id);
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS sent_at            TIMESTAMPTZ;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS expected_return_at TIMESTAMPTZ;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS returned_at        TIMESTAMPTZ;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS outsource_cost     NUMERIC(12,2);
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS outsource_notes    TEXT;
+      CREATE INDEX IF NOT EXISTS idx_routing_outsourced ON job_routing(is_outsourced, status);
+    `);
+    logger.info("Migration 21 complete — outsourced steps ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 21 error");
+  }
+
   // ─── MIGRATION 20: purchase orders ────────────────────────────────────────
   // Header + line items: one PO, one vendor, several materials — how paper is
   // actually bought. Vendors gain email/GST so a PO can be sent and taxed.

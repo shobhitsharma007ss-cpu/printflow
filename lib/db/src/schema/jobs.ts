@@ -47,7 +47,8 @@ export const jobRoutingTable = pgTable("job_routing", {
   jobId: integer("job_id").notNull().references(() => jobsTable.id),
   stepNumber: integer("step_number").notNull(),
   stepCode: text("step_code").notNull().default(""),
-  machineId: integer("machine_id").notNull().references(() => machinesTable.id),
+  // Null when the step is outsourced — the work happens at a vendor, not a machine.
+  machineId: integer("machine_id").references(() => machinesTable.id),
   operatorName: text("operator_name"),
   status: text("status").notNull().default("pending"),
   prerequisiteCodes: text("prerequisite_codes").array().notNull().default([]),
@@ -57,6 +58,14 @@ export const jobRoutingTable = pgTable("job_routing", {
   totalPausedSeconds: integer("total_paused_seconds").notNull().default(0),
   estimatedMinutes: integer("estimated_minutes").notNull().default(0),
   notes: text("notes"),
+  // Outsourcing (migration 21) — lamination/foiling/embossing done outside.
+  isOutsourced: boolean("is_outsourced").notNull().default(false),
+  vendorId: integer("vendor_id"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  expectedReturnAt: timestamp("expected_return_at", { withTimezone: true }),
+  returnedAt: timestamp("returned_at", { withTimezone: true }),
+  outsourceCost: numeric("outsource_cost", { precision: 12, scale: 2 }),
+  outsourceNotes: text("outsource_notes"),
 });
 
 export const jobInterruptionsTable = pgTable("job_interruptions", {

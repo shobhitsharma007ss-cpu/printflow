@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable, vendorsTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -1228,6 +1228,137 @@ router.post("/wastage-log", async (req, res): Promise<void> => {
   }).returning();
 
   res.status(201).json(row);
+});
+
+/* ── Outsourced steps ──────────────────────────────────────────────────────
+   Lamination/foiling leaves the plant. The step keeps the same status field
+   as any other step, so completing it (stock returned) unlocks the next step
+   through the normal prerequisite lock — no special routing logic needed. */
+
+/** Convert a routing step into an outsourced one, or update its vendor detail. */
+router.patch("/job-routing/:id/outsource", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const body = req.body as {
+    isOutsourced?: boolean; vendorId?: number | null;
+    expectedReturnAt?: string | null; outsourceCost?: number | null;
+    outsourceNotes?: string | null;
+  };
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (step.status === "completed") {
+    res.status(409).json({ error: "Cannot change a completed step" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (body.isOutsourced !== undefined) {
+    updates.isOutsourced = body.isOutsourced;
+    // An outsourced step has no machine; restoring it in-house needs one back.
+    if (body.isOutsourced) updates.machineId = null;
+  }
+  if (body.vendorId !== undefined) updates.vendorId = body.vendorId;
+  if (body.expectedReturnAt !== undefined) {
+    updates.expectedReturnAt = body.expectedReturnAt ? new Date(body.expectedReturnAt) : null;
+  }
+  if (body.outsourceCost !== undefined) {
+    updates.outsourceCost = body.outsourceCost != null ? String(body.outsourceCost) : null;
+  }
+  if (body.outsourceNotes !== undefined) updates.outsourceNotes = body.outsourceNotes;
+
+  const [updated] = await db.update(jobRoutingTable).set(updates)
+    .where(eq(jobRoutingTable.id, id)).returning();
+  res.json(updated);
+});
+
+/** Stock has left for the vendor. */
+router.post("/job-routing/:id/send-to-vendor", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (!step.isOutsourced) { res.status(400).json({ error: "Step is not marked as outsourced" }); return; }
+  if (!step.vendorId) { res.status(400).json({ error: "Pick a vendor before sending" }); return; }
+
+  const { canStart, waitingFor } = await canStartStep(step.jobId, step.prerequisiteCodes ?? []);
+  if (!canStart) {
+    res.status(409).json({ error: `Cannot send — waiting for: ${waitingFor.join(", ")}`, waitingFor });
+    return;
+  }
+
+  const [updated] = await db.update(jobRoutingTable)
+    .set({ status: "in-progress", sentAt: new Date(), startedAt: new Date().toISOString() })
+    .where(eq(jobRoutingTable.id, id)).returning();
+
+  await db.update(jobsTable).set({ status: "in-progress" })
+    .where(and(eq(jobsTable.id, step.jobId), eq(jobsTable.status, "pending")));
+
+  res.json(updated);
+});
+
+/** Stock is back from the vendor — completes the step and unlocks downstream. */
+router.post("/job-routing/:id/receive-from-vendor", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { outsourceCost?: number | null; notes?: string | null };
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (!step.isOutsourced) { res.status(400).json({ error: "Step is not outsourced" }); return; }
+
+  const now = new Date();
+  const updates: Record<string, unknown> = {
+    status: "completed",
+    returnedAt: now,
+    completedAt: now.toISOString(),
+  };
+  if (body.outsourceCost != null) updates.outsourceCost = String(body.outsourceCost);
+  if (body.notes) updates.outsourceNotes = body.notes;
+
+  const [updated] = await db.update(jobRoutingTable).set(updates)
+    .where(eq(jobRoutingTable.id, id)).returning();
+
+  // Promote any pending step whose prerequisites are now satisfied.
+  const siblings = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, step.jobId));
+  for (const sib of siblings) {
+    if (sib.status !== "pending") continue;
+    const { canStart } = await canStartStep(step.jobId, sib.prerequisiteCodes ?? []);
+    if (canStart) {
+      await db.update(jobRoutingTable).set({ status: "ready" }).where(eq(jobRoutingTable.id, sib.id));
+    }
+  }
+
+  res.json(updated);
+});
+
+/** Everything currently sitting at a vendor — the "chase list". */
+router.get("/outsourced-steps", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: jobRoutingTable.id,
+      jobId: jobRoutingTable.jobId,
+      jobCode: jobsTable.jobCode,
+      jobName: jobsTable.jobName,
+      clientName: jobsTable.clientName,
+      stepCode: jobRoutingTable.stepCode,
+      status: jobRoutingTable.status,
+      vendorId: jobRoutingTable.vendorId,
+      vendorName: vendorsTable.vendorName,
+      vendorPhone: vendorsTable.phone,
+      sentAt: jobRoutingTable.sentAt,
+      expectedReturnAt: jobRoutingTable.expectedReturnAt,
+      returnedAt: jobRoutingTable.returnedAt,
+      outsourceCost: jobRoutingTable.outsourceCost,
+      qtySheets: jobsTable.qtySheets,
+    })
+    .from(jobRoutingTable)
+    .leftJoin(jobsTable, eq(jobRoutingTable.jobId, jobsTable.id))
+    .leftJoin(vendorsTable, eq(jobRoutingTable.vendorId, vendorsTable.id))
+    .where(eq(jobRoutingTable.isOutsourced, true));
+  res.json(rows);
 });
 
 export default router;
