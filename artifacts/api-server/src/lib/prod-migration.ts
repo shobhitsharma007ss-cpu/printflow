@@ -14,6 +14,53 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 20: purchase orders ────────────────────────────────────────
+  // Header + line items: one PO, one vendor, several materials — how paper is
+  // actually bought. Vendors gain email/GST so a PO can be sent and taxed.
+  try {
+    await db.execute(sql`
+      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email   TEXT;
+      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS gst_no  TEXT;
+      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT;
+
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id            SERIAL PRIMARY KEY,
+        po_number     TEXT NOT NULL UNIQUE,
+        vendor_id     INTEGER NOT NULL REFERENCES vendors(id),
+        status        TEXT NOT NULL DEFAULT 'draft',
+        order_date    TEXT NOT NULL,
+        expected_date TEXT,
+        subtotal      NUMERIC(12,2) NOT NULL DEFAULT 0,
+        gst_percent   NUMERIC(5,2)  NOT NULL DEFAULT 18,
+        gst_amount    NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_amount  NUMERIC(12,2) NOT NULL DEFAULT 0,
+        notes         TEXT,
+        sent_at       TIMESTAMPTZ,
+        sent_via      TEXT,
+        created_by    TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id            SERIAL PRIMARY KEY,
+        po_id         INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        material_id   INTEGER REFERENCES materials(id),
+        description   TEXT NOT NULL,
+        qty           NUMERIC(12,3) NOT NULL,
+        unit          TEXT NOT NULL DEFAULT 'kg',
+        rate_per_unit NUMERIC(12,2) NOT NULL,
+        line_total    NUMERIC(12,2) NOT NULL,
+        qty_received  NUMERIC(12,3) NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_po_vendor ON purchase_orders(vendor_id, status);
+      CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items(po_id);
+    `);
+    logger.info("Migration 20 complete — purchase orders ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 20 error");
+  }
+
   // ─── MIGRATION 19: packing detail on dispatches ───────────────────────────
   // A challan proves goods moved; a packing slip lets the receiver COUNT.
   // Cartons ship as bundles ("50,000 = 100 bundles x 500 + 0 loose"), so the

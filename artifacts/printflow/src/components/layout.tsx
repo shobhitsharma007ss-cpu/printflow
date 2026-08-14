@@ -20,6 +20,7 @@ import {
   TabletSmartphone,
   LogOut,
   CalendarDays,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlantAlerts } from "@/hooks/use-notifications";
@@ -34,6 +35,7 @@ const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; ro
   { href: "/schedule", label: "Schedule", icon: CalendarDays, roles: ["owner", "supervisor"] },
   { href: "/layout", label: "Layout Planner", icon: LayoutGrid, roles: ["owner", "supervisor"] },
   { href: "/costing", label: "Costing", icon: Calculator, roles: ["owner"] },
+  { href: "/purchase-orders", label: "Purchase Orders", icon: ShoppingCart, roles: ["owner", "supervisor"] },
   { href: "/inventory", label: "Inventory", icon: Package, roles: ["owner", "supervisor"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["owner"] },
   { href: "/settings", label: "Settings", icon: Settings, roles: ["owner"] },

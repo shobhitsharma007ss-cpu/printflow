@@ -8,6 +8,9 @@ export const vendorsTable = pgTable("vendors", {
   contactPerson: text("contact_person").notNull(),
   phone: text("phone").notNull(),
   city: text("city").notNull(),
+  email: text("email"),
+  gstNo: text("gst_no"),
+  address: text("address"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

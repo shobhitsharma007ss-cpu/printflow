@@ -9,6 +9,7 @@ import templatesRouter from "./templates";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import notificationsRouter from "./notifications";
+import purchaseOrdersRouter from "./purchase-orders";
 import quotesRouter from "./quotes";
 import scheduleRouter from "./schedule";
 import adminRouter from "./admin";
@@ -36,6 +37,7 @@ router.use(templatesRouter);
 router.use(dashboardRouter);
 router.use(notificationsRouter);
 router.use(quotesRouter);
+router.use(requireRole("owner", "supervisor"), purchaseOrdersRouter);
 router.use(requireRole("owner", "supervisor"), scheduleRouter);
 
 // Owner-only routes: Reports screen, user management, alert config, and destructive admin
