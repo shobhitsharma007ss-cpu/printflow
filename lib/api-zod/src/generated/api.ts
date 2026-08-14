@@ -547,6 +547,8 @@ export const CreateJobBody = zod.object({
   processColors: zod.number().nullish(),
   spotColors: zod.number().nullish(),
   printPassCount: zod.number().nullish(),
+  printsBothSides: zod.boolean().nullish(),
+  backColors: zod.number().nullish(),
   dryingWaitHours: zod.number().nullish(),
   cartonStyle: zod.string().nullish(),
   upsPerSheet: zod.number().nullish(),

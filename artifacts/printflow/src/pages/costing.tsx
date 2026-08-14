@@ -59,6 +59,8 @@ interface CostForm {
   spotColors: string;
   spotHandling: string;
   printPassCount: string;
+  printsBothSides: boolean;
+  backColors: string;
   coatingType: string;
   isNewDie: boolean;
   dieFabCost: string;
@@ -114,6 +116,8 @@ const DEFAULTS: CostForm = {
   spotColors: "1",
   spotHandling: "convert_cmyk",
   printPassCount: "1",
+  printsBothSides: false,
+  backColors: "0",
   coatingType: "aqueous",
   isNewDie: false,
   dieFabCost: "0",
@@ -197,9 +201,25 @@ function compute(
   const effSpotC      = spotConverted ? 0 : spotC;
   const effTotalC     = procC + effSpotC;
   const unitCap       = machine?.colorUnits ?? 4;
-  const minPasses     = effTotalC > unitCap ? Math.ceil(effTotalC / unitCap) : 1;
+  // Double-sided work (playing cards ≈ 30% of Prakash's capacity). Neither
+  // Komori perfects, so the back is always a second trip through the press.
+  const bothSides     = !!form.printsBothSides;
+  const backC         = bothSides ? Math.max(0, n(form.backColors)) : 0;
+  const frontPasses   = Math.max(1, Math.ceil(effTotalC / Math.max(1, unitCap)));
+  const backPasses    = backC > 0 ? Math.ceil(backC / Math.max(1, unitCap)) : 0;
+  const minPasses     = frontPasses + backPasses;
   const passes        = Math.max(minPasses, Math.max(1, n(form.printPassCount, 1)));
   const coating    = form.coatingType;
+  // Coating happens INLINE on the presses. The Single Coater is out of service,
+  // so a coating the chosen press can't do is not runnable at all:
+  //   LA37 → UV / texture / drip-off      GL37 → varnish / aqueous
+  const coatingCapability =
+    coating === "uv" ? "uv-single-pass"
+    : (coating === "aqueous" || coating === "varnish") ? "varnish-single-pass"
+    : null;
+  const pressCaps = machine?.capabilities ?? [];
+  const coatingUnsupported =
+    !!machine && !!coatingCapability && !pressCaps.includes(coatingCapability);
   const isNewDie   = form.isNewDie;
   const dieFab     = n(form.dieFabCost);
   const hwPer1k    = n(form.handworkPer1000, 250);
@@ -231,8 +251,9 @@ function compute(
   // Makeready from settings
   const mb = settings.makeready_bases;
   const baseReady = effTotalC >= 5 ? mb.ge5c : mb.lt5c;
-  const makeready = mkOverride > 0 ? mkOverride : passes >= 2 ? baseReady * 2 : baseReady;
-  const makereadyAuto = passes >= 2 ? baseReady * 2 : baseReady;
+  // Each pass is its own setup — front, then back, then any extra colour pass.
+  const makeready = mkOverride > 0 ? mkOverride : baseReady * passes;
+  const makereadyAuto = baseReady * passes;
 
   // Setup waste from settings
   const dieSetupWaste = settings.die_setup_waste_sheets;
@@ -255,8 +276,10 @@ function compute(
   // Paper
   const paperCost = planSheets * sheetCostEa;
 
-  // Plates: total_colors × passes + passes (if inline coating)
-  const plateCnt  = effTotalC * passes + (coating !== "none" ? passes : 0);
+  // Plates: one per colour on each side, plus one for inline coating.
+  // A colour is imaged once regardless of how many passes it takes — the old
+  // "colours × passes" formula triple-counted plates on multi-pass jobs.
+  const plateCnt  = effTotalC + backC + (coating !== "none" ? 1 : 0);
   const plateCost = plateCnt * plateEach;
 
   // Press
@@ -273,7 +296,8 @@ function compute(
   const spotKgPerColor = (imgAreaM2 * cov.spotKg * planSheets * 1.5) / 1000;
   const cmykCost       = procC * cmykKgPerColor * cmykRate;
   const spotCostAmt    = effSpotC * spotKgPerColor * spotRate;
-  const inkCost        = cmykCost + spotCostAmt;
+  const backInkCost    = backC * cmykKgPerColor * cmykRate;
+  const inkCost        = cmykCost + spotCostAmt + backInkCost;
 
   // Coating
   let coatingCost = 0;
@@ -364,6 +388,7 @@ function compute(
     subtotal, profit, preGst, gstAmt, finalTotal, per1kRate,
     procC, spotC, totalC, passes,
     spotConverted, effSpotC, effTotalC, unitCap, minPasses,
+    coatingUnsupported, coatingCapability, bothSides, backC,
     jobKind, isFlat, isCarton, qtyPieces,
     effDieSetupWasteSheets, effGluerSetupWasteSheets,
   };
@@ -1159,6 +1184,35 @@ export default function CostingPage() {
                   </Select>
                 </div>
               </div>
+
+              {/* Double-sided — playing cards etc. Neither Komori perfects, so
+                  the back is a second trip through the press. */}
+              <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!form.printsBothSides}
+                    onChange={(e) => setForm(p => ({ ...p, printsBothSides: e.target.checked, backColors: e.target.checked ? (p.backColors === "0" ? "4" : p.backColors) : "0" }))}
+                    className="h-4 w-4 rounded border-input"
+                  />
+                  <span className="text-xs font-semibold">Prints on both sides (playing cards, leaflets)</span>
+                </label>
+                {form.printsBothSides && (
+                  <>
+                    <div>
+                      <Label className="text-xs mb-1 block">Colours on the back</Label>
+                      <Select value={form.backColors} onChange={field("backColors")} className="w-full">
+                        {[1,2,3,4,5,6].map(v => <option key={v} value={v}>{v}</option>)}
+                      </Select>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Back needs its own pass — no perfecting unit on either Komori.
+                      Plates: {c.effTotalC ?? 0} front + {n(form.backColors)} back.
+                    </p>
+                  </>
+                )}
+              </div>
+
               {n(form.spotColors) > 0 && (
                 <div>
                   <Label className="text-xs mb-1 block">Spot colour handling</Label>
@@ -1213,6 +1267,13 @@ export default function CostingPage() {
                   <option value="uv">UV (Inline) — ₹380/kg</option>
                   <option value="varnish">Varnish (Inline) — ₹180/kg</option>
                 </Select>
+                {c.coatingUnsupported && (
+                  <p className="mt-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/40 px-2.5 py-1.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+                    ⚠ {machine?.machineName} cannot apply {form.coatingType} inline.
+                    {" "}UV runs on the LA37, varnish/aqueous on the GL37. Pick the right press —
+                    the Single Coater is out of service.
+                  </p>
+                )}
               </div>
               {!c.isFlat && (<>
               <div>

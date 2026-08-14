@@ -14,6 +14,20 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 23: double-sided printing ──────────────────────────────────
+  // Playing cards are ~30% of Prakash's capacity and were never modelled.
+  // Neither Komori perfects, so the back is always a second pass; plates are
+  // one per colour PER SIDE, not colours x passes.
+  try {
+    await db.execute(sql`
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS prints_both_sides BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS back_colors       INTEGER NOT NULL DEFAULT 0;
+    `);
+    logger.info("Migration 23 complete — double-sided printing ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 23 error");
+  }
+
   // ─── MIGRATION 22: seed batches for pre-existing stock ────────────────────
   // Batches only started being written at inward from now on. Stock already in
   // the system has no lot to draw from, so FIFO would find nothing to consume.

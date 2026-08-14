@@ -328,6 +328,8 @@ export interface JobWithDetails {
   processColors?: number | null;
   spotColors?: number | null;
   printPassCount?: number | null;
+  printsBothSides?: boolean | null;
+  backColors?: number | null;
   cartonStyle?: string | null;
   upsPerSheet?: number | null;
   isNewDie?: boolean | null;

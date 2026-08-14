@@ -653,7 +653,7 @@ router.post("/jobs", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const jobCode = await getNextJobCode();
-  const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, needsPaperTrim, processColors, spotColors, printPassCount, dryingWaitHours, ...jobData } = parsed.data;
+  const { customRouting, materials: jobMats, templateId, coatingType, finishRequirements, needsPaperTrim, processColors, spotColors, printPassCount, printsBothSides, backColors, dryingWaitHours, ...jobData } = parsed.data;
 
   const [job] = await db.insert(jobsTable).values({
     ...jobData,
@@ -665,6 +665,8 @@ router.post("/jobs", async (req, res): Promise<void> => {
     processColors: processColors ?? 4,
     spotColors: spotColors ?? 0,
     printPassCount: printPassCount ?? 1,
+    printsBothSides: printsBothSides ?? false,
+    backColors: backColors ?? 0,
     dryingWaitHours: dryingWaitHours ?? 0,
     status: "pending",
   }).returning();

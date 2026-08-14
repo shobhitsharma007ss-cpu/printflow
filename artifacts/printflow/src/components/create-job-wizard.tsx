@@ -62,6 +62,8 @@ interface JobForm {
   templateId: string;
   needsPaperTrim: boolean;
   processColors: string;
+  printsBothSides: boolean;
+  backColors: string;
   spotColors: string;
   dryingWaitHours: string;
   cartonL: string;
@@ -97,6 +99,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
     templateId: "",
     needsPaperTrim: false,
     processColors: "4",
+    printsBothSides: false,
+    backColors: "0",
     spotColors: "0",
     dryingWaitHours: "6",
     cartonL: "",
@@ -244,9 +248,10 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
         (coating === "varnish" && printMachine.capabilities.includes("varnish-single-pass")) ||
         (["uv", "texture", "drip-off", "led-uv"].includes(coating) && printMachine.capabilities.includes("uv-single-pass"))
       );
-    if (needsStandaloneCoat && coatingMachines.length > 0) {
-      steps.push({ machineId: coatingMachines[0].id, machineName: coatingMachines[0].machineName });
-    }
+    // The Single Coater is out of service — coating is inline on the Komoris only.
+    // If the chosen press can't apply this coating, the job simply isn't runnable
+    // as configured; we surface that rather than routing to a dead machine.
+    // (needsStandaloneCoat is kept for the warning shown in step 3.)
 
     if (form.finishRequirements.includes("die-cutting")) {
       const dc = cuttingMachines.find((m) => m.machineName.includes("Bobst Die Cutter") && m.status !== "maintenance");
@@ -355,7 +360,15 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
           needsPaperTrim: form.needsPaperTrim,
           processColors: parseInt(form.processColors) || 4,
           spotColors: parseInt(form.spotColors) || 0,
-          printPassCount: (parseInt(form.processColors) || 4) + (parseInt(form.spotColors) || 0) > 4 ? 2 : 1,
+          // No perfecting on either Komori — the back is always its own pass.
+          printPassCount: (() => {
+            const units = 6;
+            const front = (parseInt(form.processColors) || 4) + (parseInt(form.spotColors) || 0);
+            const back = form.printsBothSides ? (parseInt(form.backColors) || 0) : 0;
+            return Math.max(1, Math.ceil(front / units)) + (back > 0 ? Math.ceil(back / units) : 0);
+          })(),
+          printsBothSides: form.printsBothSides,
+          backColors: form.printsBothSides ? (parseInt(form.backColors) || 0) : 0,
           dryingWaitHours: parseInt(form.dryingWaitHours) || 0,
           cartonStyle: cartonPlan && cartonPlan.blank ? form.cartonStyle : undefined,
           upsPerSheet: cartonPlan?.ups ?? undefined,
@@ -391,6 +404,8 @@ export function CreateJobWizard({ isOpen, onClose }: { isOpen: boolean; onClose:
       templateId: "",
       needsPaperTrim: false,
       processColors: "4",
+    printsBothSides: false,
+    backColors: "0",
       spotColors: "0",
       dryingWaitHours: "6",
     cartonL: "",
@@ -886,6 +901,28 @@ function Step3Coating({
       {/* Colour count fields */}
       <div>
         <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted-foreground">Colour Count</Label>
+        {/* Double-sided — no perfecting on either Komori, so the back is its own pass */}
+        <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!form.printsBothSides}
+              onChange={(e) => setForm({ ...form, printsBothSides: e.target.checked, backColors: e.target.checked ? (form.backColors === "0" ? "4" : form.backColors) : "0" })}
+              className="h-4 w-4 rounded border-input"
+            />
+            <span className="text-xs font-semibold">Prints on both sides (playing cards, leaflets)</span>
+          </label>
+          {form.printsBothSides && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Colours on the back</Label>
+              <Select value={form.backColors} onChange={(e) => setForm({ ...form, backColors: e.target.value })}>
+                {[1,2,3,4,5,6].map(n => <option key={n} value={String(n)}>{n}</option>)}
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Back runs as a separate pass — extra setup and press time.</p>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Process Colours</Label>

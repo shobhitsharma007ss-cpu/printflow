@@ -30,6 +30,8 @@ export const jobsTable = pgTable("jobs", {
   coatingMethod: text("coating_method").notNull().default("inline"),
   processColors: integer("process_colors").notNull().default(4),
   spotColors: integer("spot_colors").notNull().default(0),
+  printsBothSides: boolean("prints_both_sides").notNull().default(false),
+  backColors: integer("back_colors").notNull().default(0),
   printPassCount: integer("print_pass_count").notNull().default(1),
   dryingWaitHours: integer("drying_wait_hours").notNull().default(0),
   cartonStyle: text("carton_style").default("straight_tuck"),
