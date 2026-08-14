@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, stockInwardTable, materialsTable, vendorsTable, stockMovementsTable } from "@workspace/db";
+import { db, stockInwardTable, materialsTable, vendorsTable, stockMovementsTable , materialBatchesTable} from "@workspace/db";
 import { CreateStockInwardBody } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
 
@@ -77,6 +77,25 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
 
     await db.update(materialsTable).set(materialUpdate).where(eq(materialsTable.id, parsed.data.materialId));
 
+    // Every inward becomes a BATCH — a distinct lot with its own brand, rate and
+    // remaining quantity. FIFO consumption draws from these oldest-first, which
+    // is what lets brand-vs-mileage reporting work later.
+    await db.insert(materialBatchesTable).values({
+      materialId: parsed.data.materialId,
+      vendorId: parsed.data.vendorId ?? null,
+      brand: parsed.data.brand ?? null,
+      batchCode: parsed.data.batchRef || null,
+      qtyKg: parsed.data.unit === "kg" ? String(inwardQty) : null,
+      qtySheets: String(sheetsToAdd),
+      qtyRemaining: String(sheetsToAdd),
+      ratePerKg: parsed.data.ratePerUnit != null ? String(parsed.data.ratePerUnit) : null,
+      ratePerSheet: sheetWeightKg && parsed.data.ratePerUnit != null
+        ? String(sheetWeightKg * parseFloat(String(parsed.data.ratePerUnit)))
+        : null,
+      receivedDate: parsed.data.receivedDate,
+      notes: parsed.data.notes ?? null,
+    });
+
     await db.insert(stockMovementsTable).values({
       materialId: parsed.data.materialId,
       movementType: "inward",
@@ -101,6 +120,18 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
     .where(eq(stockInwardTable.id, row.id));
 
   res.status(201).json(withJoins);
+});
+
+/** Lot-level stock for a material — oldest first, i.e. the FIFO consumption order. */
+router.get("/materials/:id/batches", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const rows = await db
+    .select()
+    .from(materialBatchesTable)
+    .where(eq(materialBatchesTable.materialId, id))
+    .orderBy(materialBatchesTable.receivedDate, materialBatchesTable.id);
+  res.json(rows);
 });
 
 export default router;

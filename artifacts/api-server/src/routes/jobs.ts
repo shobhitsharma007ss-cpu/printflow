@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable, vendorsTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable, vendorsTable, materialBatchesTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -137,6 +137,43 @@ async function checkPaperStock(jobId: number): Promise<{ ok: boolean; shortName?
   return { ok: true };
 }
 
+/* Consume stock from batches, oldest lot first.
+
+   materials.currentQty stays the authoritative total — batches are a parallel
+   ledger that records WHICH lot was used, so brand-vs-mileage reporting works.
+   Stock recorded before batches existed has no lots to draw from; in that case
+   we simply consume what lots exist and let currentQty carry the rest, rather
+   than blocking a job over historical bookkeeping. */
+async function consumeBatchesFifo(
+  materialId: number,
+  qtyNeeded: number,
+): Promise<Array<{ batchId: number; brand: string | null; qty: number }>> {
+  if (qtyNeeded <= 0) return [];
+
+  const lots = await db
+    .select()
+    .from(materialBatchesTable)
+    .where(eq(materialBatchesTable.materialId, materialId))
+    .orderBy(materialBatchesTable.receivedDate, materialBatchesTable.id);
+
+  const consumed: Array<{ batchId: number; brand: string | null; qty: number }> = [];
+  let remaining = qtyNeeded;
+
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const available = Number(lot.qtyRemaining ?? 0);
+    if (available <= 0) continue;
+    const take = Math.min(available, remaining);
+    await db
+      .update(materialBatchesTable)
+      .set({ qtyRemaining: String(available - take) })
+      .where(eq(materialBatchesTable.id, lot.id));
+    consumed.push({ batchId: lot.id, brand: lot.brand ?? null, qty: take });
+    remaining -= take;
+  }
+  return consumed;
+}
+
 async function deductJobMaterials(jobId: number, performedBy = "system"): Promise<DeductionInfo[]> {
   // Idempotency: skip if materials already deducted for this job
   const [jobForDeduction] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
@@ -159,13 +196,16 @@ async function deductJobMaterials(jobId: number, performedBy = "system"): Promis
     const actualDeducted = Math.min(plannedQty, currentQty); // actual amount removed (never below zero)
     const newQty = currentQty - actualDeducted;
     await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+    const lotsUsed = await consumeBatchesFifo(mat.id, actualDeducted);
     await db.insert(stockMovementsTable).values({
       materialId: mat.id,
       movementType: "deduction",
       qty: String(-actualDeducted),
       jobId,
-      sourceRef: jobForDeduction.jobCode,
       performedBy,
+      sourceRef: lotsUsed.length
+        ? `${jobForDeduction.jobCode} · FIFO ${lotsUsed.map(l => l.brand ?? `lot#${l.batchId}`).join("/")}`
+        : jobForDeduction.jobCode,
     });
     deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: plannedQty, unit: mat.unit });
     deductedMaterialIds.add(mat.id);
@@ -187,13 +227,16 @@ async function deductJobMaterials(jobId: number, performedBy = "system"): Promis
       const actualDeducted = Math.min(jobForDeduction.qtySheets, currentQty);
       const newQty = currentQty - actualDeducted;
       await db.update(materialsTable).set({ currentQty: String(newQty) }).where(eq(materialsTable.id, mat.id));
+      const boardLots = await consumeBatchesFifo(mat.id, actualDeducted);
       await db.insert(stockMovementsTable).values({
         materialId: mat.id,
         movementType: "deduction",
         qty: String(-actualDeducted),
         jobId,
-        sourceRef: jobForDeduction.jobCode,
         performedBy,
+        sourceRef: boardLots.length
+          ? `${jobForDeduction.jobCode} · FIFO ${boardLots.map(l => l.brand ?? `lot#${l.batchId}`).join("/")}`
+          : jobForDeduction.jobCode,
       });
       deductions.push({ materialId: mat.id, materialName: mat.materialName, qty: jobForDeduction.qtySheets, unit: mat.unit });
       if (newQty <= parseFloat(String(mat.minReorderQty))) {

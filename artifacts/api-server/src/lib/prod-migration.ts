@@ -14,6 +14,25 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 22: seed batches for pre-existing stock ────────────────────
+  // Batches only started being written at inward from now on. Stock already in
+  // the system has no lot to draw from, so FIFO would find nothing to consume.
+  // Give each material one opening batch equal to its current quantity.
+  try {
+    await db.execute(sql`
+      INSERT INTO material_batches
+        (material_id, brand, batch_code, qty_sheets, qty_remaining, rate_per_sheet, received_date, notes)
+      SELECT m.id, NULL, 'OPENING', m.current_qty, m.current_qty, m.rate_per_sheet,
+             CURRENT_DATE, 'Opening balance — created by migration 22'
+      FROM materials m
+      WHERE m.current_qty > 0
+        AND NOT EXISTS (SELECT 1 FROM material_batches b WHERE b.material_id = m.id);
+    `);
+    logger.info("Migration 22 complete — opening batches seeded");
+  } catch (err) {
+    logger.error({ err }, "Migration 22 error");
+  }
+
   // ─── MIGRATION 21: outsourced routing steps ───────────────────────────────
   // Lamination, foiling and embossing go OUT of the plant. Such a step has no
   // internal machine — it has a vendor, a send date and an expected return.
