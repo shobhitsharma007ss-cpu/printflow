@@ -296,6 +296,8 @@ export default function FloorMonitor() {
                           status={machine.status}
                           isPaused={isPaused}
                           sph={machine.speedPerHour}
+                          colorUnits={machine.colorUnits}
+                          capabilities={machine.capabilities}
                         />
 
                         {/* Maintenance banner */}
