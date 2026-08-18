@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { OutsourcedWorkPanel } from "@/components/outsourced-work";
 import { ReassignMachineButton } from "@/components/reassign-machine";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
