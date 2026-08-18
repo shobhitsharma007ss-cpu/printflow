@@ -162,7 +162,7 @@ const INK_COVERAGE = {
   heavy:  { cmykKg: 0.45, spotKg: 0.75 },
 };
 
-function compute(
+export function compute(
   form: CostForm,
   machine: MachineRow | null,
   dieMachine: MachineRow | null,

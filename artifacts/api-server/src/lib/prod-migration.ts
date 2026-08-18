@@ -336,7 +336,17 @@ export async function runProdMigration(): Promise<void> {
       .limit(1);
 
     if (existingOwner.length === 0) {
-      const passwordHash = await bcrypt.hash("printflow123", 10);
+      // No fixed default password. A random one is generated and printed ONCE to
+      // the boot log; it must be changed on first login. Shipping a known password
+      // to a live plant is not acceptable.
+      const generated =
+        process.env.OWNER_INITIAL_PASSWORD ??
+        `pf-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 6)}`;
+      const passwordHash = await bcrypt.hash(generated, 10);
+      logger.warn(
+        { email: ownerEmail, password: generated },
+        "SEEDED OWNER ACCOUNT — copy this password now, it will not be shown again",
+      );
       await db.insert(usersTable).values({
         name: "Owner",
         email: ownerEmail,
