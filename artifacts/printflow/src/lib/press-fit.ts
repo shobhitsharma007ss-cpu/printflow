@@ -14,6 +14,23 @@ import type { Machine } from "@workspace/api-client-react";
    The Planeta accepts sheets the Komoris cannot, so we warn rather than block:
    the estimator decides whether that job can wait for the one machine. */
 
+/* ── DISABLED 2026-08-17 ─────────────────────────────────────────────────────
+   Press-fit checking is suppressed pending a post-trim size model.
+
+   WHY: sheets are routinely trimmed on the Wohlenberg before loading (see
+   DOMAIN-RULES.md → Sheet handling → Trimming before press). These checks read
+   the material's STORED dimensions, which are the PURCHASED size, so any job on
+   trimmed stock is measured against a sheet the plant never loads. T-35 Dibbi
+   (93.5 x 106 cm) is the proof case: 1060 mm exceeds every press here, yet the
+   plant runs it routinely after trimming. The warnings therefore produce false
+   negatives on real production work, and a supervised pilot is imminent.
+
+   RE-ENABLE WHEN: a post-trim sheet size exists to validate against — i.e. the
+   material-received-vs-material-consumed model is built. Flip this one flag and
+   point checkPressFit() at the post-trim size instead of material.dimensions.
+   The validation logic below is deliberately left intact and unmodified.        */
+export const PRESS_FIT_CHECK_ENABLED = false;
+
 export type PressFit = {
   fits: Machine[];        // presses that can feed this sheet
   cannot: Machine[];      // presses that cannot
@@ -39,6 +56,10 @@ export function checkPressFit(
   sheetShortMm: number,
   machines: Machine[] | undefined,
 ): PressFit {
+  // Suppressed until a post-trim size exists — see PRESS_FIT_CHECK_ENABLED above.
+  if (!PRESS_FIT_CHECK_ENABLED) {
+    return { fits: [], cannot: [], allFit: true, noneFit: false };
+  }
   const presses = pressesFor(machines).filter(
     (m) => m.maxSheetWidthMm && m.maxSheetLengthMm,
   );
