@@ -464,7 +464,7 @@ export default function LayoutPlanner() {
         </Card>
 
         {/* ------------ RESULTS ------------ */}
-        <div className="lg:col-span-8 order-1 lg:order-2 flex flex-col gap-4 lg:sticky lg:top-4">
+        <div className="lg:col-span-8 order-1 lg:order-2 flex flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1">
           {!blank ? (
             <Card className="p-10 text-center text-muted-foreground order-1">
               {isFlat ? "Enter piece size and sheet size to see the layout"

@@ -83,8 +83,7 @@ export default function Reports() {
   return (
     <div className="space-y-8 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-black tracking-tight">Factory Reports</h1>
-        <p className="text-muted-foreground mt-1 font-medium">Analytics and historical performance data</p>
+        <h1 className="text-xl font-bold tracking-tight">Reports</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

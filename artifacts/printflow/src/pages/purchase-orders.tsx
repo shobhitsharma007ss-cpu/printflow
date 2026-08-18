@@ -180,8 +180,7 @@ export default function PurchaseOrders() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">Purchase Orders</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Raise an order, send it to the vendor on WhatsApp or email</p>
+          <h1 className="text-xl font-bold tracking-tight">Purchase Orders</h1>
         </div>
         <Button onClick={() => setOpen(true)} className="flex items-center gap-2">
           <Plus size={16} /> New PO

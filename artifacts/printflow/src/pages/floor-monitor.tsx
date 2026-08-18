@@ -185,15 +185,13 @@ export default function FloorMonitor() {
   }, {} as Record<string, Machine[]>);
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header */}
-      <div className="flex justify-between items-center bg-card p-6 rounded-xl border border-border shadow-sm">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
-            <Factory className="text-primary" size={32} />
-            Live Floor Monitor
-          </h1>
-          <p className="text-muted-foreground mt-1 font-medium">Real-time status of all factory equipment</p>
+    <div className="space-y-4 animate-fade-in">
+      {/* Slim header — the sidebar already says which page this is, so the title
+          block was ~88px spent repeating it. Legend and controls sit inline. */}
+      <div className="flex justify-between items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Factory className="text-primary" size={20} />
+          <span className="text-lg font-bold tracking-tight">Live Floor</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-4 text-sm">
@@ -253,11 +251,11 @@ export default function FloorMonitor() {
                       )}
                       style={{ borderTopColor: isPaused ? '#f59e0b' : getMachineColorCode(machine.status) }}
                     >
-                      <div className="p-5 relative">
+                      <div className="p-3.5 relative">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <h3 className="text-2xl font-black tracking-tight">{machine.machineCode}</h3>
-                            <p className="font-semibold text-muted-foreground text-sm">{machine.machineName}</p>
+                            <h3 className="text-lg font-bold tracking-tight">{machine.machineCode}</h3>
+                            <p className="font-medium text-muted-foreground text-xs">{machine.machineName}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <button

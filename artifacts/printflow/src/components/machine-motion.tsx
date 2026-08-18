@@ -56,7 +56,7 @@ export function MachineMotion({
   const units = Math.max(1, Math.min(8, colorUnits ?? 4));
 
   return (
-    <div className={`mm ${stateClass} mb-3 rounded-xl overflow-hidden border border-[#24344F]`}
+    <div className={`mm ${stateClass} mb-2 rounded-lg overflow-hidden border border-[#24344F]`}
          style={{ background: "linear-gradient(158deg,#0B1220,#152441 58%,#0C1526)" }}>
       <style>{MM_CSS}</style>
       {k === "press"  && <Press units={units} hasCoater={hasCoater} cyc={cyc} />}
@@ -83,7 +83,7 @@ function Press({ units, hasCoater, cyc }: { units: number; hasCoater: boolean; c
   for (let i = -1; i < units + 3; i++) sheets.push(X0 + 2 + i * GAP);
 
   return (
-    <svg viewBox={`0 0 ${W} 120`} className="w-full h-28" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
+    <svg viewBox={`0 0 ${W} 120`} className="w-full h-14" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
       <defs>
         <linearGradient id="mmTower" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#3A5478" /><stop offset=".42" stopColor="#22344F" /><stop offset="1" stopColor="#16233A" />
@@ -171,7 +171,7 @@ function Press({ units, hasCoater, cyc }: { units: number; hasCoater: boolean; c
 function DieCutter({ cyc }: { cyc: number }) {
   const sheets = [36, 96, 156, 216];
   return (
-    <svg viewBox="0 0 300 120" className="w-full h-28" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
+    <svg viewBox="0 0 300 120" className="w-full h-14" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
       <defs>
         <linearGradient id="dcHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2A4162" /><stop offset="1" stopColor="#0F1A2C" /></linearGradient>
         <linearGradient id="dcPlaten" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5B8FD0" /><stop offset="1" stopColor="#22385C" /></linearGradient>
@@ -221,7 +221,7 @@ function Gluer({ cyc }: { cyc: number }) {
   const GAP = 56;
   const idx = [0, 1, 2, 3];
   return (
-    <svg viewBox="0 0 300 120" className="w-full h-28" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
+    <svg viewBox="0 0 300 120" className="w-full h-14" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
       <defs>
         <linearGradient id="fgHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2A4162" /><stop offset="1" stopColor="#0F1A2C" /></linearGradient>
         <filter id="fgGlow" x="-70%" y="-70%" width="240%" height="240%">
@@ -272,7 +272,7 @@ function Gluer({ cyc }: { cyc: number }) {
 /* ─────────────────────────── CUTTER ─────────────────────────── */
 function Cutter({ cyc }: { cyc: number }) {
   return (
-    <svg viewBox="0 0 300 120" className="w-full h-28" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
+    <svg viewBox="0 0 300 120" className="w-full h-14" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
       <defs>
         <linearGradient id="cuHull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2A4162" /><stop offset="1" stopColor="#0F1A2C" /></linearGradient>
         <linearGradient id="cuBlade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#93C5FD" /><stop offset="1" stopColor="#22385C" /></linearGradient>
@@ -292,7 +292,7 @@ function Cutter({ cyc }: { cyc: number }) {
 /* ─────────────────────────── GENERIC ─────────────────────────── */
 function Gear({ cyc }: { cyc: number }) {
   return (
-    <svg viewBox="0 0 300 120" className="w-full h-28" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
+    <svg viewBox="0 0 300 120" className="w-full h-14" style={{ ["--c" as string]: `${cyc}s` }} aria-hidden="true">
       <defs>
         <linearGradient id="gwCyl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6B8FC4" /><stop offset="1" stopColor="#15223A" /></linearGradient>
       </defs>

@@ -93,7 +93,7 @@ interface CostForm {
   freightPacking: string;
 }
 
-const DEFAULTS: CostForm = {
+export const DEFAULTS: CostForm = {
   jobName: "",
   clientName: "",
   linkedJobId: "",

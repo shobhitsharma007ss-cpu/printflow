@@ -36,8 +36,7 @@ export default function Jobs() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">Job Management</h1>
-          <p className="text-muted-foreground mt-1">Track and schedule production orders</p>
+          <h1 className="text-xl font-bold tracking-tight">Jobs</h1>
         </div>
         <Button onClick={() => setIsNewJobOpen(true)} className="flex items-center gap-2 shadow-lg hover:shadow-primary/25">
           <Plus size={18} strokeWidth={3} />
