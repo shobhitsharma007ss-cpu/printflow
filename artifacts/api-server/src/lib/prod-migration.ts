@@ -14,6 +14,67 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 25: split-run partial handoff ──────────────────────────────
+  // The die cutters are the plant's bottleneck. Printing and pasting are fast;
+  // die cutting cannot keep up and runs overtime and Sundays. So finished lifts
+  // move downstream WHILE the press is still running — every single day.
+  // Strict sequential routing would idle the bottleneck, so a step can release a
+  // partial quantity and unlock the next step without being complete itself.
+  try {
+    await db.execute(sql`
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS qty_completed_so_far  INTEGER;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS handoff_released_at   TIMESTAMPTZ;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS handoff_qty           INTEGER;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS handoff_by            TEXT;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS handoff_reason        TEXT;
+      ALTER TABLE job_routing ADD COLUMN IF NOT EXISTS started_via_handoff   BOOLEAN NOT NULL DEFAULT FALSE;
+
+      CREATE TABLE IF NOT EXISTS job_step_events (
+        id            SERIAL PRIMARY KEY,
+        job_id        INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        routing_id    INTEGER,
+        step_code     TEXT NOT NULL,
+        event_type    TEXT NOT NULL,
+        qty           INTEGER,
+        reason        TEXT,
+        notes         TEXT,
+        performed_by  TEXT,
+        occurred_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_step_events_job ON job_step_events(job_id, occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_routing_handoff ON job_routing(job_id, handoff_released_at);
+    `);
+    logger.info("Migration 25 complete — split-run handoff ready");
+  } catch (err) {
+    logger.error({ err }, "Migration 25 error");
+  }
+
+  // ─── MIGRATION 24: waste settings from observed floor reality ─────────────
+  // The seeded figures (400 makeready, 50 die, 100 gluer cartons, 3% running)
+  // were textbook numbers and wildly overstated. Per the plant owner, who ran
+  // these presses for five years:
+  //   - colour testing happens on ALREADY-MISPRINTED sheets, not job stock, so
+  //     it costs nothing and must not be charged to the customer
+  //   - the modern Komoris take 20-30 fresh sheets to come to colour, and this
+  //     does NOT scale with run length
+  //   - die cutting loses 10-15, pasting 5-6
+  //   - ~50 sheets total across the whole chain, INCLUDING running spoilage
+  // Old values over-planned this reference job by 521 sheets = Rs 7,097 of paper
+  // the customer was charged for and never used.
+  try {
+    await db.execute(sql`
+      UPDATE costing_settings SET value = '{"lt5c":25,"ge5c":30}'::jsonb
+        WHERE key = 'makeready_bases';
+      UPDATE costing_settings SET value = '{"existing":15,"new_die":40}'::jsonb
+        WHERE key = 'die_setup_waste_sheets';
+      UPDATE costing_settings SET value = '{"value":80}'::jsonb
+        WHERE key = 'gluer_setup_waste_cartons';
+    `);
+    logger.info("Migration 24 complete — waste settings corrected to floor reality");
+  } catch (err) {
+    logger.error({ err }, "Migration 24 error");
+  }
+
   // ─── MIGRATION 23: double-sided printing ──────────────────────────────────
   // Playing cards are ~30% of Prakash's capacity and were never modelled.
   // Neither Komori perfects, so the back is always a second pass; plates are
@@ -184,9 +245,9 @@ export async function runProdMigration(): Promise<void> {
     await db.execute(sql`
       INSERT INTO costing_settings (key, value) VALUES
         ('ink_coverage',              '{"preset":"medium","light":{"cmykKg":0.28,"spotKg":0.48},"medium":{"cmykKg":0.35,"spotKg":0.60},"heavy":{"cmykKg":0.45,"spotKg":0.75}}'::jsonb),
-        ('makeready_bases',           '{"lt5c":400,"ge5c":500}'::jsonb),
-        ('die_setup_waste_sheets',    '{"existing":50,"new_die":150}'::jsonb),
-        ('gluer_setup_waste_cartons', '{"value":100}'::jsonb),
+        ('makeready_bases',           '{"lt5c":25,"ge5c":30}'::jsonb),
+        ('die_setup_waste_sheets',    '{"existing":15,"new_die":40}'::jsonb),
+        ('gluer_setup_waste_cartons', '{"value":80}'::jsonb),
         ('glue_grams',                '{"straight_tuck":0.4,"reverse_tuck":0.5,"auto_bottom":0.7,"crash_lock":0.6}'::jsonb),
         ('glue_rate_per_kg',          '{"value":150}'::jsonb),
         ('finishing_rates',           '{"lamination_bopp_gloss":{"rate":18,"unit":"sqm"},"lamination_bopp_matt":{"rate":16,"unit":"sqm"},"foil_stamping":{"rate":8,"unit":"sqm"},"embossing":{"rate":12,"unit":"sqm"},"spot_uv":{"rate":14,"unit":"sqm"},"window_patching":{"rate":0.80,"unit":"per_carton"}}'::jsonb),

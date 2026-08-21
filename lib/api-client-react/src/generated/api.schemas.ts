@@ -243,6 +243,12 @@ export interface JobRouting {
   etaSeconds?: number | null;
   etaFormatted?: string | null;
   notes?: string | null;
+  stepCode?: string | null;
+  stepName?: string | null;
+  handoffReleasedAt?: string | null;
+  handoffQty?: number | null;
+  startedViaHandoff?: boolean | null;
+  qtyCompletedSoFar?: number | null;
 }
 
 export interface JobMaterial {

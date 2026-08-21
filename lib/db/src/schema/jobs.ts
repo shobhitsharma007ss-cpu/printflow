@@ -68,6 +68,27 @@ export const jobRoutingTable = pgTable("job_routing", {
   returnedAt: timestamp("returned_at", { withTimezone: true }),
   outsourceCost: numeric("outsource_cost", { precision: 12, scale: 2 }),
   outsourceNotes: text("outsource_notes"),
+  // Split-run handoff (migration 25) — release part of a run downstream while
+  // this step is still running. Daily practice, not an exception.
+  qtyCompletedSoFar: integer("qty_completed_so_far"),
+  handoffReleasedAt: timestamp("handoff_released_at", { withTimezone: true }),
+  handoffQty: integer("handoff_qty"),
+  handoffBy: text("handoff_by"),
+  handoffReason: text("handoff_reason"),
+  startedViaHandoff: boolean("started_via_handoff").notNull().default(false),
+});
+
+export const jobStepEventsTable = pgTable("job_step_events", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").notNull().references(() => jobsTable.id, { onDelete: "cascade" }),
+  routingId: integer("routing_id"),
+  stepCode: text("step_code").notNull(),
+  eventType: text("event_type").notNull(),   // handoff_released | started | completed
+  qty: integer("qty"),
+  reason: text("reason"),
+  notes: text("notes"),
+  performedBy: text("performed_by"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const jobInterruptionsTable = pgTable("job_interruptions", {

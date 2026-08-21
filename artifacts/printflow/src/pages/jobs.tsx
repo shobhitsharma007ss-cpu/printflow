@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { OutsourcedWorkPanel } from "@/components/outsourced-work";
 import { ReassignMachineButton } from "@/components/reassign-machine";
+import { HandoffButton } from "@/components/handoff-button";
 import { useJobs, useJob, useUpdateJobStatus, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { useJobCostReport } from "@/hooks/use-reports";
 import { Card, Button, Modal, Input, Label, Select } from "@/components/ui-elements";
@@ -315,6 +316,26 @@ function JobDetailPanel({ jobId, onClose }: { jobId: number; onClose: () => void
                                     routingId={step.id}
                                     currentMachineName={step.machineName}
                                   />
+                                )}
+                                {(step.status === "in-progress" || step.status === "paused") &&
+                                 !step.handoffReleasedAt && (
+                                  <HandoffButton
+                                    routingId={step.id}
+                                    stepName={step.stepName}
+                                    plannedQty={job.qtySheets}
+                                  />
+                                )}
+                                {step.handoffReleasedAt && (
+                                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded
+                                    bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                    ↗ {step.handoffQty?.toLocaleString("en-IN")} released
+                                  </span>
+                                )}
+                                {step.startedViaHandoff && (
+                                  <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded
+                                    bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                    partial received
+                                  </span>
                                 )}
                               </div>
                               {step.operatorName && (

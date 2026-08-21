@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
-import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable, vendorsTable, materialBatchesTable } from "@workspace/db";
+import { db, jobsTable, jobRoutingTable, jobMaterialsTable, jobTemplatesTable, materialsTable, machinesTable, wastageLogTable, jobInterruptionsTable, jobQuotesTable, jobDispatchesTable, stockMovementsTable, vendorsTable, materialBatchesTable, jobStepEventsTable } from "@workspace/db";
 import {
   CreateJobBody,
   UpdateJobBody,
@@ -91,15 +91,22 @@ async function canStartStep(jobId: number, prerequisiteCodes: string[]): Promise
     return { canStart: true, waitingFor: [] };
   }
   const prereqSteps = await db
-    .select({ stepCode: jobRoutingTable.stepCode, status: jobRoutingTable.status })
+    .select({
+      stepCode: jobRoutingTable.stepCode,
+      status: jobRoutingTable.status,
+      handoffReleasedAt: jobRoutingTable.handoffReleasedAt,
+    })
     .from(jobRoutingTable)
     .where(eq(jobRoutingTable.jobId, jobId));
   const waitingFor: string[] = [];
   for (const code of prerequisiteCodes) {
     const step = prereqSteps.find(s => s.stepCode === code);
-    if (!step || (step.status !== "completed" && step.status !== "skipped")) {
-      waitingFor.push(code);
-    }
+    const done = step && (step.status === "completed" || step.status === "skipped");
+    // A partial handoff unlocks the next step even though this one is still
+    // running. The die cutters are the bottleneck here — lifts move downstream
+    // while the press keeps printing. Blocking that would idle the plant daily.
+    const handedOff = step && step.handoffReleasedAt != null;
+    if (!done && !handedOff) waitingFor.push(code);
   }
   return { canStart: waitingFor.length === 0, waitingFor };
 }
@@ -1348,6 +1355,64 @@ router.get("/job-routing/:id/alternatives", async (req, res): Promise<void> => {
     .where(eq(machinesTable.machineType, current.machineType));
 
   res.json(rows.filter((m) => m.id !== step.machineId));
+});
+
+/* ── Split-run partial handoff ─────────────────────────────────────────────
+   Release part of a run to the next stage while this step keeps running. */
+
+/** Release a partial quantity downstream. */
+router.post("/job-routing/:id/handoff", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const body = req.body as { qty?: number; reason?: string; performedBy?: string; notes?: string };
+  const qty = Number(body.qty);
+  if (!qty || qty <= 0) { res.status(400).json({ error: "Quantity released is required" }); return; }
+
+  const [step] = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.id, id));
+  if (!step) { res.status(404).json({ error: "Routing step not found" }); return; }
+  if (step.status !== "in-progress" && step.status !== "paused") {
+    res.status(409).json({ error: "Only a running step can release a partial handoff" });
+    return;
+  }
+
+  const [updated] = await db.update(jobRoutingTable).set({
+    handoffReleasedAt: new Date(),
+    handoffQty: qty,
+    handoffBy: body.performedBy ?? null,
+    handoffReason: body.reason ?? null,
+    qtyCompletedSoFar: qty,
+  }).where(eq(jobRoutingTable.id, id)).returning();
+
+  await db.insert(jobStepEventsTable).values({
+    jobId: step.jobId, routingId: step.id, stepCode: step.stepCode,
+    eventType: "handoff_released", qty, reason: body.reason ?? null,
+    notes: body.notes ?? null, performedBy: body.performedBy ?? null,
+  });
+
+  // Promote anything now unlocked by this release.
+  const siblings = await db.select().from(jobRoutingTable).where(eq(jobRoutingTable.jobId, step.jobId));
+  const unlocked: string[] = [];
+  for (const sib of siblings) {
+    if (sib.status !== "pending") continue;
+    const { canStart } = await canStartStep(step.jobId, sib.prerequisiteCodes ?? []);
+    if (canStart) {
+      await db.update(jobRoutingTable)
+        .set({ status: "ready", startedViaHandoff: true })
+        .where(eq(jobRoutingTable.id, sib.id));
+      unlocked.push(sib.stepCode);
+    }
+  }
+  res.json({ ...updated, unlocked });
+});
+
+/** Full event timeline for a job — proves when lifts actually moved. */
+router.get("/jobs/:id/step-events", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const rows = await db.select().from(jobStepEventsTable)
+    .where(eq(jobStepEventsTable.jobId, id))
+    .orderBy(jobStepEventsTable.occurredAt);
+  res.json(rows);
 });
 
 /* ── Outsourced steps ──────────────────────────────────────────────────────
