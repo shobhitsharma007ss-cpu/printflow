@@ -14,6 +14,32 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 26: machine data from the floor supervisor ─────────────────
+  // Returned on the printed मशीन जानकारी फॉर्म, Aug 2026. These replace estimates.
+  //   Speeds are now the SPEC MAXIMUM, with OEE carrying the real running loss:
+  //     LA37 13,000 x 0.92 = 12,000   GL37 15,000 x 0.87 = 13,000
+  //   Setup times were all under-estimated, the die cutters badly so.
+  //   Hour rates derived from Rs 2.83cr annual overhead, weighted by machine size.
+  try {
+    await db.execute(sql`
+      UPDATE machines SET rated_sph=13000, oee_default=0.92, setup_min_repeat=30,
+             setup_min_new=45, hour_rate=2987 WHERE machine_code='KOM-LA37';
+      UPDATE machines SET rated_sph=15000, oee_default=0.87, setup_min_repeat=30,
+             setup_min_new=45, hour_rate=2987 WHERE machine_code='KOM-GL37';
+      UPDATE machines SET rated_sph=5000,  setup_min_repeat=45, setup_min_new=60,
+             hour_rate=1991 WHERE machine_code='PLAN-SV';
+      UPDATE machines SET setup_min_repeat=15, setup_min_new=120, hour_rate=1493
+             WHERE machine_code IN ('BOB-DC1','BOB-DC2');
+      UPDATE machines SET setup_min_repeat=30, setup_min_new=45, hour_rate=996
+             WHERE machine_type='gluing';
+      UPDATE machines SET setup_min_repeat=15, setup_min_new=30, hour_rate=796
+             WHERE machine_type='cutting';
+    `);
+    logger.info("Migration 26 complete — machine data from supervisor applied");
+  } catch (err) {
+    logger.error({ err }, "Migration 26 error");
+  }
+
   // ─── MIGRATION 25: split-run partial handoff ──────────────────────────────
   // The die cutters are the plant's bottleneck. Printing and pasting are fast;
   // die cutting cannot keep up and runs overtime and Sundays. So finished lifts

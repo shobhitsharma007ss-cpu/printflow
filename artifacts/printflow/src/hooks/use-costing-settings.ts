@@ -36,9 +36,18 @@ export const COSTING_SETTINGS_DEFAULTS: CostingSettingsMap = {
     medium: { cmykKg: 0.35, spotKg: 0.60 },
     heavy:  { cmykKg: 0.45, spotKg: 0.75 },
   },
-  makeready_bases: { lt5c: 400, ge5c: 500 },
-  die_setup_waste_sheets: { existing: 50, new_die: 150 },
-  gluer_setup_waste_cartons: { value: 100 },
+  /* Setup waste — confirmed by the floor supervisor, Aug 2026.
+     Per stage: press 12 + die cut 16 + gluer 16 cartons (~2 sheets) = 30 sheets
+     on a typical job. Colour testing still costs no job paper: it runs on
+     already-misprinted scrap.
+     Original note follows.
+     Setup waste, measured on Prakash's floor — NOT textbook figures.
+     Colour testing runs on already-misprinted scrap, so it costs no job paper.
+     Fresh sheets consumed: press 8, die cut 4, gluer ~3 (24 cartons at 8-up).
+     The new Komoris are precise; 50 sheets total is the ceiling, ~10-15 typical. */
+  makeready_bases: { lt5c: 12, ge5c: 16 },
+  die_setup_waste_sheets: { existing: 16, new_die: 40 },
+  gluer_setup_waste_cartons: { value: 16 },
   glue_grams: {
     straight_tuck: 0.4,
     reverse_tuck:  0.5,
