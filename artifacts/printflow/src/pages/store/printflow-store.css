@@ -32,14 +32,16 @@ body {
 button { font: inherit; }
 
 .app-shell {
-  width: 100vw;
-  height: 100dvh;
-  min-width: 1080px;
-  min-height: 720px;
+  width: 100%;
+  height: calc(100vh - 84px);   /* sit inside the app's top bar, don't overflow it */
+  min-width: 0;
+  min-height: 620px;
   display: grid;
   grid-template-rows: 76px 64px minmax(0, 1fr) 30px;
   overflow: hidden;
   background: var(--warehouse);
+  border-radius: 14px;          /* a dark godown panel inside the light app */
+  margin: 12px;
 }
 
 .topbar {
