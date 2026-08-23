@@ -187,6 +187,7 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
       receivedDate: b.receivedDate ?? "",
       price: Number(b.ratePerKg ?? b.ratePerSheet ?? 0),
       invoice: b.invoiceNumber ?? "",
+      jobs: [] as string[],   // real consumers; wired when job-material links land
     };
   });
   res.json(lots);

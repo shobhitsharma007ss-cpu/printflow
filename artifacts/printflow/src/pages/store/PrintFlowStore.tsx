@@ -114,13 +114,19 @@ function LotDialog({ lot, onClose }: { lot: Lot; onClose: () => void }) {
   const urgency = getUrgency(lot);
   const percent = Math.round((lot.qty / lot.full) * 100);
   const issued = Math.max(0, lot.full - lot.qty);
-  const movementRows = issued > 0
-    ? [
-        ["Today, 11:20", `Issued to ${lot.jobs[0]?.split(" · ")[1] ?? "press floor"}`, `−${formatNumber.format(Math.max(1, Math.round(issued * 0.38)))}`, formatNumber.format(lot.qty)],
-        ["18 Aug", lot.jobs[1] ?? "Issued to store", `−${formatNumber.format(Math.max(1, Math.round(issued * 0.62)))}`, formatNumber.format(lot.qty + Math.round(issued * 0.38))],
-        [lot.receivedDate, `Received · ${lot.invoice}`, `+${formatNumber.format(lot.full)}`, formatNumber.format(lot.full)],
-      ]
-    : [[lot.receivedDate, `Received · ${lot.invoice}`, `+${formatNumber.format(lot.full)}`, formatNumber.format(lot.full)]];
+  /* Only facts. The demo build invented dated movements ("Today, 11:20") which
+     would show the owner history that never happened. Show the receipt, and the
+     issued total as one honest line, until the movement ledger is wired. */
+  const movementRows: string[][] = [];
+  if (issued > 0) {
+    movementRows.push(["—", "Issued to production", `−${formatNumber.format(issued)}`, formatNumber.format(lot.qty)]);
+  }
+  movementRows.push([
+    lot.receivedDate || "—",
+    lot.invoice ? `Received · ${lot.invoice}` : "Received",
+    `+${formatNumber.format(lot.full)}`,
+    formatNumber.format(lot.full),
+  ]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -170,7 +176,7 @@ function LotDialog({ lot, onClose }: { lot: Lot; onClose: () => void }) {
               </div>
               <aside className="jobs-panel">
                 <div className="section-title"><span>Consumed by</span></div>
-                {lot.jobs.map((job) => <div className="job-chip" key={job}>{job}</div>)}
+                {(lot.jobs ?? []).map((job) => <div className="job-chip" key={job}>{job}</div>)}
                 <div className="cost-note"><span>Costing uses this lot’s rate</span><strong>₹{formatMoney.format(lot.price)}</strong><small>Not the blended material average</small></div>
               </aside>
             </div>
@@ -205,7 +211,7 @@ function LotDialog({ lot, onClose }: { lot: Lot; onClose: () => void }) {
   );
 }
 
-export default function PrintFlowStore({ lots: lotsProp }: { lots?: Lot[] } = {}) {
+export default function PrintFlowStore({ lots: lotsProp, onRecordInward }: { lots?: Lot[]; onRecordInward?: () => void } = {}) {
   const lots = lotsProp ?? demoLots;
   const [category, setCategory] = useState<Category>("paper");
   const [selectedLot, setSelectedLot] = useState<Lot | null>(null);
@@ -222,7 +228,11 @@ export default function PrintFlowStore({ lots: lotsProp }: { lots?: Lot[] } = {}
         <div className={`low-stock-banner ${runningLow.length ? "low-stock-banner--active" : ""}`}>
           <span className="beacon" /><div><small>{runningLow.length ? "RUNNING OUT FIRST" : "NO LOT UNDER 7 DAYS"}</small><strong>{runningLow.length ? runningLow.map((lot) => `${lot.shortProduct} · ${getDays(lot)} days`).join("  ·  ") : "Store cover is stable"}</strong></div>
         </div>
-        <button className="user-block" aria-label="Open user menu"><span>RK</span><div><strong>Rakesh</strong><small>Store manager</small></div></button>
+        {/* Was a hardcoded fake user. The pilot needs a way to RECORD stock,
+            not a decorative avatar — this is the primary action on this screen. */}
+        <button className="user-block" onClick={onRecordInward} aria-label="Record stock inward">
+          <span>+</span><div><strong>Record</strong><small>stock inward</small></div>
+        </button>
       </header>
 
       <nav className="category-tabs" role="tablist" aria-label="Material categories">
