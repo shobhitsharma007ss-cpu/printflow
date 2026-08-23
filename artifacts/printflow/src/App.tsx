@@ -10,6 +10,7 @@ import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import FloorMonitor from "@/pages/floor-monitor";
 import Inventory from "@/pages/inventory";
+import InventoryStore from "@/pages/inventory-store";
 import Jobs from "@/pages/jobs";
 import Costing from "@/pages/costing";
 import PurchaseOrders from "@/pages/purchase-orders";
@@ -87,7 +88,8 @@ function AuthedRouter() {
       <Switch>
         <RoleRoute path="/" allowed={["owner", "supervisor"]} role={role} component={Dashboard} />
         <RoleRoute path="/floor-monitor" allowed={["owner", "supervisor", "operator"]} role={role} component={FloorMonitor} />
-        <RoleRoute path="/inventory" allowed={["owner", "supervisor"]} role={role} component={Inventory} />
+        <RoleRoute path="/inventory" allowed={["owner", "supervisor"]} role={role} component={InventoryStore} />
+        <RoleRoute path="/inventory-classic" allowed={["owner", "supervisor"]} role={role} component={Inventory} />
         <RoleRoute path="/jobs" allowed={["owner", "supervisor"]} role={role} component={Jobs} />
         <RoleRoute path="/schedule" allowed={["owner", "supervisor"]} role={role} component={Schedule} />
         <RoleRoute path="/layout" allowed={["owner", "supervisor"]} role={role} component={LayoutPlanner} />

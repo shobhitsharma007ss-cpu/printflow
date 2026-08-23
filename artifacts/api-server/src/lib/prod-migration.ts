@@ -14,6 +14,19 @@ import { logger } from "./logger";
 
 export async function runProdMigration(): Promise<void> {
 
+  // ─── MIGRATION 27: batch reservation (held-for-job) ───────────────────────
+  // Repeat-job paper is bought pre-cut to the job's size, 1-3 months ahead. That
+  // reservation is real before it is software: a lot arrives already spoken for.
+  // Store view shows held lots with amber strapping and the job name.
+  try {
+    await db.execute(sql`
+      ALTER TABLE material_batches ADD COLUMN IF NOT EXISTS held_for_job_id INTEGER;
+      ALTER TABLE material_batches ADD COLUMN IF NOT EXISTS held_for_label  TEXT;
+      CREATE INDEX IF NOT EXISTS idx_batches_material ON material_batches(material_id);
+    `);
+    logger.info("Migration 27 complete — batch reservation ready");
+  } catch (err) { logger.error({ err }, "Migration 27 error"); }
+
   // ─── MIGRATION 26: machine data from the floor supervisor ─────────────────
   // Returned on the printed मशीन जानकारी फॉर्म, Aug 2026. These replace estimates.
   //   Speeds are now the SPEC MAXIMUM, with OEE carrying the real running loss:

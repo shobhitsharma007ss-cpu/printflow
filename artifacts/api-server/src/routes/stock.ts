@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { db, stockInwardTable, materialsTable, vendorsTable, stockMovementsTable , materialBatchesTable} from "@workspace/db";
 import { CreateStockInwardBody } from "@workspace/api-zod";
 import { createNotification } from "./notifications";
@@ -132,6 +132,64 @@ router.get("/materials/:id/batches", async (req, res): Promise<void> => {
     .where(eq(materialBatchesTable.materialId, id))
     .orderBy(materialBatchesTable.receivedDate, materialBatchesTable.id);
   res.json(rows);
+});
+
+/* ── STORE VIEW: every lot as the Lot view model ───────────────────────────
+   full     = largest recorded delivery for that batch (qtySheets)
+   ratePerDay = deductions over the last 28 days / 28, from stock_movements
+   held     = batch.heldForLabel, set when paper is bought for a job */
+router.get("/store/lots", async (_req, res): Promise<void> => {
+  const batches = await db.select().from(materialBatchesTable);
+  const materials = await db.select().from(materialsTable);
+  const matById = new Map(materials.map(m => [m.id, m]));
+  const vendors = await db.select().from(vendorsTable);
+  const venById = new Map(vendors.map(v => [v.id, v.name]));
+
+  // consumption per material over the last 28 days
+  const since = new Date(Date.now() - 28 * 864e5);
+  const moves = await db.select().from(stockMovementsTable)
+    .where(and(eq(stockMovementsTable.movementType, "deduction"),
+               gte(stockMovementsTable.createdAt, since)));
+  const usedByMat = new Map<number, number>();
+  for (const m of moves) {
+    const q = Math.abs(Number(m.qty));
+    usedByMat.set(m.materialId, (usedByMat.get(m.materialId) ?? 0) + q);
+  }
+
+  const catOf = (t?: string | null) => {
+    const s = (t ?? "").toLowerCase();
+    if (/ink/.test(s)) return "inks";
+    if (/coat|uv|varnish|aqueous/.test(s)) return "coatings";
+    if (/glue|gum|chem|solution|wash|fount/.test(s)) return "chemicals";
+    return "paper";
+  };
+
+  const lots = batches.map(b => {
+    const mat = matById.get(b.materialId);
+    const remaining = Number(b.qtyRemaining ?? b.qtySheets ?? 0);
+    const full = Number(b.qtySheets ?? remaining) || remaining;
+    const perDay = usedByMat.get(b.materialId);
+    const ratePerDay = perDay && perDay > 0 ? Math.round(perDay / 28) : undefined;
+    return {
+      id: b.batchCode ?? `B-${b.id}`,
+      category: catOf(mat?.materialType),
+      vendor: b.vendorId ? (venById.get(b.vendorId) ?? "—") : "—",
+      vendorKey: (b.vendorId ? (venById.get(b.vendorId) ?? "x") : "x").toLowerCase().replace(/[^a-z]/g,"").slice(0,8),
+      brand: b.brand ?? "—",
+      product: mat?.name ?? "—",
+      shortProduct: (mat?.name ?? "—").split(" ").slice(0,2).join(" "),
+      size: mat?.dimensions ?? "",
+      qty: remaining,
+      unit: mat?.baseUnit ?? "sheets",
+      full,
+      ratePerDay,
+      heldFor: b.heldForLabel ?? undefined,
+      receivedDate: b.receivedDate ?? "",
+      price: Number(b.ratePerKg ?? b.ratePerSheet ?? 0),
+      invoice: b.invoiceNumber ?? "",
+    };
+  });
+  res.json(lots);
 });
 
 export default router;

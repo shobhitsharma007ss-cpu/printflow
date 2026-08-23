@@ -40,6 +40,8 @@ export const materialBatchesTable = pgTable("material_batches", {
   ratePerSheet: numeric("rate_per_sheet", { precision: 10, scale: 3 }),
   receivedDate: date("received_date"),
   notes: text("notes"),
+  heldForJobId: integer("held_for_job_id"),
+  heldForLabel: text("held_for_label"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
