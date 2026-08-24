@@ -1,4 +1,4 @@
-:root {
+.app-shell {
   --warehouse: #11130f;
   --warehouse-deep: #0b0c0a;
   --warehouse-panel: #181a15;
@@ -12,7 +12,7 @@
   --line: rgba(238, 231, 212, 0.16);
 }
 
-* { box-sizing: border-box; }
+.app-shell *, .app-shell *::before, .app-shell *::after { box-sizing: border-box; }
 
 html,
 body {
@@ -29,7 +29,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button { font: inherit; }
+.app-shell button { font: inherit; }
 
 .app-shell {
   width: 100%;
