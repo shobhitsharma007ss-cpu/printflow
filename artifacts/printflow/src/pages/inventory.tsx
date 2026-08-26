@@ -269,7 +269,7 @@ const defaultInward: InwardForm = {
   showMore: false,
 };
 
-function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { data: materials } = useMaterials();
   const { data: vendors } = useVendors();
   const createInward = useCreateStockInward();

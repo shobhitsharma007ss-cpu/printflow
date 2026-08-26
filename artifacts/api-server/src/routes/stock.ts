@@ -145,7 +145,6 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
   const vendors = await db.select().from(vendorsTable);
   const venById = new Map(vendors.map(v => [v.id, v.name]));
 
-  // consumption per material over the last 28 days
   const since = new Date(Date.now() - 28 * 864e5);
   const moves = await db.select().from(stockMovementsTable)
     .where(and(eq(stockMovementsTable.movementType, "deduction"),
@@ -156,38 +155,42 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
     usedByMat.set(m.materialId, (usedByMat.get(m.materialId) ?? 0) + q);
   }
 
-  const catOf = (t?: string | null) => {
-    const s = (t ?? "").toLowerCase();
-    if (/ink/.test(s)) return "inks";
-    if (/coat|uv|varnish|aqueous/.test(s)) return "coatings";
-    if (/glue|gum|chem|solution|wash|fount/.test(s)) return "chemicals";
-    return "paper";
+  /* Same rule the classic inventory page uses. materialType is only
+     board/paper/consumable — every consumable is separated by keywords in
+     subType and materialName. Guessing from materialType alone dumped inks,
+     coatings and glue into the paper tab. */
+  const catOf = (m?: { materialType: string; subType?: string | null; materialName?: string | null }) => {
+    if (!m) return "paper" as const;
+    if (m.materialType === "board" || m.materialType === "paper") return "paper" as const;
+    const hay = `${m.subType ?? ""} ${m.materialName ?? ""}`.toLowerCase();
+    if (/varnish|aqueous|coating|uv/.test(hay)) return "coatings" as const;
+    if (/ink/.test(hay)) return "inks" as const;
+    return "chemicals" as const;
   };
 
   const lots = batches.map(b => {
     const mat = matById.get(b.materialId);
-    const remaining = Number(b.qtyRemaining ?? b.qtySheets ?? 0);
-    const full = Number(b.qtySheets ?? remaining) || remaining;
+    const remaining = Number(b.qtyRemaining ?? b.qtySheets ?? b.qtyKg ?? 0);
+    const delivered = Number(b.qtySheets ?? b.qtyKg ?? 0) || remaining;
     const perDay = usedByMat.get(b.materialId);
-    const ratePerDay = perDay && perDay > 0 ? Math.round(perDay / 28) : undefined;
+    const vendorName = b.vendorId ? (venById.get(b.vendorId) ?? "Unknown vendor") : "Unknown vendor";
     return {
       id: b.batchCode ?? `B-${b.id}`,
-      category: catOf(mat?.materialType),
-      vendor: b.vendorId ? (venById.get(b.vendorId) ?? "—") : "—",
-      vendorKey: (b.vendorId ? (venById.get(b.vendorId) ?? "x") : "x").toLowerCase().replace(/[^a-z]/g,"").slice(0,8),
+      category: catOf(mat),
+      vendor: vendorName,
+      vendorKey: vendorName.toLowerCase().replace(/[^a-z]/g, "").slice(0, 10) || "unknown",
       brand: b.brand ?? "—",
-      product: mat?.name ?? "—",
-      shortProduct: (mat?.name ?? "—").split(" ").slice(0,2).join(" "),
+      product: mat?.materialName ?? "Unknown material",
       size: mat?.dimensions ?? "",
       qty: remaining,
-      unit: mat?.baseUnit ?? "sheets",
-      full,
-      ratePerDay,
+      unit: mat?.unit ?? "units",
+      full: delivered,
+      ratePerDay: perDay && perDay > 0 ? Math.round((perDay / 28) * 100) / 100 : undefined,
       heldFor: b.heldForLabel ?? undefined,
       receivedDate: b.receivedDate ?? "",
-      price: Number(b.ratePerKg ?? b.ratePerSheet ?? 0),
+      price: Number(b.ratePerKg ?? b.ratePerSheet ?? 0) || undefined,
       invoice: b.invoiceNumber ?? "",
-      jobs: [] as string[],   // real consumers; wired when job-material links land
+      jobs: [] as string[],
     };
   });
   res.json(lots);
