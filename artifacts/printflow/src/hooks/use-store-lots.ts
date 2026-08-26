@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Lot } from "@/pages/store/printflow-store.data";
+import type { Lot } from "@/pages/store/PrintFlowStore";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
