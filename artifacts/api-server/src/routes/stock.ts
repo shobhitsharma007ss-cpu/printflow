@@ -174,6 +174,11 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
     const delivered = Number(b.qtySheets ?? b.qtyKg ?? 0) || remaining;
     const perDay = usedByMat.get(b.materialId);
     const vendorName = b.vendorId ? (venById.get(b.vendorId) ?? "Unknown vendor") : "Unknown vendor";
+    const isSheets = (mat?.unit ?? "").toLowerCase().includes("sheet");
+    const rate = Number(isSheets ? (b.ratePerSheet ?? 0) : (b.ratePerKg ?? 0)) || 0;
+    const ageDays = b.receivedDate
+      ? Math.max(0, Math.floor((Date.now() - new Date(b.receivedDate).getTime()) / 864e5))
+      : undefined;
     return {
       id: b.batchCode ?? `B-${b.id}`,
       category: catOf(mat),
@@ -188,7 +193,12 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
       ratePerDay: perDay && perDay > 0 ? Math.round((perDay / 28) * 100) / 100 : undefined,
       heldFor: b.heldForLabel ?? undefined,
       receivedDate: b.receivedDate ?? "",
-      price: Number(b.ratePerKg ?? b.ratePerSheet ?? 0) || undefined,
+      /* Rate is per-sheet for paper and per-kg for everything else, so send the
+         unit with it — a bare number gets misread as the wrong basis. */
+      price: rate || undefined,
+      rateUnit: isSheets ? "sheet" : "kg",
+      value: rate ? Math.round(rate * remaining) : undefined,
+      ageDays,
       invoice: b.invoiceNumber ?? "",
       jobs: [] as string[],
     };

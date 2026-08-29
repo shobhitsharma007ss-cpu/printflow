@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Package, Plus, Lock, AlertTriangle, X } from "lucide-react";
+import { Package, Plus, Lock, AlertTriangle, X, Search, LayoutGrid, Table2 } from "lucide-react";
 import { Card, Button, Badge, Modal } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,9 @@ export type Lot = {
   price?: number;
   invoice?: string;
   jobs?: string[];
+  rateUnit?: string;
+  value?: number;
+  ageDays?: number;
 };
 
 const TABS = [
@@ -57,6 +60,8 @@ function vendorColour(key: string): string {
 }
 
 const nf = new Intl.NumberFormat("en-IN");
+const money = (n: number) =>
+  n >= 1e5 ? `₹${(n / 1e5).toFixed(2)}L` : `₹${nf.format(Math.round(n))}`;
 const daysLeft = (l: Lot): number | null =>
   l.ratePerDay && l.ratePerDay > 0 ? l.qty / l.ratePerDay : null;
 
@@ -184,6 +189,12 @@ function LotTile({ lot, onOpen }: { lot: Lot; onOpen: () => void }) {
             {lot.vendor} · {lot.brand}
           </span>
         </div>
+        {lot.price ? (
+          <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+            ₹{nf.format(lot.price)}/{lot.rateUnit ?? "kg"}
+            {lot.value ? <span className="font-semibold text-foreground"> · {money(lot.value)}</span> : null}
+          </div>
+        ) : null}
         {lot.heldFor ? (
           <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mt-1 truncate">
             🔒 {lot.heldFor}
@@ -203,6 +214,8 @@ export default function PrintFlowStore({
 }) {
   const [tab, setTab] = useState<TabKey>("paper");
   const [open, setOpen] = useState<Lot | null>(null);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<"visual" | "table">("visual");
 
   /* Most urgent first, then lots with no history, then held lots last — nothing
      consumes a held lot, so it can never be the thing about to run out. */
@@ -210,6 +223,11 @@ export default function PrintFlowStore({
     () =>
       lots
         .filter((l) => l.category === tab)
+        .filter((l) => {
+          if (!query.trim()) return true;
+          const q = query.toLowerCase();
+          return `${l.product} ${l.vendor} ${l.brand} ${l.size ?? ""}`.toLowerCase().includes(q);
+        })
         .sort((a, b) => {
           if (!!a.heldFor !== !!b.heldFor) return a.heldFor ? 1 : -1;
           const A = daysLeft(a), B = daysLeft(b);
@@ -218,7 +236,7 @@ export default function PrintFlowStore({
           if (B === null) return -1;
           return A - B;
         }),
-    [lots, tab],
+    [lots, tab, query],
   );
 
   const critical = shown.filter((l) => {
@@ -226,6 +244,9 @@ export default function PrintFlowStore({
     return d !== null && d <= 7;
   });
   const countFor = (k: TabKey) => lots.filter((l) => l.category === k).length;
+  const stockValue = shown.reduce((t, l) => t + (l.value ?? 0), 0);
+  const ages = shown.map((l) => l.ageDays).filter((d): d is number => typeof d === "number");
+  const oldest = ages.length ? Math.max(...ages) : undefined;
 
   return (
     <div className="p-6 space-y-4">
@@ -251,6 +272,17 @@ export default function PrintFlowStore({
           </span>
         </div>
       )}
+
+      <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
+        <Kpi label="Stock value" value={money(stockValue)} />
+        <Kpi label="Low / out" value={String(critical.length)} tone={critical.length ? "crit" : "ok"} />
+        <Kpi label="Held for jobs" value={String(shown.filter((l) => l.heldFor).length)} />
+        <Kpi
+          label="Oldest stock"
+          value={oldest === undefined ? "—" : `${oldest} days`}
+          tone={oldest !== undefined && oldest > 90 ? "warn" : undefined}
+        />
+      </div>
 
       <div className="flex gap-1.5 flex-wrap border-b border-border pb-2" role="tablist">
         {TABS.map((t) => (
@@ -286,18 +318,132 @@ export default function PrintFlowStore({
         </Card>
       ) : (
         <>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-            Most urgent on the left · held lots last
-          </p>
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))] items-end">
-            {shown.map((l) => (
-              <LotTile key={l.id} lot={l} onOpen={() => setOpen(l)} />
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search material, vendor or brand…"
+                className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              {([["visual", LayoutGrid, "Visual"], ["table", Table2, "Table"]] as const).map(([v, Icon, lbl]) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm font-semibold transition-colors",
+                    view === v ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground",
+                  )}
+                >
+                  <Icon size={14} /> {lbl}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground ml-auto">
+              Most urgent first · held lots last
+            </p>
           </div>
+          {view === "visual" ? (
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(168px,1fr))] items-end">
+              {shown.map((l) => (
+                <LotTile key={l.id} lot={l} onOpen={() => setOpen(l)} />
+              ))}
+            </div>
+          ) : (
+            <LotTable lots={shown} onOpen={setOpen} />
+          )}
         </>
       )}
 
       <LotDetail lot={open} onClose={() => setOpen(null)} />
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone }: { label: string; value: string; tone?: "crit" | "warn" | "ok" }) {
+  return (
+    <div className="bg-muted/50 rounded-lg p-3">
+      <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div
+        className={cn(
+          "text-xl font-bold tabular-nums mt-0.5",
+          tone === "crit" && "text-rose-600 dark:text-rose-400",
+          tone === "warn" && "text-amber-600 dark:text-amber-400",
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/* Table view — the same lots as rows. The visual answers "how much is left";
+   this answers "what is it worth" and "what is sitting too long". */
+function LotTable({ lots, onOpen }: { lots: Lot[]; onOpen: (l: Lot) => void }) {
+  return (
+    <div className="rounded-xl border border-border overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50">
+          <tr className="text-left">
+            {["Material", "Vendor · Brand", "Left", "of full", "Rate", "Value", "Age", "Status"].map((h) => (
+              <th key={h} className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lots.map((l) => {
+            const c = cover(l);
+            const pct = l.full > 0 ? Math.round((l.qty / l.full) * 100) : 0;
+            return (
+              <tr
+                key={l.id}
+                onClick={() => onOpen(l)}
+                className="border-t border-border hover:bg-muted/40 cursor-pointer"
+              >
+                <td className="px-3 py-2.5">
+                  <div className="font-semibold">{l.product}</div>
+                  {l.size ? <div className="text-[11px] text-muted-foreground">{l.size}</div> : null}
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-sm shrink-0"
+                          style={{ background: vendorColour(l.vendorKey || l.vendor) }} />
+                    <span className="text-[13px]">{l.vendor} · {l.brand}</span>
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 font-bold tabular-nums whitespace-nowrap">
+                  {nf.format(l.qty)} <span className="text-[11px] font-normal text-muted-foreground">{l.unit}</span>
+                </td>
+                <td className="px-3 py-2.5 tabular-nums text-muted-foreground whitespace-nowrap">
+                  {nf.format(l.full)} <span className="text-[11px]">({pct}%)</span>
+                </td>
+                <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">
+                  {l.price ? `₹${nf.format(l.price)}/${l.rateUnit ?? "kg"}` : "—"}
+                </td>
+                <td className="px-3 py-2.5 tabular-nums font-semibold whitespace-nowrap">
+                  {l.value ? money(l.value) : "—"}
+                </td>
+                <td className={cn("px-3 py-2.5 tabular-nums whitespace-nowrap",
+                                  (l.ageDays ?? 0) > 90 && "text-amber-600 font-semibold dark:text-amber-400")}>
+                  {l.ageDays === undefined ? "—" : `${l.ageDays}d`}
+                </td>
+                <td className="px-3 py-2.5">
+                  <Badge className={cn("border whitespace-nowrap", TONE[c.tone])}>
+                    {l.heldFor ? <Lock size={10} className="mr-1" /> : null}
+                    {c.label}
+                  </Badge>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
