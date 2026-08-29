@@ -58,9 +58,22 @@ router.post("/stock-inward", async (req, res): Promise<void> => {
     const currentQtyVal = parseFloat(String(mat.currentQty));
     const inwardQty = parseFloat(String(parsed.data.qtyReceived));
 
-    // If inward recorded in kg (board/paper), convert to sheets for currentQty
+    /* Convert kg -> sheets. If the material has no dimensions or GSM we CANNOT
+       do this, and silently storing kg as a sheet count corrupts the stock (a
+       30,000 kg delivery became "30,000 sheets"). Refuse instead, and say why. */
     let sheetsToAdd = inwardQty;
-    if (parsed.data.unit === 'kg' && sheetWeightKg && sheetWeightKg > 0) {
+    const needsConversion = parsed.data.unit === 'kg';
+    if (needsConversion) {
+      if (!sheetWeightKg || sheetWeightKg <= 0) {
+        res.status(422).json({
+          error:
+            `Cannot convert kg to sheets for "${mat.materialName}" — it has no sheet size ` +
+            `or GSM recorded. Add both in Settings → Materials, then record this stock again.`,
+          code: "SHEET_WEIGHT_UNKNOWN",
+          materialId: mat.id,
+        });
+        return;
+      }
       sheetsToAdd = inwardQty / sheetWeightKg;
     }
 
@@ -174,8 +187,14 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
     const delivered = Number(b.qtySheets ?? b.qtyKg ?? 0) || remaining;
     const perDay = usedByMat.get(b.materialId);
     const vendorName = b.vendorId ? (venById.get(b.vendorId) ?? "Unknown vendor") : "Unknown vendor";
+    /* Value the lot on whichever rate basis actually exists. Asking only for
+       ratePerSheet made stock value read zero for every lot whose material has
+       no sheet weight. */
     const isSheets = (mat?.unit ?? "").toLowerCase().includes("sheet");
-    const rate = Number(isSheets ? (b.ratePerSheet ?? 0) : (b.ratePerKg ?? 0)) || 0;
+    const perSheet = Number(b.ratePerSheet ?? 0) || 0;
+    const perKg = Number(b.ratePerKg ?? 0) || 0;
+    const rate = isSheets ? (perSheet || perKg) : (perKg || perSheet);
+    const rateBasis = isSheets ? (perSheet ? "sheet" : "kg") : (perKg ? "kg" : "sheet");
     const ageDays = b.receivedDate
       ? Math.max(0, Math.floor((Date.now() - new Date(b.receivedDate).getTime()) / 864e5))
       : undefined;
@@ -196,10 +215,13 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
       /* Rate is per-sheet for paper and per-kg for everything else, so send the
          unit with it — a bare number gets misread as the wrong basis. */
       price: rate || undefined,
-      rateUnit: isSheets ? "sheet" : "kg",
+      rateUnit: rateBasis,
       value: rate ? Math.round(rate * remaining) : undefined,
       ageDays,
       invoice: b.invoiceNumber ?? "",
+      /* true when the material has no sheet weight, so this quantity may be a
+         raw kg figure mislabelled as sheets by an older inward. */
+      basisUnknown: isSheets && !perSheet && !!perKg,
       jobs: [] as string[],
     };
   });

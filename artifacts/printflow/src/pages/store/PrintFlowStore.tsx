@@ -39,6 +39,7 @@ export type Lot = {
   rateUnit?: string;
   value?: number;
   ageDays?: number;
+  basisUnknown?: boolean;
 };
 
 const TABS = [
@@ -189,6 +190,12 @@ function LotTile({ lot, onOpen }: { lot: Lot; onOpen: () => void }) {
             {lot.vendor} · {lot.brand}
           </span>
         </div>
+        {lot.basisUnknown ? (
+          <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mt-1 flex items-start gap-1">
+            <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+            <span>No sheet size set — quantity may be kg</span>
+          </div>
+        ) : null}
         {lot.price ? (
           <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
             ₹{nf.format(lot.price)}/{lot.rateUnit ?? "kg"}
@@ -506,6 +513,19 @@ function LotDetail({ lot, onClose }: { lot: Lot | null; onClose: () => void }) {
             <p className="text-amber-700 dark:text-amber-400/90 mt-1 text-[13px]">
               It was bought for <b>{lot.heldFor}</b>. You can still use it, but that job will go short by
               whatever you take.
+            </p>
+          </div>
+        ) : null}
+
+        {lot.basisUnknown ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:bg-amber-950/25 dark:border-amber-900">
+            <div className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+              <AlertTriangle size={14} /> Sheet size missing
+            </div>
+            <p className="text-amber-700 dark:text-amber-400/90 mt-1 text-[13px]">
+              This material has no sheet dimensions or GSM recorded, so kilograms could not be
+              converted to sheets — the quantity above may actually be kg. Add the sheet size and
+              GSM in <b>Settings → Materials</b>, then correct this lot.
             </p>
           </div>
         ) : null}
