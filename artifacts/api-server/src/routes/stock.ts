@@ -200,6 +200,7 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
       : undefined;
     return {
       id: b.batchCode ?? `B-${b.id}`,
+      batchId: b.id,
       category: catOf(mat),
       vendor: vendorName,
       vendorKey: vendorName.toLowerCase().replace(/[^a-z]/g, "").slice(0, 10) || "unknown",
@@ -226,6 +227,107 @@ router.get("/store/lots", async (_req, res): Promise<void> => {
     };
   });
   res.json(lots);
+});
+
+
+/* ── Correcting a lot ──────────────────────────────────────────────────────
+   Lots recorded before the kg guard may hold a raw kg figure in the sheet
+   count. The true kg was saved in qty_kg, so once the material has a sheet
+   size and GSM the correct sheet count can be recomputed exactly. */
+
+function sheetWeightKgOf(mat: { dimensions: string | null; gsm: number | null }): number | null {
+  if (!mat.dimensions || !mat.gsm) return null;
+  const parts = mat.dimensions.trim().split(" ");
+  const wh = parts[0].split("x").map(Number);
+  if (wh.length !== 2 || !wh[0] || !wh[1]) return null;
+  const u = parts[1]?.toLowerCase() ?? "in";
+  const toCm = (v: number) => (u === "mm" ? v * 0.1 : u === "cm" ? v : v * 2.54);
+  return (toCm(wh[0]) * toCm(wh[1]) * mat.gsm) / 10000000;
+}
+
+/** Recompute sheets from the stored kg, using the material's current size/GSM. */
+router.post("/store/lots/:id/recompute", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [lot] = await db.select().from(materialBatchesTable).where(eq(materialBatchesTable.id, id));
+  if (!lot) { res.status(404).json({ error: "Lot not found" }); return; }
+  const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, lot.materialId));
+  if (!mat) { res.status(404).json({ error: "Material not found" }); return; }
+
+  const kg = Number(lot.qtyKg ?? 0);
+  if (!kg) {
+    res.status(422).json({ error: "This lot has no kilogram figure recorded, so it cannot be recomputed. Correct the quantity by hand instead." });
+    return;
+  }
+  const sw = sheetWeightKgOf(mat);
+  if (!sw || sw <= 0) {
+    res.status(422).json({
+      error: `"${mat.materialName}" still has no sheet size or GSM. Add both in Settings → Materials first.`,
+      code: "SHEET_WEIGHT_UNKNOWN",
+    });
+    return;
+  }
+
+  const oldSheets = Number(lot.qtyRemaining ?? 0);
+  const newSheets = Math.round((kg / sw) * 100) / 100;
+  const rateKg = Number(lot.ratePerKg ?? 0);
+
+  await db.update(materialBatchesTable).set({
+    qtySheets: String(newSheets),
+    qtyRemaining: String(newSheets),
+    ratePerSheet: rateKg ? String(sw * rateKg) : lot.ratePerSheet,
+  }).where(eq(materialBatchesTable.id, id));
+
+  // keep the material's running total honest
+  const delta = newSheets - oldSheets;
+  await db.update(materialsTable)
+    .set({
+      currentQty: String(Number(mat.currentQty) + delta),
+      ratePerSheet: rateKg ? String(sw * rateKg) : mat.ratePerSheet,
+    })
+    .where(eq(materialsTable.id, mat.id));
+
+  res.json({ ok: true, kg, sheetWeightKg: sw, was: oldSheets, now: newSheets });
+});
+
+/** Set a lot's remaining quantity by hand. */
+router.patch("/store/lots/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const qty = Number((req.body as { qty?: number }).qty);
+  if (!isFinite(qty) || qty < 0) { res.status(400).json({ error: "A quantity of zero or more is required" }); return; }
+
+  const [lot] = await db.select().from(materialBatchesTable).where(eq(materialBatchesTable.id, id));
+  if (!lot) { res.status(404).json({ error: "Lot not found" }); return; }
+  const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, lot.materialId));
+
+  const delta = qty - Number(lot.qtyRemaining ?? 0);
+  await db.update(materialBatchesTable)
+    .set({ qtyRemaining: String(qty), qtySheets: String(Math.max(qty, Number(lot.qtySheets ?? 0))) })
+    .where(eq(materialBatchesTable.id, id));
+  if (mat) {
+    await db.update(materialsTable)
+      .set({ currentQty: String(Math.max(0, Number(mat.currentQty) + delta)) })
+      .where(eq(materialsTable.id, mat.id));
+  }
+  res.json({ ok: true, qty });
+});
+
+/** Remove a lot recorded in error. */
+router.delete("/store/lots/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [lot] = await db.select().from(materialBatchesTable).where(eq(materialBatchesTable.id, id));
+  if (!lot) { res.status(404).json({ error: "Lot not found" }); return; }
+  const [mat] = await db.select().from(materialsTable).where(eq(materialsTable.id, lot.materialId));
+  if (mat) {
+    await db.update(materialsTable)
+      .set({ currentQty: String(Math.max(0, Number(mat.currentQty) - Number(lot.qtyRemaining ?? 0))) })
+      .where(eq(materialsTable.id, mat.id));
+  }
+  await db.delete(materialBatchesTable).where(eq(materialBatchesTable.id, id));
+  res.json({ ok: true });
 });
 
 export default router;

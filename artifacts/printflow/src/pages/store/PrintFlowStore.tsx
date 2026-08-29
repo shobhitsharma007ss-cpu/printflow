@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { Package, Plus, Lock, AlertTriangle, X, Search, LayoutGrid, Table2 } from "lucide-react";
-import { Card, Button, Badge, Modal } from "@/components/ui-elements";
+import { Package, Plus, Lock, AlertTriangle, X, Search, LayoutGrid, Table2, Wand2, Trash2, Save } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Card, Button, Badge, Modal, Input } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ export type Lot = {
   value?: number;
   ageDays?: number;
   basisUnknown?: boolean;
+  batchId?: number;
 };
 
 const TABS = [
@@ -371,6 +374,110 @@ export default function PrintFlowStore({
   );
 }
 
+const API = import.meta.env.VITE_API_URL ?? "";
+
+/* Correcting a lot. The kg figure was stored correctly even when the sheet
+   conversion failed, so "Recompute from kg" fixes those lots exactly once the
+   material has a sheet size. Manual entry and delete cover everything else. */
+function CorrectLot({ lot, onDone }: { lot: Lot; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [qty, setQty] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const id = lot.batchId;
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["store-lots"] });
+    qc.invalidateQueries({ queryKey: ["materials"] });
+    onDone();
+  };
+  const fail = (e: Error) => toast.error(e.message, { duration: 8000 });
+  const call = async (path: string, init: RequestInit) => {
+    const r = await fetch(`${API}/api/store/lots/${id}${path}`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error ?? "That did not work");
+    return body;
+  };
+
+  const recompute = useMutation({
+    mutationFn: () => call("/recompute", { method: "POST" }),
+    onSuccess: (d: { was: number; now: number }) => {
+      toast.success(`Corrected — ${nf.format(d.was)} to ${nf.format(d.now)} sheets`);
+      refresh();
+    },
+    onError: fail,
+  });
+  const setQtyM = useMutation({
+    mutationFn: () => call("", { method: "PATCH", body: JSON.stringify({ qty: Number(qty) }) }),
+    onSuccess: () => { toast.success("Quantity updated"); refresh(); },
+    onError: fail,
+  });
+  const del = useMutation({
+    mutationFn: () => call("", { method: "DELETE" }),
+    onSuccess: () => { toast.success("Lot removed"); refresh(); },
+    onError: fail,
+  });
+
+  if (!id) return null;
+
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-3">
+      <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        Correct this lot
+      </div>
+
+      {lot.basisUnknown ? (
+        <Button
+          onClick={() => recompute.mutate()}
+          disabled={recompute.isPending}
+          className="w-full flex items-center justify-center gap-2"
+        >
+          <Wand2 size={15} />
+          {recompute.isPending ? "Recomputing…" : "Recompute sheets from the kg recorded"}
+        </Button>
+      ) : null}
+
+      <div className="flex gap-2">
+        <Input
+          type="number"
+          min={0}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder={`Set remaining (now ${nf.format(lot.qty)})`}
+          className="flex-1"
+        />
+        <Button
+          variant="secondary"
+          onClick={() => setQtyM.mutate()}
+          disabled={qty === "" || setQtyM.isPending}
+          className="flex items-center gap-1.5"
+        >
+          <Save size={14} /> Save
+        </Button>
+      </div>
+
+      {confirmDelete ? (
+        <div className="flex gap-2">
+          <Button variant="destructive" onClick={() => del.mutate()} disabled={del.isPending} className="flex-1">
+            {del.isPending ? "Removing…" : "Yes, remove this lot"}
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirmDelete(true)}
+          className="text-[13px] font-medium text-rose-600 hover:underline flex items-center gap-1.5 dark:text-rose-400"
+        >
+          <Trash2 size={13} /> Remove this lot
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "crit" | "warn" | "ok" }) {
   return (
     <div className="bg-muted/50 rounded-lg p-3">
@@ -535,6 +642,8 @@ function LotDetail({ lot, onClose }: { lot: Lot | null; onClose: () => void }) {
             Days of cover appear once this material has a few weeks of consumption recorded.
           </p>
         ) : null}
+
+        <CorrectLot lot={lot} onDone={onClose} />
 
         <div className="flex justify-end">
           <Button variant="secondary" onClick={onClose} className="flex items-center gap-1.5">
