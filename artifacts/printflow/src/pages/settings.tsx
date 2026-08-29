@@ -6,7 +6,7 @@ import { useJobTemplates } from "@/hooks/use-templates";
 import { useUsers, useCreateUser, useUpdateUser, useResetUserPassword } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, Button, Input, Label, Select, Modal } from "@/components/ui-elements";
-import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle, UserCog, ShieldCheck, Eye, EyeOff, KeyRound, Bell, MessageCircle, Mail, CheckCircle2, XCircle, Send, Smartphone } from "lucide-react";
+import { Settings as SettingsIcon, Cpu, Package, Users, Briefcase, Save, Plus, Trash2, ArrowRight, Check, X, ChevronLeft, ChevronRight, Layers, IndianRupee, AlertTriangle, UserCog, ShieldCheck, Eye, EyeOff, KeyRound, Bell, MessageCircle, Mail, CheckCircle2, XCircle, Send, Smartphone , Pencil } from "lucide-react";
 import { cn, formatDim } from "@/lib/utils";
 import { useAddMaterialVendor } from "@/hooks/use-inventory";
 import type { Machine, Material, CreateMaterialRequest, CreateMaterialRequestUnit, JobTemplate, StaffUser, StaffUserRole } from "@workspace/api-client-react";
@@ -195,6 +195,7 @@ type EditingField = "reorder" | "rate" | "wastage" | null;
 type EditingState = { id: number; field: EditingField };
 
 function MaterialsSection() {
+  const [editMat, setEditMat] = useState<any>(null);
   const { data: materials, isLoading } = useMaterials();
   const updateMaterial = useUpdateMaterial();
   const deleteMaterial = useDeleteMaterial();
@@ -328,6 +329,13 @@ function MaterialsSection() {
                         </div>
                       </div>
                       <button
+                        onClick={() => setEditMat(m)}
+                        title="Edit material"
+                        className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
                         onClick={() => {
                           if (confirm(`Delete "${m.materialName}"? This cannot be undone.`)) {
                             deleteMaterial.mutate({ id: m.id });
@@ -452,6 +460,7 @@ function MaterialsSection() {
 
       <AddMaterialWizard isOpen={showWizard} onClose={() => setShowWizard(false)} />
       <AddConsumableForm isOpen={showConsumableForm} onClose={() => setShowConsumableForm(false)} />
+      {editMat && <EditMaterialModal material={editMat} onClose={() => setEditMat(null)} />}
     </div>
   );
 }
@@ -2173,5 +2182,111 @@ function LoadingSpinner() {
     <div className="flex justify-center py-12">
       <div className="animate-spin w-8 h-8 border-2 border-primary rounded-full border-t-transparent" />
     </div>
+  );
+}
+
+/* Editing an existing material. Sheet size and GSM were previously only
+   settable when creating a material, so a board recorded without them could
+   never convert kilograms to sheets — and could never be fixed. */
+function EditMaterialModal({ material, onClose }: { material: any; onClose: () => void }) {
+  const update = useUpdateMaterial();
+  const dims = String(material.dimensions ?? "").trim().split(" ")[0].split("x");
+  const [form, setForm] = useState({
+    materialName: material.materialName ?? "",
+    gsm: material.gsm ? String(material.gsm) : "",
+    w: dims[0] && !isNaN(Number(dims[0])) ? dims[0] : "",
+    h: dims[1] && !isNaN(Number(dims[1])) ? dims[1] : "",
+    minReorderQty: String(material.minReorderQty ?? ""),
+    wastagePercent: String(material.wastagePercent ?? ""),
+    ratePerUnit: material.ratePerUnit != null ? String(material.ratePerUnit) : "",
+  });
+
+  const gsmN = Number(form.gsm), wN = Number(form.w), hN = Number(form.h);
+  const sheetKg = gsmN && wN && hN ? (wN * 2.54 * hN * 2.54 * gsmN) / 10000000 : null;
+
+  const save = () => {
+    update.mutate(
+      {
+        id: material.id,
+        data: {
+          materialName: form.materialName,
+          gsm: form.gsm ? Number(form.gsm) : null,
+          dimensions: form.w && form.h ? `${form.w}x${form.h}` : null,
+          minReorderQty: form.minReorderQty ? String(form.minReorderQty) : undefined,
+          wastagePercent: form.wastagePercent ? String(form.wastagePercent) : undefined,
+          ratePerUnit: form.ratePerUnit ? String(form.ratePerUnit) : undefined,
+        } as any,
+      } as any,
+      {
+        onSuccess: () => { toast.success("Material updated"); onClose(); },
+        onError: (e: any) => toast.error(e?.message ?? "Could not save"),
+      },
+    );
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Edit ${material.materialName}`}>
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <Label className="text-xs">Material name</Label>
+          <Input value={form.materialName} onChange={e => setForm(f => ({ ...f, materialName: e.target.value }))} />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">GSM</Label>
+            <Input type="number" value={form.gsm} onChange={e => setForm(f => ({ ...f, gsm: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Width (in)</Label>
+            <Input type="number" value={form.w} onChange={e => setForm(f => ({ ...f, w: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Height (in)</Label>
+            <Input type="number" value={form.h} onChange={e => setForm(f => ({ ...f, h: e.target.value }))} />
+          </div>
+        </div>
+
+        {sheetKg ? (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm dark:bg-emerald-950/25 dark:border-emerald-900">
+            <span className="font-semibold text-emerald-800 dark:text-emerald-300">
+              One sheet weighs {(sheetKg * 1000).toFixed(1)} g
+            </span>
+            <p className="text-emerald-700 dark:text-emerald-400/90 text-[13px] mt-0.5">
+              Kilograms can now be converted to sheets. 1,000 kg ≈ {Math.round(1000 / sheetKg).toLocaleString("en-IN")} sheets.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm dark:bg-amber-950/25 dark:border-amber-900">
+            <span className="font-semibold text-amber-800 dark:text-amber-300">Sheet size incomplete</span>
+            <p className="text-amber-700 dark:text-amber-400/90 text-[13px] mt-0.5">
+              Fill GSM, width and height so stock recorded in kilograms can be converted to sheets.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Rate / kg</Label>
+            <Input type="number" value={form.ratePerUnit} onChange={e => setForm(f => ({ ...f, ratePerUnit: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Reorder level</Label>
+            <Input type="number" value={form.minReorderQty} onChange={e => setForm(f => ({ ...f, minReorderQty: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Wastage %</Label>
+            <Input type="number" value={form.wastagePercent} onChange={e => setForm(f => ({ ...f, wastagePercent: e.target.value }))} />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} disabled={update.isPending} className="flex items-center gap-2">
+            <Save size={15} /> {update.isPending ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
