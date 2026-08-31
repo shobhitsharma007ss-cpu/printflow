@@ -23,17 +23,20 @@ async function seed() {
     { vendorName: "Saini Traders", contactPerson: "Manoj Saini", phone: "9876543214", city: "Delhi" },
   ]).returning();
 
+  /* Materials — DEMO DATA. Every board and paper carries a sheet size, because
+     without one, kilograms cannot be converted to sheets and stock silently
+     records wrong. Delete these before a real plant goes live. */
   // Materials
   const [
     greyBack285, greyBack350, whiteBack300, fbbBoard350, artCard285,
     maplitho70, cmykInk, uvInk, ledUvInk, varnish, aqueousCoating, gumAdhesive, lubricant,
   ] = await db.insert(materialsTable).values([
-    { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "500", minReorderQty: "100" },
-    { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "300", minReorderQty: "100" },
-    { materialName: "White Back Duplex 300gsm", materialType: "board", subType: "white-back", gsm: 300, unit: "sheets", currentQty: "200", minReorderQty: "80" },
-    { materialName: "FBB Board 350gsm", materialType: "board", subType: "fbb", gsm: 350, unit: "sheets", currentQty: "150", minReorderQty: "50" },
-    { materialName: "Art Card 285gsm", materialType: "paper", subType: "art-card", gsm: 285, unit: "sheets", currentQty: "400", minReorderQty: "100" },
-    { materialName: "Maplitho 70gsm", materialType: "paper", subType: "maplitho", gsm: 70, unit: "reams", currentQty: "800", minReorderQty: "200" },
+    { materialName: "Grey Back Duplex 285gsm", materialType: "board", subType: "grey-back", gsm: 285, unit: "sheets", currentQty: "500", minReorderQty: "100", dimensions: "23x36" },
+    { materialName: "Grey Back Duplex 350gsm", materialType: "board", subType: "grey-back", gsm: 350, unit: "sheets", currentQty: "300", minReorderQty: "100", dimensions: "23x36" },
+    { materialName: "White Back Duplex 300gsm", materialType: "board", subType: "white-back", gsm: 300, unit: "sheets", currentQty: "200", minReorderQty: "80", dimensions: "23x36" },
+    { materialName: "FBB Board 350gsm", materialType: "board", subType: "fbb", gsm: 350, unit: "sheets", currentQty: "150", minReorderQty: "50", dimensions: "23x36" },
+    { materialName: "Art Card 285gsm", materialType: "paper", subType: "art-card", gsm: 285, unit: "sheets", currentQty: "400", minReorderQty: "100", dimensions: "25x36" },
+    { materialName: "Maplitho 70gsm", materialType: "paper", subType: "maplitho", gsm: 70, unit: "reams", currentQty: "800", minReorderQty: "200", dimensions: "23x36" },
     { materialName: "CMYK Ink Set", materialType: "consumable", subType: "cmyk-ink", unit: "kg", currentQty: "40", minReorderQty: "10" },
     { materialName: "UV Ink", materialType: "consumable", subType: "uv-ink", unit: "kg", currentQty: "15", minReorderQty: "5" },
     { materialName: "LED UV Ink", materialType: "consumable", subType: "led-uv-ink", unit: "kg", currentQty: "10", minReorderQty: "5" },
