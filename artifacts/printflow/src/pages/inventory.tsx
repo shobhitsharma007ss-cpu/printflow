@@ -230,7 +230,11 @@ export default function Inventory() {
       </div>
 
       <AddStockWizard isOpen={isWizardOpen} onClose={() => setIsWizardOpen(false)} />
-      <InwardStockWizard isOpen={isInwardOpen} onClose={() => setIsInwardOpen(false)} />
+      <InwardStockWizard
+        isOpen={isInwardOpen}
+        onClose={() => setIsInwardOpen(false)}
+        onAddMaterial={() => setIsWizardOpen(true)}
+      />
     </div>
   );
 }
@@ -269,7 +273,11 @@ const defaultInward: InwardForm = {
   showMore: false,
 };
 
-export function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function InwardStockWizard({ isOpen, onClose, onAddMaterial }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onAddMaterial?: () => void;
+}) {
   const { data: materials } = useMaterials();
   const { data: vendors } = useVendors();
   const createInward = useCreateStockInward();
@@ -490,7 +498,13 @@ export function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClos
                       </div>
                       <div className="flex flex-wrap gap-1 justify-end shrink-0">
                         {m.gsm && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.gsm} GSM</span>}
-                        {m.dimensions && <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{formatDim(m.dimensions) ?? m.dimensions}</span>}
+                        {m.dimensions
+                          ? <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{formatDim(m.dimensions) ?? m.dimensions}</span>
+                          : /* Without a sheet size, kilograms cannot be converted to sheets.
+                               Say so here rather than letting the entry fail at the last step. */
+                            <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-semibold dark:bg-amber-950/40 dark:text-amber-300">
+                              no size
+                            </span>}
                       </div>
                     </div>
                   </button>
@@ -503,7 +517,7 @@ export function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClos
 
             <button
               type="button"
-              onClick={() => { onClose(); }}
+              onClick={() => { onClose(); onAddMaterial?.(); }}
               className="text-xs text-primary hover:underline"
             >
               + Add a new material instead
@@ -610,9 +624,16 @@ export function InwardStockWizard({ isOpen, onClose }: { isOpen: boolean; onClos
                     {isBoard ? "kg" : selectedMaterial.unit}
                   </span>
                 </div>
-                {sheetsFromQty !== null && (
+                {sheetsFromQty !== null ? (
                   <p className="text-xs text-muted-foreground">≈ {sheetsFromQty.toLocaleString("en-IN")} sheets</p>
-                )}
+                ) : isBoard ? (
+                  /* No sheet size means kg cannot become sheets. Saying so here beats
+                     letting the save fail, or worse, silently storing kg as sheets. */
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                    ⚠ No sheet size on this material — kg cannot be converted. Add the size
+                    in Settings → Materials first.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label>Rate per {isBoard ? "kg" : selectedMaterial.unit} (₹)</Label>
