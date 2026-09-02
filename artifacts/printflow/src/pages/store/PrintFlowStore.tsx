@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Package, Plus, Lock, AlertTriangle, X, Search, LayoutGrid, Table2, Wand2, Trash2, Save } from "lucide-react";
+import { Package, Plus, Lock, AlertTriangle, X, Search, LayoutGrid, Table2, Wand2, Trash2, Save, PackagePlus } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card, Button, Badge, Modal, Input } from "@/components/ui-elements";
@@ -218,9 +218,11 @@ function LotTile({ lot, onOpen }: { lot: Lot; onOpen: () => void }) {
 export default function PrintFlowStore({
   lots = [],
   onRecordInward,
+  onAddMaterial,
 }: {
   lots?: Lot[];
   onRecordInward?: () => void;
+  onAddMaterial?: () => void;
 }) {
   const [tab, setTab] = useState<TabKey>("paper");
   const [open, setOpen] = useState<Lot | null>(null);
@@ -269,9 +271,14 @@ export default function PrintFlowStore({
             Choose the lot you'll actually take. The dashed outline is the full delivery — the pile inside is what's left.
           </p>
         </div>
-        <Button onClick={onRecordInward} className="flex items-center gap-2">
-          <Plus size={16} /> Record stock inward
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onAddMaterial} className="flex items-center gap-2">
+            <PackagePlus size={16} /> Add material
+          </Button>
+          <Button onClick={onRecordInward} className="flex items-center gap-2">
+            <Plus size={16} /> Record stock inward
+          </Button>
+        </div>
       </div>
 
       {critical.length > 0 && (
@@ -322,9 +329,14 @@ export default function PrintFlowStore({
           <p className="text-sm text-muted-foreground mt-1">
             Record a stock inward and it will appear on the floor.
           </p>
-          <Button onClick={onRecordInward} className="mt-4 inline-flex items-center gap-2">
-            <Plus size={15} /> Record stock inward
-          </Button>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <Button variant="outline" onClick={onAddMaterial} className="inline-flex items-center gap-2">
+              <PackagePlus size={15} /> Add material
+            </Button>
+            <Button onClick={onRecordInward} className="inline-flex items-center gap-2">
+              <Plus size={15} /> Record stock inward
+            </Button>
+          </div>
         </Card>
       ) : (
         <>
