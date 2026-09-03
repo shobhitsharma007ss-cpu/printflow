@@ -9,6 +9,7 @@ import { useMachines } from "@/hooks/use-machines";
 import { useJobs, useUpdateJobRoutingStatus } from "@/hooks/use-jobs";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { TakeReadyButton } from "@/components/take-ready-button";
 import type { JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -400,15 +401,42 @@ export default function OperatorStation() {
               ) : current.step.canStart === true ? (
                 <BigButton color="primary" disabled={needName} onClick={() => doStart(current.step)} icon={<Play size={44} />} hi={HI.start} en={HI.startSub} />
               ) : (
-                <div className="rounded-2xl bg-muted/40 border border-border p-5 flex items-center gap-4">
-                  <Lock size={36} className="text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-2xl font-bold">{HI.locked}</p>
-                    {waitingNames.length > 0 && (
-                      <p className="text-lg text-muted-foreground mt-0.5">{HI.waitingFor} <b>{waitingNames.join(", ")}</b></p>
-                    )}
-                  </div>
-                </div>
+                (() => {
+                  /* If the step we are waiting on is RUNNING, sheets exist right
+                     now — so offer to take them instead of showing a dead end.
+                     This is what the operator does on the floor anyway. */
+                  const blocker = (current.job.routing ?? []).find(
+                    (r: any) =>
+                      (current.step.prerequisiteCodes ?? []).includes(r.stepCode) &&
+                      (r.status === "in-progress" || r.status === "paused") &&
+                      !r.handoffReleasedAt,
+                  );
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl bg-muted/40 border border-border p-5 flex items-center gap-4">
+                        <Lock size={36} className="text-muted-foreground shrink-0" />
+                        <div>
+                          <p className="text-2xl font-bold">{HI.locked}</p>
+                          {waitingNames.length > 0 && (
+                            <p className="text-lg text-muted-foreground mt-0.5">{HI.waitingFor} <b>{waitingNames.join(", ")}</b></p>
+                          )}
+                        </div>
+                      </div>
+                      {blocker && (
+                        <>
+                          <p className="text-center text-base text-muted-foreground">
+                            <b>{blocker.stepName ?? blocker.stepCode}</b> अभी चल रहा है — तैयार शीट ले सकते हैं
+                          </p>
+                          <TakeReadyButton
+                            upstreamRoutingId={blocker.id}
+                            upstreamName={blocker.stepName ?? blocker.stepCode}
+                            jobQty={current.job.qtySheets}
+                          />
+                        </>
+                      )}
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>

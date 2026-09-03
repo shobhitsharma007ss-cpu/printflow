@@ -6,6 +6,7 @@ import { Card } from "@/components/ui-elements";
 import { MachineMotion } from "@/components/machine-motion";
 import { getStatusColor, getStatusDotColor, cn } from "@/lib/utils";
 import { Factory, AlertCircle, Maximize2, Play, CheckCircle, ChevronRight, ArrowRight, Clock, AlertTriangle, X, Pause, RotateCcw, Timer, Zap, Wrench } from "lucide-react";
+import { TakeReadyButton } from "@/components/take-ready-button";
 import type { Machine, JobWithDetails, JobRouting } from "@workspace/api-client-react";
 
 // ─── Pause reasons ────────────────────────────────────────────────────────────
@@ -425,6 +426,40 @@ export default function FloorMonitor() {
                             )}
                           </div>
                         )}
+
+                        {/* Blocked, but the step it waits on is RUNNING — so sheets
+                            exist now. The floor takes them rather than waiting, so
+                            offer that here instead of showing nothing. */}
+                        {!activeInfo && pendingInfo && machine.status !== "maintenance" &&
+                          pendingInfo.step.canStart !== true && (() => {
+                            const blocker = (pendingInfo.job.routing ?? []).find(
+                              (r: any) =>
+                                (pendingInfo.step.prerequisiteCodes ?? []).includes(r.stepCode) &&
+                                (r.status === "in-progress" || r.status === "paused") &&
+                                !r.handoffReleasedAt,
+                            );
+                            if (!blocker) return null;
+                            return (
+                              <div className="bg-amber-500/5 border border-amber-500/25 rounded-lg p-3 mb-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <span className="text-[10px] uppercase tracking-wider font-bold text-amber-600 block">
+                                      {blocker.stepName ?? blocker.stepCode} still running
+                                    </span>
+                                    <span className="text-xs font-semibold text-foreground truncate block">
+                                      {pendingInfo.job.jobCode} — {pendingInfo.job.jobName}
+                                    </span>
+                                  </div>
+                                  <TakeReadyButton
+                                    compact
+                                    upstreamRoutingId={blocker.id}
+                                    upstreamName={blocker.stepName ?? blocker.stepCode}
+                                    jobQty={pendingInfo.job.qtySheets}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                         {/* Pending Step — Start button */}
                         {!activeInfo && pendingInfo && machine.status !== "maintenance" && pendingInfo.step.canStart === true && (

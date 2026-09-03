@@ -245,6 +245,7 @@ export interface JobRouting {
   notes?: string | null;
   stepCode?: string | null;
   stepName?: string | null;
+  prerequisiteCodes?: string[] | null;
   handoffReleasedAt?: string | null;
   handoffQty?: number | null;
   startedViaHandoff?: boolean | null;
